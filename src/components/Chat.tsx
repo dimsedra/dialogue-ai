@@ -4,13 +4,15 @@ import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Send, User, Bot, Sparkles, Calendar, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu } from "lucide-react";
+import { Send, User, Bot, Sparkles, Calendar, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../convex/_generated/dataModel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { processLocalLLMRequest } from "../lib/lmstudio";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 interface ToolCall {
   name: string;
@@ -138,6 +140,7 @@ export function Chat({
   
   // Settings / Provider State
   const [showSettings, setShowSettings] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const profile = useQuery(api.ai.getProfile);
   const [provider, setProvider] = useState<"gemini" | "lmstudio">(() => {
     if (typeof window !== "undefined") {
@@ -953,11 +956,11 @@ export function Chat({
                           : <Bot className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-[#0f0e0c]" />
                         }
                       </div>
-                      <div className={`flex flex-col space-y-2 max-w-[90%] lg:max-w-[85%] ${msg.author === "User" ? "items-end" : ""}`}>
-                        <div className={`px-4 lg:px-5 py-2 lg:py-4 rounded-2xl lg:rounded-3xl ${
+                      <div className={`flex flex-col space-y-2 min-w-0 max-w-[90%] lg:max-w-[85%] ${msg.author === "User" ? "items-end ml-auto" : "mr-auto"}`}>
+                        <div className={`px-4 lg:px-5 py-2 lg:py-4 rounded-2xl lg:rounded-3xl min-w-0 ${
                           msg.author === "User"
                             ? "bg-[#1f1d19] border border-[#2a2723] text-[#f2efeb] rounded-tr-none"
-                            : "bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] rounded-tl-none prose prose-invert prose-sm max-w-none"
+                            : "bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] rounded-tl-none prose prose-invert prose-sm max-w-none w-full"
                         }`}>
                           {msg.author === "User" ? (
                             <p className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.6] whitespace-pre-wrap">{msg.text}</p>
@@ -971,9 +974,78 @@ export function Chat({
                                   ol: ({ children }) => <ol className="list-decimal pl-4 mb-4 space-y-1">{children}</ol>,
                                   li: ({ children }) => <li className="text-[#a8a29e]">{children}</li>,
                                   strong: ({ children }) => <strong className="text-[#d4a373] font-bold">{children}</strong>,
-                                  code: ({ children }) => <code className="bg-[#0f0e0c] px-1.5 py-0.5 rounded text-[#d4a373] font-mono text-sm">{children}</code>,
+                                  pre: ({ children }: React.ComponentPropsWithoutRef<'pre'>) => {
+                                    return (
+                                      <div className="relative my-6 group/code min-w-0">
+                                        {children}
+                                      </div>
+                                    );
+                                  },
+                                  code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<'code'>) => {
+                                    const match = /language-(\w+)/.exec(className || "");
+                                    const isInline = !className;
+                                    
+                                    if (isInline) {
+                                      return (
+                                        <code className="bg-[#0f0e0c] px-1.5 py-0.5 rounded text-[#d4a373] font-mono text-[13px]" {...props}>
+                                          {children}
+                                        </code>
+                                      );
+                                    }
+
+                                    const language = match ? match[1] : "text";
+                                    const codeString = String(children).replace(/\n$/, "");
+
+                                    return (
+                                      <div className="relative">
+                                        <div className="absolute top-0 right-4 -translate-y-1/2 flex items-center gap-2 z-10">
+                                          {language && (
+                                            <div className="px-2.5 py-1 rounded-lg bg-[#1a1814] border border-[#d4a373]/20 text-[9px] font-black uppercase tracking-[0.2em] text-[#d4a373] shadow-xl">
+                                              {language}
+                                            </div>
+                                          )}
+                                          <button
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(codeString);
+                                              setCopiedCode(codeString);
+                                              setTimeout(() => setCopiedCode(null), 2000);
+                                            }}
+                                            className="p-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all shadow-xl"
+                                            title="Copy Code"
+                                          >
+                                            {copiedCode === codeString ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                                          </button>
+                                        </div>
+                                        <SyntaxHighlighter
+                                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                          style={vscDarkPlus as any}
+                                          language={language}
+                                          PreTag="div"
+                                          customStyle={{
+                                            margin: 0,
+                                            padding: "1.25rem",
+                                            background: "#0f0e0c",
+                                            borderRadius: "1.5rem",
+                                            border: "1px solid #2a2723",
+                                            fontSize: "0.85rem",
+                                            lineHeight: "1.6",
+                                            boxShadow: "inset 0 2px 4px rgba(0,0,0,0.3)"
+                                          }}
+                                          codeTagProps={{
+                                            style: {
+                                              fontFamily: "inherit",
+                                              background: "transparent"
+                                            }
+                                          }}
+                                          {...props}
+                                        >
+                                          {codeString}
+                                        </SyntaxHighlighter>
+                                      </div>
+                                    );
+                                  },
                                   table: ({ children }) => (
-                                    <div className="overflow-x-auto mb-4">
+                                    <div className="overflow-x-auto mb-6">
                                       <table className="w-full text-sm border-collapse">{children}</table>
                                     </div>
                                   ),

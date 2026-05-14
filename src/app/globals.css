@@ -71,6 +71,22 @@ body {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Global Code & Pre Styling */
+  pre {
+    max-width: 100%;
+    overflow-x: auto;
+    position: relative;
+  }
+
+  code {
+    word-break: break-word;
+  }
+
+  pre code {
+    word-break: normal;
+    white-space: pre;
+  }
 }
 
 /* Calendar Custom Styles (v10) */
