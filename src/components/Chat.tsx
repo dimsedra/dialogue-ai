@@ -1,0 +1,1032 @@
+"use client";
+
+import { useQuery, useMutation, useConvex } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
+import { Send, User, Bot, Sparkles, Calendar, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
+import { Id } from "../../convex/_generated/dataModel";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { processLocalLLMRequest } from "../lib/lmstudio";
+
+interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  result?: Record<string, unknown>;
+}
+
+const formatDate = (dateStr: string | undefined) => {
+  if (!dateStr) return "";
+  try {
+    if (dateStr.includes("T") || dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return format(parseISO(dateStr), "MMM d, h:mm a");
+    }
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+};
+
+function ToolCard({ toolCall }: { toolCall: ToolCall }) {
+  if (!toolCall) return null;
+
+  if (toolCall.name === "addTask") {
+    const { text, dueDate, priority, category } = toolCall.args as { 
+      text: string; 
+      dueDate?: string; 
+      priority?: string; 
+      category?: string; 
+    };
+    return (
+      <div className="mt-3 p-4 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-3 shadow-sm">
+        <div className="flex items-center gap-2 text-[#d4a373]">
+          <Calendar className="w-4 h-4" />
+          <span className="text-[10px] font-bold uppercase tracking-widest">New Task Added</span>
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm text-[#f2efeb] font-medium leading-relaxed">{text}</p>
+          <div className="flex flex-wrap gap-2">
+            {priority && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1f1d19] text-[#a8a29e] border border-[#2a2723]">
+                {priority}
+              </span>
+            )}
+            {category && (
+              <div className="flex items-center gap-1 text-[10px] text-[#a8a29e]">
+                <Tag className="w-3 h-3" />
+                {category}
+              </div>
+            )}
+            {dueDate && (
+              <div className="flex items-center gap-1.5 text-[10px] text-[#d4a373]/70 font-medium">
+                <Clock className="w-3 h-3" />
+                Due {formatDate(dueDate)}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end pt-1">
+          <button className="text-[10px] text-[#a8a29e] hover:text-[#d4a373] transition-colors flex items-center gap-1 font-medium">
+            <Trash2 className="w-3 h-3" />
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (toolCall.name === "updateMemory") {
+    return (
+      <div className="mt-3 flex items-center gap-2 p-3 rounded-xl bg-emerald-500/[0.03] border border-emerald-500/10">
+        <Sparkles className="w-3.5 h-3.5 text-emerald-500/60" />
+        <span className="text-xs text-emerald-500/70 font-medium italic">
+          Dialogue updated its memory of you.
+        </span>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+export function Chat({ 
+  activeSessionId, 
+  setActiveSessionId,
+  activeWorkspaceId,
+  setActiveWorkspaceId,
+  showHistory,
+  setShowHistory,
+  onSyncRef
+}: { 
+  activeSessionId: Id<"chatSessions"> | null, 
+  setActiveSessionId: (id: Id<"chatSessions"> | null) => void,
+  activeWorkspaceId: Id<"workspaces"> | undefined,
+  setActiveWorkspaceId: (id: Id<"workspaces"> | undefined, sessionId?: Id<"chatSessions"> | null) => void,
+  showHistory: boolean,
+  setShowHistory: (show: boolean) => void,
+  onSyncRef?: React.MutableRefObject<(() => void) | null>
+}) {
+  const workspaces = useQuery(api.workspaces.list);
+  const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
+  const messages = useQuery(api.messages.list, { sessionId: activeSessionId ?? undefined });
+  
+  const createWorkspace = useMutation(api.workspaces.create);
+  const sendMessage = useMutation(api.messages.send);
+  const createSession = useMutation(api.messages.createSession);
+  const deleteSession = useMutation(api.messages.deleteSession);
+  const renameSession = useMutation(api.messages.renameSession);
+  const updateWorkspaceContext = useMutation(api.workspaces.updateContext);
+  
+  // Tool Mutations for local LLM
+  const addTask = useMutation(api.ai.addTask);
+  const completeTask = useMutation(api.tasks.toggleCompleted);
+  const deleteTask = useMutation(api.tasks.deleteTask);
+  const updateMemory = useMutation(api.ai.updateProfile);
+
+  const convex = useConvex();
+
+  const [input, setInput] = useState("");
+  const [editingSessionId, setEditingSessionId] = useState<Id<"chatSessions"> | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [newWorkspaceName, setNewWorkspaceName] = useState("");
+  const [isEditingWorkspaceContext, setIsEditingWorkspaceContext] = useState(false);
+  const [tempContext, setTempContext] = useState("");
+  
+  // Settings / Provider State
+  const [showSettings, setShowSettings] = useState(false);
+  const profile = useQuery(api.ai.getProfile);
+  const [provider, setProvider] = useState<"gemini" | "lmstudio">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("dialogue_provider") as "gemini" | "lmstudio") || "gemini";
+    }
+    return "gemini";
+  });
+
+  const [lastSyncedProfileId, setLastSyncedProfileId] = useState<Id<"userProfile"> | null>(null);
+
+  // Sync provider with DB profile during render
+  if (profile && profile._id !== lastSyncedProfileId) {
+    setLastSyncedProfileId(profile._id);
+    if (profile.preferences?.provider && profile.preferences.provider !== provider) {
+      setProvider(profile.preferences.provider);
+    }
+  }
+
+  const handleProviderChange = (p: "gemini" | "lmstudio") => {
+    setProvider(p);
+    localStorage.setItem("dialogue_provider", p);
+  };
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (sessions && sessions.length > 0 && !activeSessionId) {
+      setActiveSessionId(sessions[0]._id);
+    }
+  }, [sessions, activeSessionId, setActiveSessionId]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // ---- Shared helper: run LM Studio logic for a given session + text ----
+  const runLocalLLMForSession = async (
+    sessionId: Id<"chatSessions">,
+    userText: string,
+    opts?: { brief?: boolean }
+  ) => {
+    try {
+      const promptCtx = await convex.query(api.ai.getPromptContext, {
+        sessionId,
+        timezoneOffset: new Date().getTimezoneOffset(),
+        ...(opts?.brief !== undefined ? { brief: opts.brief } : {}),
+      });
+
+      const recentMsgs = (messages || []).slice(-10);
+
+      const result = await processLocalLLMRequest({
+        systemInstruction: promptCtx.systemInstruction,
+        recentMessages: recentMsgs,
+        userText,
+      });
+
+      if (result.toolCall) {
+        const { name, args } = result.toolCall;
+        if (name === "addTask") await addTask({ ...args, workspaceId: promptCtx.workspaceId });
+        else if (name === "completeTask") await completeTask({ id: args.taskId as Id<"tasks"> });
+        else if (name === "deleteTask") await deleteTask({ id: args.taskId as Id<"tasks"> });
+        else if (name === "updateMemory") await updateMemory({ bio: args.bio as string });
+      }
+
+      await sendMessage({
+        sessionId,
+        text: result.aiText || "Done!",
+        author: "AI",
+        toolCall: result.toolCall
+          ? { name: result.toolCall.name, args: result.toolCall.args, result: { status: "success" } }
+          : undefined,
+      });
+    } catch (error) {
+      console.error("LM Studio Error:", error);
+      await sendMessage({
+        sessionId,
+        text: "I encountered a connection error. Please make sure LM Studio's Local Server is running on port 1234.",
+        author: "AI",
+      });
+    }
+  };
+
+  // ---- Sync handler (used by both the sidebar button and TaskPanel) ----
+  const handleSync = async () => {
+    const syncText = "Sync my workspace.";
+    let sessionId = activeSessionId;
+
+    if (!sessionId) {
+      sessionId = await createSession({
+        title: `Sync - ${new Date().toLocaleDateString()}`,
+        workspaceId: activeWorkspaceId,
+      });
+      setActiveSessionId(sessionId);
+    }
+
+    await sendMessage({
+      sessionId,
+      text: syncText,
+      author: "User",
+      brief: true,
+      timezoneOffset: new Date().getTimezoneOffset(),
+      provider,
+    });
+
+    if (provider === "lmstudio") {
+      await runLocalLLMForSession(sessionId, syncText, { brief: true });
+    }
+    // Gemini path: the Convex scheduler handles it automatically via messages.send
+  };
+
+  // Expose handleSync to parent via ref (placed after declaration)
+  useEffect(() => {
+    if (onSyncRef) onSyncRef.current = handleSync;
+  });
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || !activeSessionId) return;
+
+    const userText = input.trim();
+    setInput("");
+
+    // 1. Send the user message to Convex
+    await sendMessage({ 
+      sessionId: activeSessionId,
+      text: userText, 
+      author: "User",
+      timezoneOffset: new Date().getTimezoneOffset(),
+      provider
+    });
+
+    // 2. If LM Studio is selected, we do the LLM logic on the client
+    if (provider === "lmstudio") {
+      await runLocalLLMForSession(activeSessionId, userText);
+    }
+  };
+
+  const handleNewChat = async () => {
+    const id = await createSession({ 
+      title: `Chat ${new Date().toLocaleTimeString()}`,
+      workspaceId: activeWorkspaceId
+    });
+    setActiveSessionId(id);
+  };
+
+  const handleAddWorkspace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWorkspaceName.trim()) return;
+
+    const colors = ["#d4a373", "#8b5cf6", "#ec4899", "#10b981", "#3b82f6"];
+    const index = (workspaces?.length || 0) % colors.length;
+    
+    await createWorkspace({
+      name: newWorkspaceName.trim(),
+      icon: "Briefcase",
+      color: colors[index]
+    });
+
+    setNewWorkspaceName("");
+    setIsCreatingWorkspace(false);
+  };
+
+  const handleUpdateWorkspaceContext = async () => {
+    if (activeWorkspaceId) {
+      await updateWorkspaceContext({ 
+        id: activeWorkspaceId, 
+        context: tempContext 
+      });
+      setIsEditingWorkspaceContext(false);
+    }
+  };
+
+  const currentWorkspace = workspaces?.find(w => w._id === activeWorkspaceId);
+
+  const handleDeleteChat = async (id: Id<"chatSessions">, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await deleteSession({ id });
+    if (activeSessionId === id) {
+      setActiveSessionId(null);
+    }
+  };
+
+  const startEditing = (id: Id<"chatSessions">, title: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingSessionId(id);
+    setEditTitle(title);
+  };
+
+  const handleRename = async (id: Id<"chatSessions">) => {
+    if (editTitle.trim()) {
+      await renameSession({ id, title: editTitle.trim() });
+    }
+    setEditingSessionId(null);
+  };
+
+  return (
+    <div className="flex-1 flex overflow-hidden h-full relative">
+      {/* Workspace Rail (The Focus) - Hidden on Mobile */}
+      <nav className="hidden lg:flex w-[84px] h-full shrink-0 border-r border-[#2a2723] bg-gradient-to-b from-[#141210] to-[#0f0e0c] flex-col items-center py-8 gap-8 z-50 relative">
+        {/* Floating Toggle for History (when collapsed) - Anchored to Rail */}
+        <AnimatePresence>
+          {!showHistory && (
+            <motion.div 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              className="hidden lg:block absolute left-full top-1/2 -translate-y-1/2 z-50 h-fit w-fit"
+            >
+              <button
+                onClick={() => setShowHistory(true)}
+                className="p-2 rounded-r-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all shadow-black/50 shadow-lg group flex items-center justify-center border-l-0"
+                title="Show History"
+              >
+                <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div className="w-12 h-12 rounded-[20px] bg-gradient-to-br from-[#d4a373] to-[#c39262] flex items-center justify-center shadow-xl shadow-[#d4a373]/20 shrink-0 group transition-all cursor-pointer hover:scale-110 active:scale-95">
+          <Bot className="w-6 h-6 text-[#0f0e0c]" />
+        </div>
+        
+        <div className="w-10 h-[1px] bg-[#2a2723]/50" />
+        
+        <div className="flex-1 w-full flex flex-col items-center gap-5 overflow-y-auto overflow-x-hidden custom-scrollbar py-6">
+          {/* Global / All Workspace */}
+          <div className="w-full relative group flex items-center justify-center">
+            <button
+              onClick={() => setActiveWorkspaceId(undefined)}
+              className={`w-12 h-12 rounded-[20px] flex items-center justify-center transition-all duration-300 border relative overflow-hidden group/btn ${
+                !activeWorkspaceId 
+                  ? "bg-[#d4a373] border-[#d4a373] shadow-[0_0_20px_rgba(212,163,115,0.3)] scale-110" 
+                  : "bg-[#1a1814] border-[#2a2723] text-[#a8a29e] hover:border-[#d4a373]/30 hover:text-[#f2efeb] hover:scale-105"
+              }`}
+            >
+              <Sparkles className={`w-5 h-5 transition-transform duration-300 ${!activeWorkspaceId ? "text-[#0f0e0c] scale-110" : "group-hover/btn:rotate-12"}`} />
+              {!activeWorkspaceId && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0.2, 0.5, 0.2] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                  className="absolute inset-0 bg-white"
+                />
+              )}
+            </button>
+            {!activeWorkspaceId && (
+              <motion.div 
+                layoutId="active-ws"
+                className="absolute left-0 w-1.5 h-8 bg-[#d4a373] rounded-r-full shadow-[2px_0_10px_rgba(212,163,115,0.5)] z-20"
+              />
+            )}
+            <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all translate-x-[-10px] group-hover:translate-x-0 z-[100] whitespace-nowrap shadow-2xl">
+              All Workspaces
+            </div>
+          </div>
+
+          {workspaces?.map((ws) => (
+            <div key={ws._id} className="w-full relative group flex items-center justify-center">
+              <button
+                onClick={() => setActiveWorkspaceId(ws._id)}
+                className={`w-12 h-12 rounded-[20px] flex items-center justify-center transition-all duration-300 border text-xs font-bold uppercase relative group/btn ${
+                  activeWorkspaceId === ws._id 
+                    ? "bg-[#d4a373]/10 border-[#d4a373] text-[#d4a373] shadow-[0_0_15px_rgba(212,163,115,0.15)] scale-110" 
+                    : "bg-[#1a1814] border-[#2a2723] text-[#a8a29e] hover:border-[#d4a373]/30 hover:text-[#f2efeb] hover:scale-105"
+                }`}
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <span className={`transition-all duration-300 ${activeWorkspaceId === ws._id ? "text-[#f2efeb] scale-110" : "text-[#a8a29e]"}`}>
+                    {ws.name.substring(0, 2)}
+                  </span>
+                  <div 
+                    className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${activeWorkspaceId === ws._id ? "scale-125 shadow-[0_0_8px_rgba(0,0,0,0.5)]" : "opacity-40"}`} 
+                    style={{ backgroundColor: ws.color }} 
+                  />
+                </div>
+              </button>
+              {activeWorkspaceId === ws._id && (
+                <motion.div 
+                  layoutId="active-ws"
+                  className="absolute left-0 w-1.5 h-8 bg-[#d4a373] rounded-r-full shadow-[2px_0_10px_rgba(212,163,115,0.4)] z-20"
+                />
+              )}
+              <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all translate-x-[-10px] group-hover:translate-x-0 z-[100] whitespace-nowrap shadow-2xl">
+                {ws.name}
+              </div>
+            </div>
+          ))}
+
+          <div className="relative group mt-2">
+            <button
+              onClick={() => setIsCreatingWorkspace(true)}
+              className="w-12 h-12 rounded-[20px] bg-[#1a1814]/40 border border-dashed border-[#2a2723] flex items-center justify-center text-[#a8a29e] hover:border-[#d4a373]/40 hover:text-[#d4a373] hover:bg-[#d4a373]/5 transition-all"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+            <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all translate-x-[-10px] group-hover:translate-x-0 z-[100] whitespace-nowrap shadow-2xl">
+              New Workspace
+            </div>
+          </div>
+        </div>
+
+        {/* Workspace Creation Modal */}
+        <AnimatePresence>
+          {isCreatingWorkspace && (
+            <>
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsCreatingWorkspace(false)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, x: -20 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.9, x: -20 }}
+                className="fixed left-24 top-1/2 -translate-y-1/2 w-[320px] bg-[#1a1814] border border-[#d4a373]/30 rounded-[32px] p-8 shadow-[0_30px_60px_rgba(0,0,0,0.6)] z-[110] space-y-6"
+              >
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold text-[#f2efeb]">Create Workspace</h3>
+                  <p className="text-xs text-[#a8a29e]">Give your new context a name.</p>
+                </div>
+                <form onSubmit={handleAddWorkspace} className="space-y-4">
+                  <input
+                    autoFocus
+                    value={newWorkspaceName}
+                    onChange={(e) => setNewWorkspaceName(e.target.value)}
+                    placeholder="Workspace Name"
+                    className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-2xl px-5 py-4 text-sm text-[#f2efeb] focus:border-[#d4a373]/50 outline-none transition-all"
+                  />
+                  <div className="flex gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setIsCreatingWorkspace(false)}
+                      className="flex-1 py-3 rounded-2xl border border-[#2a2723] text-xs font-bold uppercase tracking-widest text-[#a8a29e] hover:text-[#f2efeb] transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit"
+                      className="flex-1 py-3 rounded-2xl bg-[#d4a373] text-[#0f0e0c] text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/10"
+                    >
+                      Create
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+
+        <div className="shrink-0 pb-8 flex flex-col gap-4">
+          <Link 
+            href="/settings"
+            className="w-12 h-12 rounded-[20px] bg-[#1a1814] border border-[#2a2723] flex items-center justify-center text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all shadow-lg group relative"
+          >
+            <Settings className="w-5 h-5" />
+            <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all translate-x-[-10px] group-hover:translate-x-0 z-[100] whitespace-nowrap shadow-2xl">
+              Settings
+            </div>
+          </Link>
+        </div>
+      </nav>
+
+      {/* Sessions Sidebar */}
+      <AnimatePresence mode="wait">
+        {showHistory && (
+          <motion.div
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: "288px", opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="h-full border-r border-[#2a2723] bg-[#1a1814] shrink-0 z-[100] lg:relative fixed left-0 w-[85%] sm:w-[288px] flex overflow-hidden"
+          >
+            {/* Mobile Workspace Rail (Inside the Drawer) */}
+            <div className="lg:hidden w-[72px] h-full bg-[#141210] border-r border-[#2a2723] flex flex-col items-center pt-10 pb-6 gap-6 shrink-0">
+              <button 
+                onClick={() => setActiveWorkspaceId(undefined)}
+                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${!activeWorkspaceId ? 'bg-[#d4a373] shadow-lg shadow-[#d4a373]/20' : 'bg-[#0f0e0c] border border-[#2a2723] text-[#a8a29e]'}`}
+              >
+                <Bot className={`w-5 h-5 ${!activeWorkspaceId ? 'text-[#0f0e0c]' : ''}`} />
+              </button>
+              
+              <div className="w-8 h-[1px] bg-[#2a2723]" />
+              
+              <div className="flex-1 flex flex-col items-center gap-4 overflow-y-auto scrollbar-hide w-full px-2 pt-4">
+                {workspaces?.map((ws) => (
+                  <button
+                    key={ws._id}
+                    onClick={() => setActiveWorkspaceId(ws._id)}
+                    className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center transition-all ${activeWorkspaceId === ws._id ? 'ring-2 ring-[#d4a373] ring-offset-2 ring-offset-[#141210]' : 'bg-[#0f0e0c] border border-[#2a2723]'}`}
+                  >
+                    <span className="text-lg">{ws.icon && ws.icon.length < 3 ? ws.icon : ws.name[0]}</span>
+                  </button>
+                ))}
+                
+                {/* Add Workspace Button for Mobile */}
+                <button
+                  onClick={() => setIsCreatingWorkspace(true)}
+                  className="w-10 h-10 rounded-xl bg-[#1a1814]/40 border border-dashed border-[#2a2723] flex items-center justify-center text-[#a8a29e] hover:border-[#d4a373]/40 hover:text-[#d4a373] transition-all shrink-0"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Mobile Settings Access */}
+              <Link
+                href="/settings"
+                className="w-10 h-10 rounded-xl bg-[#0f0e0c] border border-[#2a2723] flex items-center justify-center text-[#a8a29e] hover:text-[#d4a373] transition-all"
+              >
+                <Settings className="w-5 h-5" />
+              </Link>
+            </div>
+
+            {/* History List */}
+            <div className="flex-1 flex flex-col min-w-0 bg-[#1a1814] relative">
+              <button
+                onClick={() => setShowHistory(false)}
+                className="absolute left-full top-1/2 -translate-y-1/2 z-[110] w-7 h-16 rounded-r-2xl bg-[#d4a373] text-[#0f0e0c] flex items-center justify-center transition-all shadow-[10px_0_30px_rgba(0,0,0,0.4)] lg:hidden active:scale-95"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setShowHistory(false)}
+                className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 z-10 p-2 rounded-l-xl bg-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb] transition-all border-l border-y border-[#3a3733] shadow-[-4px_0_10px_rgba(0,0,0,0.3)]"
+                title="Hide History"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            
+            <header className="p-6 shrink-0 space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-[#d4a373]" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#f2efeb]">
+                      {activeWorkspaceId 
+                        ? workspaces?.find(w => w._id === activeWorkspaceId)?.name 
+                        : "Universal Chat"}
+                    </span>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleNewChat}
+                  className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] text-sm font-bold transition-all duration-300 shadow-lg shadow-[#d4a373]/10"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Session
+                </button>
+              </div>
+            </header>
+
+            
+            <style>{`
+              .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+              .custom-scrollbar::-webkit-scrollbar-track { background: #1a1814; }
+              .custom-scrollbar::-webkit-scrollbar-thumb { background: #2a2723; border-radius: 2px; }
+              .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d4a373; }
+            `}</style>
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 custom-scrollbar">
+              <div className="px-3 mb-2 sticky top-0 bg-[#1a1814] py-2 z-10">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/50">History</span>
+              </div>
+              {sessions?.map((session) => (
+                <div
+                  key={session._id}
+                  onClick={() => {
+                    if (!activeWorkspaceId && session.workspaceId) {
+                      setActiveWorkspaceId(session.workspaceId, session._id);
+                    } else {
+                      setActiveSessionId(session._id);
+                    }
+                  }}
+                  className={`group flex items-center justify-between p-3.5 rounded-2xl cursor-pointer transition-all duration-300 ${
+                    activeSessionId === session._id 
+                      ? "bg-[#2a2723] text-[#f2efeb]" 
+                      : "text-[#a8a29e] hover:bg-[#1f1d19] hover:text-[#f2efeb]"
+                  }`}
+                >
+                  <div className="flex-1 flex items-center gap-3 truncate mr-2">
+                    <div className={`w-1.5 h-1.5 rounded-full transition-all shrink-0 ${activeSessionId === session._id ? "bg-[#d4a373] scale-100" : "bg-transparent scale-0"}`} />
+                    {editingSessionId === session._id ? (
+                      <input
+                        autoFocus
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleRename(session._id)}
+                        onBlur={() => handleRename(session._id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-transparent border-none outline-none text-sm font-medium w-full text-[#f2efeb]"
+                      />
+                    ) : (
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">{session.title}</span>
+                        {!activeWorkspaceId && session.workspaceId && (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <div 
+                              className="w-1 h-1 rounded-full" 
+                              style={{ backgroundColor: workspaces?.find(w => w._id === session.workspaceId)?.color }} 
+                            />
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-[#a8a29e]/60 truncate">
+                              {workspaces?.find(w => w._id === session.workspaceId)?.name}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                    {editingSessionId !== session._id && (
+                      <>
+                        <button 
+                          onClick={(e) => startEditing(session._id, session.title || "", e)}
+                          className="p-1 hover:text-[#d4a373] transition-all mr-1"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={(e) => handleDeleteChat(session._id, e)}
+                          className="p-1 hover:text-red-400 transition-all shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                    {editingSessionId === session._id && (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleRename(session._id); }}
+                        className="p-1 text-[#d4a373] transition-all"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+
+      {/* Main Chat Area */}
+      <motion.div 
+        layout
+        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c]"
+      >
+        {/* Floating Toggle for History (when collapsed) */}
+        
+        <header className="px-4 lg:px-8 py-4 flex flex-col gap-4 shrink-0 bg-[#0f0e0c]/80 backdrop-blur-xl z-20 border-b border-[#2a2723]/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 lg:gap-4">
+              {/* Mobile Navigation Toggles */}
+              <div className="lg:hidden flex items-center gap-1.5">
+                <button 
+                  onClick={() => setShowHistory(true)}
+                  className="p-2 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] active:scale-90 transition-all"
+                  title="Menu"
+                >
+                  <Menu className="w-4 h-4" />
+                </button>
+                
+                {/* Mobile Active Workspace Indicator (Non-interactive indicator in header) */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-[#1a1814]/50 border border-[#2a2723]/50">
+                  <div 
+                    className="w-1.5 h-1.5 rounded-full" 
+                    style={{ backgroundColor: activeWorkspaceId ? workspaces?.find(w => w._id === activeWorkspaceId)?.color : "#d4a373" }} 
+                  />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#a8a29e] max-w-[60px] truncate">
+                    {activeWorkspaceId ? workspaces?.find(w => w._id === activeWorkspaceId)?.name : "Universal"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="hidden lg:block space-y-1">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-xl font-bold text-[#f2efeb] tracking-tight truncate max-w-[200px] lg:max-w-md">
+                    {activeSessionId ? sessions?.find(s => s._id === activeSessionId)?.title : "New Session"}
+                  </h1>
+                  
+                  {/* Settings / Provider Toggle */}
+                  <div className="relative ml-2">
+                    <button 
+                      onClick={() => setShowSettings(!showSettings)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#d4a373] hover:border-[#d4a373]/40 transition-all shadow-lg shadow-black/20 group"
+                      title="Change AI Provider"
+                    >
+                      {provider === "gemini" ? <Zap className="w-3.5 h-3.5" /> : <Cpu className="w-3.5 h-3.5" />}
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#a8a29e] group-hover:text-[#d4a373] transition-colors">
+                        {provider === "gemini" ? "Gemini" : "Local"}
+                      </span>
+                    </button>
+                    
+                    <AnimatePresence>
+                      {showSettings && (
+                        <>
+                          <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowSettings(false)}
+                            className="fixed inset-0 bg-[#000]/60 backdrop-blur-sm z-[60]"
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                            className="absolute top-full left-0 mt-3 w-[250px] bg-[#1a1814] border border-[#2a2723] rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[70] space-y-4"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-1">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#f2efeb]">AI Provider</h3>
+                                <p className="text-[10px] text-[#a8a29e]">Select your model engine.</p>
+                              </div>
+                              <button 
+                                onClick={() => setShowSettings(false)}
+                                className="p-1.5 hover:bg-[#2a2723] rounded-lg text-[#a8a29e] transition-all"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <button
+                                onClick={() => handleProviderChange("gemini")}
+                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                  provider === "gemini" 
+                                    ? "bg-[#d4a373]/10 border-[#d4a373]/30 text-[#d4a373]" 
+                                    : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:border-[#3a3733]"
+                                }`}
+                              >
+                                <span className="text-xs font-bold">Google Gemini</span>
+                                {provider === "gemini" && <Check className="w-3.5 h-3.5" />}
+                              </button>
+                              
+                              <button
+                                onClick={() => handleProviderChange("lmstudio")}
+                                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                  provider === "lmstudio" 
+                                    ? "bg-[#d4a373]/10 border-[#d4a373]/30 text-[#d4a373]" 
+                                    : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:border-[#3a3733]"
+                                }`}
+                              >
+                                <span className="text-xs font-bold">Local LLM (LM Studio)</span>
+                                {provider === "lmstudio" && <Check className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {currentWorkspace && (
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border"
+                        style={{ 
+                          backgroundColor: `${currentWorkspace.color}15`, 
+                          borderColor: `${currentWorkspace.color}40`,
+                          color: currentWorkspace.color
+                        }}
+                      >
+                        {currentWorkspace.name}
+                      </div>
+
+                      <div className="relative">
+                        <button 
+                          onClick={() => {
+                            setTempContext(currentWorkspace.context || "");
+                            setIsEditingWorkspaceContext(true);
+                          }}
+                          className={`p-1.5 rounded-lg border transition-all flex items-center gap-1.5 group/tag ${
+                            currentWorkspace.context 
+                              ? "bg-[#d4a373]/10 border-[#d4a373]/30 text-[#d4a373]" 
+                              : "bg-[#1a1814] border-[#2a2723] text-[#a8a29e] hover:border-[#d4a373]/30 hover:text-[#d4a373]"
+                          }`}
+                        >
+                          <Tag className="w-3 h-3" />
+                          <span className="text-[9px] font-bold uppercase tracking-widest hidden group-hover/tag:inline-block">
+                            {currentWorkspace.context ? "Edit Context" : "Add Context"}
+                          </span>
+                        </button>
+
+                        <AnimatePresence>
+                          {isEditingWorkspaceContext && (
+                            <>
+                              <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setIsEditingWorkspaceContext(false)}
+                                className="fixed inset-0 bg-[#000]/60 backdrop-blur-sm z-[60]"
+                              />
+                              <motion.div
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                className="absolute top-full left-0 mt-3 w-[400px] bg-[#1a1814] border border-[#d4a373]/30 rounded-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[70] space-y-4"
+                              >
+                                <div className="space-y-1">
+                                  <h3 className="text-xs font-bold uppercase tracking-widest text-[#d4a373]">Workspace Context</h3>
+                                  <p className="text-[10px] text-[#a8a29e]">Define the goals and rules for the AI agent in this workspace.</p>
+                                </div>
+                                <textarea
+                                  autoFocus
+                                  value={tempContext}
+                                  onChange={(e) => setTempContext(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      handleUpdateWorkspaceContext();
+                                    }
+                                  }}
+                                  placeholder="Type instructions here..."
+                                  className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-xl p-4 text-xs text-[#f2efeb] placeholder:text-[#a8a29e]/20 min-h-[160px] resize-none outline-none focus:border-[#d4a373]/40 transition-all scrollbar-hide"
+                                />
+                                <div className="flex items-center justify-end gap-3 pt-2">
+                                  <button 
+                                    onClick={() => setIsEditingWorkspaceContext(false)}
+                                    className="px-4 py-2 text-[10px] font-bold text-[#a8a29e] hover:text-[#f2efeb] uppercase tracking-widest"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button 
+                                    onClick={handleUpdateWorkspaceContext}
+                                    className="px-5 py-2 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/10"
+                                  >
+                                    Save Instructions
+                                  </button>
+                                </div>
+                              </motion.div>
+                            </>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-[#a8a29e] text-[11px] font-medium">
+                  <span className="flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-[#d4a373]" /> Dialogue Agent</span>
+                  <span>•</span>
+                  <span>{messages?.length || 0} messages</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1a1814] border border-[#2a2723]">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] text-[#a8a29e] font-bold uppercase tracking-wider">Live</span>
+            </div>
+          </div>
+
+        </header>
+        
+        {/* Mobile Session Title */}
+        <div className="lg:hidden px-6 py-2 border-b border-[#2a2723]/30 bg-[#12110e]">
+          <h1 className="text-xs font-bold text-[#a8a29e] uppercase tracking-[0.2em] truncate">
+            {activeSessionId ? sessions?.find(s => s._id === activeSessionId)?.title : "New Session"}
+          </h1>
+        </div>
+
+        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 lg:py-10 space-y-8 lg:space-y-12">
+          <div className="max-w-4xl mx-auto space-y-8 lg:space-y-12">
+            {messages === undefined || !activeSessionId ? (
+              <div className="flex flex-col items-center justify-center h-full space-y-6 opacity-40">
+                <div className="w-20 h-20 rounded-[32px] bg-[#1a1814] border border-[#2a2723] flex items-center justify-center shadow-2xl">
+                  <Bot className="w-10 h-10 text-[#d4a373]" />
+                </div>
+                <div className="text-center space-y-2">
+                  <h3 className="text-lg font-bold text-[#f2efeb]">Dialogue Initialized</h3>
+                  <p className="text-sm text-[#a8a29e] max-w-[240px]">
+                    Select a session from the history or start a new one to begin.
+                  </p>
+                </div>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 max-w-sm mx-auto">
+                <div className="w-16 h-16 rounded-3xl bg-[#1a1814] border border-[#2a2723] flex items-center justify-center shadow-2xl">
+                  <Bot className="w-8 h-8 text-[#d4a373]/40" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[#f2efeb] font-medium italic">&quot;The best way to predict the future is to create it.&quot;</p>
+                  <p className="text-[#a8a29e] text-xs leading-relaxed">Dialogue is ready to help you manage your tasks and thoughts with clarity.</p>
+                </div>
+              </div>
+            ) : (
+              <AnimatePresence initial={false}>
+                {[...messages].map((msg) => (
+                  <div key={msg._id}>
+                    <motion.div
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, ease: "easeOut" }}
+                      className={`flex gap-3 lg:gap-5 ${msg.author === "User" ? "flex-row-reverse" : ""}`}
+                    >
+                      <div className={`w-8 h-8 lg:w-9 lg:h-9 rounded-xl lg:rounded-2xl flex-shrink-0 flex items-center justify-center shadow-sm ${
+                        msg.author === "User" 
+                          ? "bg-[#1f1d19] border border-[#2a2723]" 
+                          : "bg-[#d4a373] shadow-lg shadow-[#d4a373]/10"
+                      }`}>
+                        {msg.author === "User" 
+                          ? <User className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-[#a8a29e]" /> 
+                          : <Bot className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-[#0f0e0c]" />
+                        }
+                      </div>
+                      <div className={`flex flex-col space-y-2 max-w-[90%] lg:max-w-[85%] ${msg.author === "User" ? "items-end" : ""}`}>
+                        <div className={`px-4 lg:px-5 py-3 lg:py-4 rounded-2xl lg:rounded-3xl ${
+                          msg.author === "User"
+                            ? "bg-[#1f1d19] border border-[#2a2723] text-[#f2efeb] rounded-tr-none"
+                            : "bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] rounded-tl-none prose prose-invert prose-sm max-w-none"
+                        }`}>
+                          {msg.author === "User" ? (
+                            <p className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.6] whitespace-pre-wrap">{msg.text}</p>
+                          ) : (
+                            <div className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.6] markdown-content">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
+                                  ul: ({ children }) => <ul className="list-disc pl-4 mb-4 space-y-1">{children}</ul>,
+                                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-4 space-y-1">{children}</ol>,
+                                  li: ({ children }) => <li className="text-[#a8a29e]">{children}</li>,
+                                  strong: ({ children }) => <strong className="text-[#d4a373] font-bold">{children}</strong>,
+                                  code: ({ children }) => <code className="bg-[#0f0e0c] px-1.5 py-0.5 rounded text-[#d4a373] font-mono text-sm">{children}</code>,
+                                  table: ({ children }) => (
+                                    <div className="overflow-x-auto mb-4">
+                                      <table className="w-full text-sm border-collapse">{children}</table>
+                                    </div>
+                                  ),
+                                  thead: ({ children }) => <thead className="border-b border-[#2a2723]">{children}</thead>,
+                                  tbody: ({ children }) => <tbody className="divide-y divide-[#2a2723]">{children}</tbody>,
+                                  tr: ({ children }) => <tr className="hover:bg-[#1f1d19]/50 transition-colors">{children}</tr>,
+                                  th: ({ children }) => <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#d4a373]">{children}</th>,
+                                  td: ({ children }) => <td className="px-3 py-2 text-[#a8a29e]">{children}</td>,
+                                }}
+                              >
+                                {msg.text}
+                              </ReactMarkdown>
+                            </div>
+                          )}
+                          {msg.author === "AI" && msg.toolCall && (
+                            <ToolCard toolCall={msg.toolCall as ToolCall} />
+                          )}
+                        </div>
+                        <span className="text-[9px] text-[#a8a29e]/60 font-bold tracking-widest uppercase px-1">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </motion.div>
+                  </div>
+                ))}
+              </AnimatePresence>
+            )}
+            <div ref={messagesEndRef} className="h-4" />
+          </div>
+        </main>
+
+        <footer className="p-4 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c] to-transparent">
+          <form onSubmit={handleSend} className="relative group max-w-4xl mx-auto">
+            <div className="absolute inset-0 bg-[#d4a373]/5 blur-2xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={activeSessionId ? "Write a message..." : "Select a conversation"}
+              disabled={!activeSessionId}
+              className="relative w-full bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] pl-4 lg:pl-6 pr-12 lg:pr-14 py-3.5 lg:py-4 rounded-xl lg:rounded-2xl focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-all duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || !activeSessionId}
+              className="absolute right-2 lg:right-2.5 top-1/2 -translate-y-1/2 p-2 lg:p-2.5 rounded-lg lg:rounded-xl bg-[#d4a373] text-[#0f0e0c] hover:bg-[#c39262] transition-all shadow-xl shadow-[#d4a373]/10 disabled:opacity-0 disabled:scale-90 z-10"
+            >
+              <Send className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            </button>
+          </form>
+          <p className="mt-4 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
+        </footer>
+      </motion.div>
+    </div>
+  );
+}

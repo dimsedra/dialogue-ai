@@ -1,0 +1,216 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #0f0e0c;
+  --foreground: #f2efeb;
+  --accent: #d4a373;
+  --panel-bg: #1a1814;
+  --border: #2a2723;
+  --card-bg: #1f1d19;
+  --text-muted: #a8a29e;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  height: 100vh;
+  overflow: hidden;
+}
+
+@layer base {
+  * {
+    @apply border-[#2a2723];
+  }
+}
+
+@keyframes warm-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(212, 163, 115, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(212, 163, 115, 0.3);
+  }
+}
+
+.animate-warm-glow {
+  animation: warm-glow 4s ease-in-out infinite;
+}
+
+@layer utilities {
+  /* Premium Scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #2a2723;
+    border-radius: 10px;
+    transition: background 0.3s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #d4a373;
+  }
+
+  /* Keep scrollbar-hide for specific elements that truly need it */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Calendar Custom Styles (v10) */
+.rdp-custom {
+  --rdp-accent-color: #d4a373;
+  --rdp-accent-background: #d4a373;
+  --rdp-day_button-border-radius: 12px !important;
+  --rdp-selected-color: #0f0e0c;
+  --rdp-today-color: #d4a373;
+  width: 100%;
+}
+
+.rdp-custom .rdp-month {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.rdp-custom .rdp-month_caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  height: 40px;
+  margin-bottom: 16px;
+  padding: 0 40px;
+}
+
+.rdp-custom .rdp-caption_label {
+  font-size: 0.75rem !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.2em !important;
+  color: #f2efeb !important;
+  z-index: 1;
+}
+
+/* Fix for the navigation buttons/chevrons color */
+.rdp-custom .rdp-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.rdp-custom .rdp-button_previous,
+.rdp-custom .rdp-button_next {
+  pointer-events: auto;
+  color: #a8a29e !important;
+  background: #2a2723 !important;
+  border: 1px solid #3a3733 !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease;
+  border-radius: 10px !important;
+  z-index: 2;
+}
+
+/* Specific SVG/Chevron color fix */
+.rdp-custom .rdp-button_previous svg,
+.rdp-custom .rdp-button_next svg,
+.rdp-custom .rdp-chevron {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+  color: #d4a373 !important;
+}
+
+.rdp-custom .rdp-button_previous:hover,
+.rdp-custom .rdp-button_next:hover {
+  background-color: #d4a373 !important;
+  border-color: #d4a373 !important;
+}
+
+.rdp-custom .rdp-button_previous:hover svg,
+.rdp-custom .rdp-button_next:hover svg {
+  color: #0f0e0c !important;
+}
+
+/* Shape Inconsistency Fixes - High Specificity */
+.rdp-custom .rdp-day_button {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 12px !important;
+  border: 1px solid transparent !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.7rem !important;
+  color: #f2efeb !important;
+  margin: 1px !important;
+}
+
+/* Selected Day State */
+.rdp-custom .rdp-selected .rdp-day_button {
+  background-color: #d4a373 !important;
+  color: #0f0e0c !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(212, 163, 115, 0.2) !important;
+}
+
+/* Today State */
+.rdp-custom .rdp-today .rdp-day_button {
+  border: 1px solid rgba(212, 163, 115, 0.4) !important;
+  color: #d4a373 !important;
+  font-weight: 800 !important;
+}
+
+/* Fix: Today + Selected should have dark text for visibility */
+.rdp-custom .rdp-selected.rdp-today .rdp-day_button {
+  color: #0f0e0c !important;
+}
+
+/* Hover State */
+.rdp-custom .rdp-day_button:hover:not(.rdp-selected .rdp-day_button) {
+  background-color: #2a2723 !important;
+  color: #d4a373 !important;
+}
+
+/* Task Indicator Dot */
+.has-task-dot .rdp-day_button::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 3px;
+  background-color: #d4a373;
+  border-radius: 50%;
+}
+
+.rdp-custom .rdp-selected.has-task-dot .rdp-day_button::after {
+  background-color: #0f0e0c;
+}
