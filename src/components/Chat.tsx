@@ -574,7 +574,7 @@ export function Chat({
                 <ChevronLeft className="w-4 h-4" />
               </button>
             
-            <header className="p-6 shrink-0 space-y-6">
+            <header className="p-4 lg:p-6 shrink-0 space-y-4 lg:space-y-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-2">
@@ -589,7 +589,7 @@ export function Chat({
 
                 <button 
                   onClick={handleNewChat}
-                  className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] text-sm font-bold transition-all duration-300 shadow-lg shadow-[#d4a373]/10"
+                  className="w-full flex items-center justify-center gap-2.5 py-3 lg:py-3.5 rounded-2xl bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] text-sm font-bold transition-all duration-300 shadow-lg shadow-[#d4a373]/10"
                 >
                   <Plus className="w-4 h-4" />
                   New Session
@@ -604,7 +604,7 @@ export function Chat({
               .custom-scrollbar::-webkit-scrollbar-thumb { background: #2a2723; border-radius: 2px; }
               .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d4a373; }
             `}</style>
-            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-3 py-2 lg:py-4 space-y-0.5 lg:space-y-1 custom-scrollbar">
               <div className="px-3 mb-2 sticky top-0 bg-[#1a1814] py-2 z-10">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/50">History</span>
               </div>
@@ -618,7 +618,7 @@ export function Chat({
                       setActiveSessionId(session._id);
                     }
                   }}
-                  className={`group flex items-center justify-between p-3.5 rounded-2xl cursor-pointer transition-all duration-300 ${
+                  className={`group flex items-center justify-between p-2.5 lg:p-3.5 rounded-2xl cursor-pointer transition-all duration-300 ${
                     activeSessionId === session._id 
                       ? "bg-[#2a2723] text-[#f2efeb]" 
                       : "text-[#a8a29e] hover:bg-[#1f1d19] hover:text-[#f2efeb]"
@@ -696,7 +696,7 @@ export function Chat({
       >
         {/* Floating Toggle for History (when collapsed) */}
         
-        <header className="px-4 lg:px-8 py-4 flex flex-col gap-4 shrink-0 bg-[#0f0e0c]/80 backdrop-blur-xl z-20 border-b border-[#2a2723]/50">
+        <header className="px-4 lg:px-8 py-3 lg:py-4 flex flex-col gap-4 shrink-0 bg-[#0f0e0c]/80 backdrop-blur-xl z-20 border-b border-[#2a2723]/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 lg:gap-4">
               {/* Mobile Navigation Toggles */}
@@ -903,14 +903,14 @@ export function Chat({
         </header>
         
         {/* Mobile Session Title */}
-        <div className="lg:hidden px-6 py-2 border-b border-[#2a2723]/30 bg-[#12110e]">
+        <div className="lg:hidden px-6 py-1.5 border-b border-[#2a2723]/30 bg-[#12110e]">
           <h1 className="text-xs font-bold text-[#a8a29e] uppercase tracking-[0.2em] truncate">
             {activeSessionId ? sessions?.find(s => s._id === activeSessionId)?.title : "New Session"}
           </h1>
         </div>
 
-        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 lg:py-10 space-y-8 lg:space-y-12">
-          <div className="max-w-4xl mx-auto space-y-8 lg:space-y-12">
+        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-10 space-y-6 lg:space-y-12">
+          <div className="max-w-4xl mx-auto space-y-6 lg:space-y-12">
             {messages === undefined || !activeSessionId ? (
               <div className="flex flex-col items-center justify-center h-full space-y-6 opacity-40">
                 <div className="w-20 h-20 rounded-[32px] bg-[#1a1814] border border-[#2a2723] flex items-center justify-center shadow-2xl">
@@ -954,7 +954,7 @@ export function Chat({
                         }
                       </div>
                       <div className={`flex flex-col space-y-2 max-w-[90%] lg:max-w-[85%] ${msg.author === "User" ? "items-end" : ""}`}>
-                        <div className={`px-4 lg:px-5 py-3 lg:py-4 rounded-2xl lg:rounded-3xl ${
+                        <div className={`px-4 lg:px-5 py-2 lg:py-4 rounded-2xl lg:rounded-3xl ${
                           msg.author === "User"
                             ? "bg-[#1f1d19] border border-[#2a2723] text-[#f2efeb] rounded-tr-none"
                             : "bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] rounded-tl-none prose prose-invert prose-sm max-w-none"
@@ -1005,7 +1005,7 @@ export function Chat({
           </div>
         </main>
 
-        <footer className="p-4 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c] to-transparent">
+        <footer className="p-3 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c] to-transparent">
           <form onSubmit={handleSend} className="relative group max-w-4xl mx-auto">
             <div className="absolute inset-0 bg-[#d4a373]/5 blur-2xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
             <input
@@ -1024,7 +1024,7 @@ export function Chat({
               <Send className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
             </button>
           </form>
-          <p className="mt-4 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
+          <p className="mt-2 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
         </footer>
       </motion.div>
     </div>

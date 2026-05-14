@@ -51,7 +51,7 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="h-screen flex overflow-hidden bg-[#0f0e0c] relative">
+    <main className="h-dvh flex overflow-hidden bg-[#0f0e0c] relative">
       {/* Backdrops for Mobile Overlay */}
       <AnimatePresence>
         {(showHistory || showTasks) && (

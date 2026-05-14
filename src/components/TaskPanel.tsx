@@ -123,7 +123,7 @@ export function TaskPanel({
 
   return (
     <div className="w-full h-full flex flex-col bg-[#1a1814] overflow-hidden">
-      <header className="px-6 py-8 space-y-6">
+      <header className="px-6 py-4 lg:py-8 space-y-4 lg:space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 flex items-center justify-center">
