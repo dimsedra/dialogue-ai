@@ -22,8 +22,11 @@ export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLargeViewport, setIsLargeViewport] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [initialHeight, setInitialHeight] = useState<number | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInitialHeight(window.innerHeight);
     const check = () => setIsLargeViewport(window.innerWidth >= 1024);
     check();
     window.addEventListener("resize", check);
@@ -39,7 +42,7 @@ export default function Home() {
       }
     };
 
-    const preventNativeScroll = (e: Event) => {
+    const preventNativeScroll = () => {
       if (window.scrollY !== 0) {
         window.scrollTo(0, 0);
       }
@@ -107,7 +110,10 @@ export default function Home() {
   }, [isLargeViewport]);
 
   return (
-    <main className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]">
+    <main 
+      style={{ height: initialHeight ? `${initialHeight}px` : "100vh" }}
+      className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]"
+    >
       {/* Backdrops for Mobile Overlay */}
       <AnimatePresence>
         {(showHistory || showTasks) && (
