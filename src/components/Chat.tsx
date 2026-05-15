@@ -1320,7 +1320,14 @@ export function Chat({
                 ))}
               </AnimatePresence>
             )}
-            <div ref={messagesEndRef} className="h-4" />
+            {/* Dynamic Buffer: Ensures last message can always be scrolled above the floating tray/keyboard */}
+            <div 
+              style={{ 
+                height: isLargeViewport ? "4rem" : `calc(8rem + ${keyboardOffset}px)` 
+              }} 
+              className="transition-[height] duration-200"
+            />
+            <div ref={messagesEndRef} />
           </div>
         </main>
         <footer 
