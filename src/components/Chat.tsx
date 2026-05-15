@@ -261,7 +261,7 @@ export function Chat({
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
     setShowScrollBottom(!isAtBottom);
   };
 
@@ -289,8 +289,10 @@ export function Chat({
 
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+    if (!showScrollBottom) {
+      scrollToBottom();
+    }
+  }, [messages, scrollToBottom, showScrollBottom]);
 
   // ---- Shared helper: run LM Studio logic for a given session + text ----
   const runLocalLLMForSession = async (
@@ -1323,11 +1325,11 @@ export function Chat({
         </main>
         <motion.footer 
           animate={{ 
-            y: isLargeViewport ? 0 : -keyboardOffset,
+            bottom: isLargeViewport ? 0 : keyboardOffset,
           }}
           initial={false}
           transition={{ duration: 0 }}
-          className="absolute bottom-0 left-0 right-0 px-3 py-4 lg:p-8 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40"
+          className="absolute left-0 right-0 px-3 py-4 lg:p-8 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40"
         >
           {/* Attachment Tray */}
           <AnimatePresence>
