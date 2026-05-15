@@ -851,8 +851,6 @@ export function Chat({
 
       {/* Main Chat Area */}
       <motion.div 
-        layout
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
         className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c]"
       >
         {/* Floating Toggle for History (when collapsed) */}
@@ -1081,7 +1079,7 @@ export function Chat({
                 initial={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
                 animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
                 exit={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
-                transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
                 onClick={scrollToBottom}
                 className="fixed bottom-28 lg:bottom-32 left-1/2 z-40 p-2.5 rounded-full bg-[#1a1814]/80 backdrop-blur-md border border-[#2a2723] text-[#d4a373] shadow-xl shadow-black/40 hover:bg-[#2a2723] transition-all"
                 title="Scroll to Bottom"
@@ -1320,18 +1318,14 @@ export function Chat({
                 ))}
               </AnimatePresence>
             )}
-            <motion.div 
-              animate={{ height: isLargeViewport ? 16 : (keyboardOffset + 120) }}
-              transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
-            />
-            <div ref={messagesEndRef} className="h-1" />
+            <div ref={messagesEndRef} className="h-4" />
           </div>
         </main>
         <motion.footer 
           animate={{ 
             y: isLargeViewport ? 0 : -keyboardOffset,
           }}
-          transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
           className="absolute bottom-0 left-0 right-0 px-3 py-4 lg:p-8 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40"
         >
           {/* Attachment Tray */}
