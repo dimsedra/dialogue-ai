@@ -5,7 +5,7 @@ import { api } from "../../convex/_generated/api";
 import { CheckCircle2, Circle, Clock, ListTodo, Sparkles, Tag, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Calendar as CalendarIcon, Grid, Filter, ArrowUpDown, Search, Trash2, Edit3, Save, X } from "lucide-react";
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Id } from "../../convex/_generated/dataModel";
+import { Id, Doc } from "../../convex/_generated/dataModel";
 import { DayPicker } from "react-day-picker";
 import { format, isSameDay, parse, parseISO } from "date-fns";
 import "react-day-picker/dist/style.css";
@@ -19,7 +19,7 @@ export function TaskPanel({
   onSync?: () => void,
   onClose?: () => void
 }) {
-  const tasks = useQuery(api.tasks.listIncomplete, { workspaceId: activeWorkspaceId });
+  const tasks = useQuery(api.tasks.list, { workspaceId: activeWorkspaceId });
   const events = useQuery(api.events.list, { workspaceId: activeWorkspaceId });
   const toggleTask = useMutation(api.tasks.toggleCompleted);
   const deleteTask = useMutation(api.tasks.deleteTask);
@@ -54,7 +54,7 @@ export function TaskPanel({
   // Custom Modal State
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; type: "task" | "event" } | null>(null);
 
-  const workspaces = useQuery(api.workspaces.list);
+  const workspaces = useQuery(api.workspaces.list, {});
 
   // Helper to parse dates from the database (supports ISO and legacy human formats)
   const parseTaskDate = (dateStr: string | number | undefined): Date | null => {
@@ -91,7 +91,7 @@ export function TaskPanel({
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];
-    return tasks.filter(t => {
+    return (tasks as Doc<"tasks">[]).filter(t => {
       const matchSearch = t.text.toLowerCase().includes(searchQuery.toLowerCase()) || 
                          t.category?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchSearch;
@@ -106,7 +106,7 @@ export function TaskPanel({
         return dateA - dateB;
       }
       if (sortBy === "priority") {
-        const weights = { high: 3, medium: 2, low: 1 };
+        const weights: Record<string, number> = { high: 3, medium: 2, low: 1 };
         return (weights[b.priority || "medium"] || 0) - (weights[a.priority || "medium"] || 0);
       }
       if (sortBy === "category") {
@@ -118,7 +118,7 @@ export function TaskPanel({
 
   const taskDates = useMemo(() => {
     if (!tasks) return [];
-    return tasks.map(t => parseTaskDate(t.dueDate)).filter(Boolean) as Date[];
+    return (tasks as Doc<"tasks">[]).map(t => parseTaskDate(t.dueDate)).filter(Boolean) as Date[];
   }, [tasks]);
 
   const eventDates = useMemo(() => {
@@ -128,7 +128,7 @@ export function TaskPanel({
 
   const tasksOnSelectedDate = useMemo(() => {
     if (!tasks || !selectedDate) return [];
-    return tasks.filter(t => {
+    return (tasks as Doc<"tasks">[]).filter(t => {
       const taskDate = parseTaskDate(t.dueDate);
       return taskDate ? isSameDay(taskDate, selectedDate) : false;
     });

@@ -4,10 +4,11 @@ import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2, ArrowDown } from "lucide-react";
+import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2, ArrowDown, LogOut } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../convex/_generated/dataModel";
+import { useAuthActions } from "@convex-dev/auth/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { processLocalLLMRequest } from "../lib/lmstudio";
@@ -187,9 +188,10 @@ export function Chat({
   isLargeViewport: boolean,
   keyboardOffset: number
 }) {
-  const workspaces = useQuery(api.workspaces.list);
+  const workspaces = useQuery(api.workspaces.list, {});
   const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
-  const messages = useQuery(api.messages.list, { sessionId: activeSessionId ?? undefined });
+  const messages = useQuery(api.messages.list, activeSessionId ? { sessionId: activeSessionId } : "skip");
+  const profile = useQuery(api.ai.getProfile, {});
   
   const createWorkspace = useMutation(api.workspaces.create);
   const sendMessage = useMutation(api.messages.send);
@@ -197,6 +199,8 @@ export function Chat({
   const createSession = useMutation(api.messages.createSession);
   const deleteSession = useMutation(api.messages.deleteSession);
   const renameSession = useMutation(api.messages.renameSession);
+  
+  const { signOut } = useAuthActions();
   const updateWorkspaceContext = useMutation(api.workspaces.updateContext);
   
   // Tool Mutations for local LLM
@@ -268,7 +272,7 @@ export function Chat({
     setPreviews(newPreviews);
     return () => cleanupUrls.forEach(url => URL.revokeObjectURL(url));
   }, [selectedFiles]);
-  const profile = useQuery(api.ai.getProfile);
+  
   const [provider, setProvider] = useState<"gemini" | "lmstudio">(() => {
     if (typeof window !== "undefined") {
       return (localStorage.getItem("dialogue_provider") as "gemini" | "lmstudio") || "gemini";
@@ -986,6 +990,16 @@ export function Chat({
                               >
                                 <span className="text-xs font-bold">Local LLM (LM Studio)</span>
                                 {provider === "lmstudio" && <Check className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+
+                            <div className="pt-2 border-t border-[#2a2723]">
+                              <button
+                                onClick={() => signOut()}
+                                className="w-full flex items-center gap-3 p-3 rounded-xl text-[#f87171] hover:bg-red-500/10 transition-all group"
+                              >
+                                <LogOut className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                                <span className="text-xs font-bold uppercase tracking-widest">Sign Out</span>
                               </button>
                             </div>
                           </motion.div>

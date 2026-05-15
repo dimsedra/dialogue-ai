@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { auth } from "./auth";
 
 export const create = mutation({
   args: {
@@ -8,7 +9,11 @@ export const create = mutation({
     color: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) throw new Error("Unauthorized");
+
     const workspaceId = await ctx.db.insert("workspaces", {
+      userId,
       name: args.name,
       icon: args.icon,
       color: args.color,
@@ -19,21 +24,35 @@ export const create = mutation({
 });
 
 export const list = query({
-  handler: async (ctx) => {
-    return await ctx.db.query("workspaces").order("desc").collect();
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) return [];
+    
+    return await ctx.db
+      .query("workspaces")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
   },
 });
 
 export const get = query({
-  args: { id: v.id("workspaces") },
+  args: { id: v.id("workspaces"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    const workspace = await ctx.db.get(args.id);
+    if (!workspace || workspace.userId !== userId) return null;
+    return workspace;
   },
 });
 
 export const updateContext = mutation({
   args: { id: v.id("workspaces"), context: v.string() },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const workspace = await ctx.db.get(args.id);
+    if (!workspace || workspace.userId !== userId) throw new Error("Unauthorized");
+    
     await ctx.db.patch(args.id, { context: args.context });
   },
 });
@@ -41,6 +60,10 @@ export const updateContext = mutation({
 export const deleteWorkspace = mutation({
   args: { id: v.id("workspaces") },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const workspace = await ctx.db.get(args.id);
+    if (!workspace || workspace.userId !== userId) throw new Error("Unauthorized");
+    
     await ctx.db.delete(args.id);
   },
 });

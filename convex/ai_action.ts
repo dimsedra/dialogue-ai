@@ -67,6 +67,7 @@ You are a multimodal agent. You can see and analyze multiple images and document
 export const chat = internalAction({
   args: {
     sessionId: v.id("chatSessions"),
+    userId: v.id("users"),
     messageId: v.optional(v.id("messages")),
     text: v.string(),
     author: v.string(),
@@ -98,8 +99,8 @@ export const chat = internalAction({
     const workspaceId = session?.workspaceId;
 
     // 1. Fetch user profile and relevant memories
-    const profile = await ctx.runQuery(api.ai.getProfile);
-    const memories = await ctx.runQuery(api.ai.getLatestMemories);
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
+    const memories = await ctx.runQuery(api.ai.getLatestMemories, { userId: args.userId });
     const personalityFragments = memories.map(m => m.text).join("\n- ");
 
     // Calculate local time based on offset if provided
@@ -118,12 +119,12 @@ export const chat = internalAction({
       });
     }
 
-    const workspace = workspaceId ? await ctx.runQuery(api.workspaces.get, { id: workspaceId }) : null;
+    const workspace = workspaceId ? await ctx.runQuery(api.workspaces.get, { id: workspaceId, userId: args.userId }) : null;
     const workspaceContext = workspace?.context
       ? `ACTIVE WORKSPACE: "${workspace.name}"\nWORKSPACE CONTEXT/RULES: "${workspace.context}"\n(Reminder: This context takes precedence over your default persona)`
       : "No specific workspace context provided. Follow your default adaptive persona.";
 
-    const briefing = await ctx.runQuery(api.tasks.getDailyBriefing, { workspaceId });
+    const briefing = await ctx.runQuery(api.tasks.getDailyBriefing, { workspaceId, userId: args.userId });
     const pendingTasksContext = briefing.tasks.map(t => {
       const eventDate = t.dueDate ? (
         args.timezoneOffset !== undefined 
@@ -134,7 +135,7 @@ export const chat = internalAction({
       return `- [${t._id}] ${t.text}${dateStr} (Priority: ${t.priority}, Category: ${t.category})`;
     }).join("\n");
 
-    const upcomingEvents = await ctx.runQuery(api.events.list, { workspaceId });
+    const upcomingEvents = await ctx.runQuery(api.events.list, { workspaceId, userId: args.userId });
     const upcomingEventsContext = upcomingEvents
       .filter(e => e.startTime > Date.now() - 3600000)
       .map(e => {
@@ -460,7 +461,8 @@ export const chat = internalAction({
               await ctx.runMutation(api.ai.addTask, {
                 ...taskArgs,
                 dueDate: taskArgs.dueDate ? parseLocal(taskArgs.dueDate as string) : undefined,
-                workspaceId
+                workspaceId,
+                userId: args.userId
               });
               activeToolCall = { name: "addTask", args: call.args };
             } else {
@@ -493,7 +495,8 @@ export const chat = internalAction({
                 ...eventArgs,
                 startTime: parseLocal(eventArgs.startTime as string),
                 endTime: parseLocal(eventArgs.endTime as string),
-                workspaceId
+                workspaceId,
+                userId: args.userId
               });
               activeToolCall = { name: "addEvent", args: call.args };
             } else {
@@ -515,8 +518,8 @@ export const chat = internalAction({
             await ctx.runMutation(api.events.remove, { id: eventId as Id<"events"> });
             activeToolCall = { name: "deleteEvent", args: call.args };
           } else if (call.name === "updateMemory") {
-            const args = call.args as { bio: string };
-            await ctx.runMutation(api.ai.updateProfile, args);
+            const updates = call.args as { bio: string };
+            await ctx.runMutation(api.ai.updateProfile, { ...updates, userId: args.userId });
             activeToolCall = { name: "updateMemory", args: call.args };
           }
         }
@@ -622,17 +625,15 @@ export const chat = internalAction({
         } : undefined
       });
 
-      // 5. Silent Reflection (Throttled: Run only every 20 messages to avoid over-sensitivity)
-      // Re-use recentMessages from earlier in the handler
       if (recentMessages.length % 20 === 0) {
-        await ctx.scheduler.runAfter(0, internal.ai_action.reflectOnPersonality, { sessionId: args.sessionId });
+        await ctx.scheduler.runAfter(0, internal.ai_action.reflectOnPersonality, { sessionId: args.sessionId, userId: args.userId });
       }
 
       // Auto-title if it's the first few messages and title is default
       if (recentMessages.length >= 1 && recentMessages.length <= 4) {
         const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId });
         if (session && session.title && (session.title.startsWith("Chat") || session.title === "New Chat")) {
-          await ctx.scheduler.runAfter(0, internal.ai_action.generateSessionTitle, { sessionId: args.sessionId });
+          await ctx.scheduler.runAfter(0, internal.ai_action.generateSessionTitle, { sessionId: args.sessionId, userId: args.userId });
         }
       }
 
@@ -648,7 +649,7 @@ export const chat = internalAction({
 });
 
 export const reflectOnPersonality = internalAction({
-  args: { sessionId: v.id("chatSessions") },
+  args: { sessionId: v.id("chatSessions"), userId: v.id("users") },
   handler: async (ctx, args) => {
     const apiKey = process.env.GEMINI_API_KEY!;
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -659,7 +660,7 @@ export const reflectOnPersonality = internalAction({
     const transcript = messages.map(m => `${m.author === "User" ? "HUMAN" : "ASSISTANT"}: ${m.text}`).join("\n");
 
     // Fetch existing memories to avoid duplicates
-    const existingMemories = await ctx.runQuery(api.ai.getAllMemories);
+    const existingMemories = await ctx.runQuery(api.ai.getAllMemories, { userId: args.userId });
     const memoryContext = existingMemories.map(m => `- ${m.text}`).join("\n");
 
     const prompt = `
@@ -706,7 +707,7 @@ export const reflectOnPersonality = internalAction({
 
       if (!isDuplicate) {
         const dummyEmbedding = Array(768).fill(0).map(() => Math.random());
-        await ctx.runMutation(api.ai.saveMemory, { text: insight, embedding: dummyEmbedding });
+        await ctx.runMutation(api.ai.saveMemory, { text: insight, embedding: dummyEmbedding, userId: args.userId });
         console.log("Captured new intelligence:", insight);
       }
     }
@@ -714,7 +715,7 @@ export const reflectOnPersonality = internalAction({
 });
 
 export const generateSessionTitle = internalAction({
-  args: { sessionId: v.id("chatSessions") },
+  args: { sessionId: v.id("chatSessions"), userId: v.id("users") },
   handler: async (ctx, args) => {
     const apiKey = process.env.GEMINI_API_KEY!;
     const genAI = new GoogleGenerativeAI(apiKey);

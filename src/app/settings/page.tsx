@@ -23,8 +23,8 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function SettingsPage() {
-  const profile = useQuery(api.ai.getProfile);
-  const memories = useQuery(api.ai.getAllMemories);
+  const profile = useQuery(api.ai.getProfile, {});
+  const memories = useQuery(api.ai.getAllMemories, {});
   const updateProfile = useMutation(api.ai.updateProfile);
   const updateMemory = useMutation(api.ai.updateMemoryText);
   const deleteMemory = useMutation(api.ai.deleteMemory);

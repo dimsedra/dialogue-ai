@@ -1,11 +1,16 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { auth } from "./auth";
 
 export const list = query({
   args: { sessionId: v.optional(v.id("chatSessions")) },
   handler: async (ctx, args) => {
     if (!args.sessionId) return [];
+    const userId = await auth.getUserId(ctx);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.userId !== userId) return [];
+
     return await ctx.db
       .query("messages")
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId!))
@@ -16,21 +21,35 @@ export const list = query({
 export const listSessions = query({
   args: { workspaceId: v.optional(v.id("workspaces")) },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return [];
+
     if (args.workspaceId) {
+      const workspace = await ctx.db.get(args.workspaceId);
+      if (!workspace || workspace.userId !== userId) return [];
+
       return await ctx.db
         .query("chatSessions")
         .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
+        .filter((q) => q.eq(q.field("userId"), userId))
         .order("desc")
         .collect();
     }
-    return await ctx.db.query("chatSessions").order("desc").collect();
+    return await ctx.db
+      .query("chatSessions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .collect();
   },
 });
 
 export const getSession = query({
   args: { id: v.id("chatSessions") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const userId = await auth.getUserId(ctx);
+    const session = await ctx.db.get(args.id);
+    if (!session || session.userId !== userId) return null;
+    return session;
   },
 });
 
@@ -40,7 +59,16 @@ export const createSession = mutation({
     workspaceId: v.optional(v.id("workspaces"))
   },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) throw new Error("Unauthorized");
+
+    if (args.workspaceId) {
+      const workspace = await ctx.db.get(args.workspaceId);
+      if (!workspace || workspace.userId !== userId) throw new Error("Unauthorized");
+    }
+
     return await ctx.db.insert("chatSessions", {
+      userId,
       title: args.title || "New Chat",
       workspaceId: args.workspaceId,
       createdAt: Date.now(),
@@ -52,6 +80,10 @@ export const createSession = mutation({
 export const deleteSession = mutation({
   args: { id: v.id("chatSessions") },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const session = await ctx.db.get(args.id);
+    if (!session || session.userId !== userId) throw new Error("Unauthorized");
+
     const messages = await ctx.db
       .query("messages")
       .withIndex("by_session", (q) => q.eq("sessionId", args.id))
@@ -66,6 +98,10 @@ export const deleteSession = mutation({
 export const renameSession = mutation({
   args: { id: v.id("chatSessions"), title: v.string() },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const session = await ctx.db.get(args.id);
+    if (!session || session.userId !== userId) throw new Error("Unauthorized");
+
     await ctx.db.patch(args.id, { title: args.title });
   },
 });
@@ -73,6 +109,10 @@ export const renameSession = mutation({
 export const updateSessionTitle = mutation({
   args: { id: v.id("chatSessions"), title: v.string() },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const session = await ctx.db.get(args.id);
+    if (!session || session.userId !== userId) throw new Error("Unauthorized");
+
     await ctx.db.patch(args.id, { title: args.title });
   },
 });
@@ -100,6 +140,10 @@ export const send = mutation({
     }))),
   },
   handler: async (ctx, { sessionId, text, author, timezoneOffset, brief, provider, toolCall, storageId, fileType, fileName, attachments }) => {
+    const userId = await auth.getUserId(ctx);
+    const session = await ctx.db.get(sessionId);
+    if (!session || session.userId !== userId) throw new Error("Unauthorized");
+
     const messageId = await ctx.db.insert("messages", {
       sessionId,
       text,
@@ -118,6 +162,7 @@ export const send = mutation({
     if (author !== "AI" && provider !== "lmstudio") {
       await ctx.scheduler.runAfter(0, internal.ai_action.chat, { 
         sessionId, 
+        userId,
         messageId,
         text, 
         author, 

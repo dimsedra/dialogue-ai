@@ -1,18 +1,34 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { auth } from "./auth";
 
 export const getPromptContext = query({
   args: {
     sessionId: v.id("chatSessions"),
     timezoneOffset: v.optional(v.number()),
     brief: v.optional(v.boolean()),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) return { systemInstruction: "Unauthorized", workspaceId: null };
+
     const session = await ctx.db.get(args.sessionId);
+    if (!session || session.userId !== userId) return { systemInstruction: "Unauthorized", workspaceId: null };
+
     const workspaceId = session?.workspaceId;
 
-    const profile = await ctx.db.query("userProfile").first();
-    const memories = await ctx.db.query("memories").order("desc").take(5);
+    const profile = await ctx.db
+      .query("userProfile")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const memories = await ctx.db
+      .query("memories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(5);
+
     const personalityFragments = memories.map(m => m.text).join("\n- ");
 
     let nowString = "";
@@ -37,7 +53,7 @@ export const getPromptContext = query({
 
     const tasks = workspaceId 
       ? await ctx.db.query("tasks").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).filter((q) => q.eq(q.field("completed"), false)).collect()
-      : await ctx.db.query("tasks").filter((q) => q.eq(q.field("completed"), false)).collect();
+      : await ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).filter((q) => q.eq(q.field("completed"), false)).collect();
     const pendingTasksContext = tasks.map(t => {
       const dateStr = t.dueDate ? ` | Due: ${t.dueDate}` : "";
       return `- [${t._id}] ${t.text}${dateStr} (Priority: ${t.priority}, Category: ${t.category})`;
@@ -45,7 +61,7 @@ export const getPromptContext = query({
 
     const events = workspaceId
       ? await ctx.db.query("events").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect()
-      : await ctx.db.query("events").collect();
+      : await ctx.db.query("events").withIndex("by_user", (q) => q.eq("userId", userId)).collect();
     const upcomingEventsContext = events
       .filter(e => e.startTime > Date.now() - 3600000)
       .map(e => {
@@ -97,34 +113,63 @@ export const getPromptContext = query({
 });
 
 export const getLatestMemories = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db.query("memories").order("desc").take(3);
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) return [];
+    return await ctx.db
+      .query("memories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(3);
   },
 });
 
 export const saveMemory = mutation({
-  args: { text: v.string(), embedding: v.array(v.number()) },
+  args: { text: v.string(), embedding: v.array(v.number()), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    await ctx.db.insert("memories", { text: args.text, embedding: args.embedding });
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+    await ctx.db.insert("memories", { 
+      userId, 
+      text: args.text, 
+      embedding: args.embedding 
+    });
   },
 });
 
 export const getProfile = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db.query("userProfile").first();
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) return null;
+    return await ctx.db
+      .query("userProfile")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
   },
 });
 
 export const updateProfile = mutation({
-  args: { name: v.optional(v.string()), bio: v.string() },
+  args: { name: v.optional(v.string()), bio: v.string(), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const profile = await ctx.db.query("userProfile").first();
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+
+    const profile = await ctx.db
+      .query("userProfile")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
     if (profile) {
       await ctx.db.patch(profile._id, { name: args.name, bio: args.bio });
     } else {
-      await ctx.db.insert("userProfile", { name: args.name, bio: args.bio, preferences: {} });
+      await ctx.db.insert("userProfile", { 
+        userId, 
+        name: args.name, 
+        bio: args.bio, 
+        preferences: {} 
+      });
     }
   },
 });
@@ -132,10 +177,18 @@ export const updateProfile = mutation({
 export const updatePreferences = mutation({
   args: { 
     provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"))),
-    searchProvider: v.optional(v.union(v.literal("tavily"), v.literal("serper")))
+    searchProvider: v.optional(v.union(v.literal("tavily"), v.literal("serper"))),
+    userId: v.optional(v.id("users"))
   },
   handler: async (ctx, args) => {
-    const profile = await ctx.db.query("userProfile").first();
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+
+    const profile = await ctx.db
+      .query("userProfile")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
     if (profile) {
       const preferences = (profile.preferences as Record<string, unknown>) || {};
       await ctx.db.patch(profile._id, {
@@ -147,6 +200,7 @@ export const updatePreferences = mutation({
       });
     } else {
       await ctx.db.insert("userProfile", {
+        userId,
         bio: "",
         preferences: { 
           ...(args.provider ? { provider: args.provider } : { provider: "gemini" }),
@@ -158,15 +212,25 @@ export const updatePreferences = mutation({
 });
 
 export const getAllMemories = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db.query("memories").order("desc").collect();
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) return [];
+    return await ctx.db
+      .query("memories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .collect();
   },
 });
 
 export const updateMemoryText = mutation({
   args: { id: v.id("memories"), text: v.string() },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const memory = await ctx.db.get(args.id);
+    if (!memory || memory.userId !== userId) throw new Error("Unauthorized");
+
     await ctx.db.patch(args.id, { text: args.text });
   },
 });
@@ -174,6 +238,10 @@ export const updateMemoryText = mutation({
 export const deleteMemory = mutation({
   args: { id: v.id("memories") },
   handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const memory = await ctx.db.get(args.id);
+    if (!memory || memory.userId !== userId) throw new Error("Unauthorized");
+
     await ctx.db.delete(args.id);
   },
 });
@@ -186,9 +254,14 @@ export const addTask = mutation({
     priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+
     await ctx.db.insert("tasks", {
+      userId,
       text: args.text,
       workspaceId: args.workspaceId,
       completed: false,
