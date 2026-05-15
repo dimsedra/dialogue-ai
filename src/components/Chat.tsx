@@ -1324,7 +1324,8 @@ export function Chat({
         </main>
         <motion.footer 
           animate={{ 
-            y: isLargeViewport ? 0 : -keyboardOffset
+            y: isLargeViewport ? 0 : -keyboardOffset,
+            paddingBottom: isLargeViewport ? "2rem" : (keyboardOffset > 0 ? "0.5rem" : "1rem")
           }}
           transition={{ type: "spring", damping: 30, stiffness: 300, mass: 0.5 }}
           className="px-3 py-4 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-20"
