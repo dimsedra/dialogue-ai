@@ -173,7 +173,9 @@ export function Chat({
   setActiveWorkspaceId,
   showHistory,
   setShowHistory,
-  onSyncRef
+  onSyncRef,
+  isLargeViewport,
+  keyboardOffset
 }: { 
   activeSessionId: Id<"chatSessions"> | null, 
   setActiveSessionId: (id: Id<"chatSessions"> | null) => void,
@@ -181,7 +183,9 @@ export function Chat({
   setActiveWorkspaceId: (id: Id<"workspaces"> | undefined, sessionId?: Id<"chatSessions"> | null) => void,
   showHistory: boolean,
   setShowHistory: (show: boolean) => void,
-  onSyncRef?: React.MutableRefObject<(() => void) | null>
+  onSyncRef?: React.MutableRefObject<(() => void) | null>,
+  isLargeViewport: boolean,
+  keyboardOffset: number
 }) {
   const workspaces = useQuery(api.workspaces.list);
   const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
@@ -853,7 +857,7 @@ export function Chat({
       >
         {/* Floating Toggle for History (when collapsed) */}
         
-        <header className="px-4 lg:px-8 py-3 lg:py-4 flex flex-col gap-4 shrink-0 bg-[#0f0e0c]/80 backdrop-blur-xl z-20 border-b border-[#2a2723]/50">
+        <header className="absolute top-0 left-0 right-0 px-4 lg:px-8 py-3 lg:py-4 flex flex-col gap-4 bg-[#0f0e0c]/80 backdrop-blur-xl z-30 border-b border-[#2a2723]/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 lg:gap-4">
               {/* Mobile Navigation Toggles */}
@@ -1068,7 +1072,7 @@ export function Chat({
 
         <main 
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-10 space-y-6 lg:space-y-12 relative"
+          className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 pb-4 lg:pb-10 space-y-6 lg:space-y-12"
         >
           {/* Premium Centered Scroll Down Button (Gemini Style) */}
           <AnimatePresence>
@@ -1316,11 +1320,19 @@ export function Chat({
                 ))}
               </AnimatePresence>
             )}
-            <div ref={messagesEndRef} className="h-4" />
+            <motion.div 
+              animate={{ height: isLargeViewport ? 16 : (keyboardOffset + 120) }}
+              transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
+            />
+            <div ref={messagesEndRef} className="h-1" />
           </div>
         </main>
-        <footer 
-          className="px-3 py-4 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-20"
+        <motion.footer 
+          animate={{ 
+            y: isLargeViewport ? 0 : -keyboardOffset,
+          }}
+          transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
+          className="absolute bottom-0 left-0 right-0 px-3 py-4 lg:p-8 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40"
         >
           {/* Attachment Tray */}
           <AnimatePresence>
@@ -1416,7 +1428,7 @@ export function Chat({
             </button>
           </form>
           <p className="mt-2 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
-        </footer>
+        </motion.footer>
       </motion.div>
 
       {/* Global Workspace Creation Modal */}

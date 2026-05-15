@@ -21,6 +21,7 @@ export default function Home() {
   const [showTasks, setShowTasks] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLargeViewport, setIsLargeViewport] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   useEffect(() => {
     const check = () => setIsLargeViewport(window.innerWidth >= 1024);
@@ -29,7 +30,14 @@ export default function Home() {
 
     // Keyboard handling via Visual Viewport API
     const handleViewportChange = () => {
-      // Manual offsets removed in favor of h-dvh
+      if (window.visualViewport) {
+        const offset = window.innerHeight - (window.visualViewport.height + window.visualViewport.offsetTop);
+        setKeyboardOffset(Math.max(0, offset));
+        
+        if (offset > 0) {
+          window.scrollTo(0, 0);
+        }
+      }
     };
 
     if (window.visualViewport) {
@@ -92,7 +100,7 @@ export default function Home() {
   }, [isLargeViewport]);
 
   return (
-    <main className="h-dvh flex overflow-hidden bg-[#0f0e0c] relative">
+    <main className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]">
       {/* Backdrops for Mobile Overlay */}
       <AnimatePresence>
         {(showHistory || showTasks) && (
@@ -110,7 +118,7 @@ export default function Home() {
       <motion.div 
         layout
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="flex-1 flex overflow-hidden relative"
+        className="flex-1 flex h-full overflow-hidden relative"
       >
         <Chat 
           activeSessionId={activeSessionId} 
@@ -120,6 +128,8 @@ export default function Home() {
           showHistory={showHistory}
           setShowHistory={handleSetShowHistory}
           onSyncRef={syncRef}
+          isLargeViewport={isLargeViewport}
+          keyboardOffset={keyboardOffset}
         />
       </motion.div>
 
@@ -127,7 +137,7 @@ export default function Home() {
       {!showTasks && (
         <motion.button
           animate={{ 
-            bottom: isLargeViewport ? "2rem" : "6.5rem" 
+            bottom: isLargeViewport ? "2rem" : `calc(6.5rem + ${keyboardOffset}px)` 
           }}
           transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
           onClick={() => handleSetShowTasks(true)}
