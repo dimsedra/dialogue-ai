@@ -700,7 +700,7 @@ export function Chat({
       <motion.div
         initial={false}
         animate={{ 
-          width: isLargeViewport ? (showHistory ? 288 : 0) : "85%",
+          width: isLargeViewport ? (showHistory ? 288 : 0) : (showHistory ? "min(288px, 85vw)" : 0),
           opacity: isLargeViewport ? (showHistory ? 1 : 0) : (showHistory ? 1 : 0),
           x: isLargeViewport ? 0 : (showHistory ? 0 : "-100%")
         }}
@@ -709,7 +709,7 @@ export function Chat({
           isLargeViewport ? "relative border-r" : "fixed left-0 shadow-[20px_0_40px_rgba(0,0,0,0.5)]"
         }`}
       >
-        <div className="w-[288px] sm:w-[288px] h-full flex overflow-hidden">
+        <div className="w-full h-full flex overflow-hidden">
             {/* Mobile Workspace Rail (Inside the Drawer) */}
             <div className="lg:hidden w-[72px] h-full bg-[#141210] border-r border-[#2a2723] flex flex-col items-center pt-10 pb-6 gap-6 shrink-0">
               <button 
@@ -1107,26 +1107,6 @@ export function Chat({
           onScroll={handleScroll}
           className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 space-y-6 lg:space-y-12 custom-scrollbar lg:scrollbar-default scrollbar-hide"
         >
-          {/* Premium Centered Scroll Down Button (Gemini Style) */}
-          <AnimatePresence>
-            {showScrollBottom && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
-                animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
-                exit={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                onClick={scrollToBottom}
-                onPointerDown={(e) => e.preventDefault()}
-                style={{ 
-                  bottom: isLargeViewport ? "8rem" : `calc(8.5rem + ${keyboardOffset}px)` 
-                }}
-                className="absolute left-1/2 z-40 p-2.5 rounded-full bg-[#1a1814]/80 backdrop-blur-md border border-[#2a2723] text-[#d4a373] shadow-xl shadow-black/40 hover:bg-[#2a2723] transition-all"
-                title="Scroll to Bottom"
-              >
-                <ArrowDown className="w-5 h-5" />
-              </motion.button>
-            )}
-          </AnimatePresence>
 
           <div className="max-w-4xl mx-auto h-full flex flex-col">
             <AnimatePresence mode="wait">
@@ -1398,6 +1378,27 @@ export function Chat({
           <div ref={messagesEndRef} className="h-px w-full" />
         </div>
       </main>
+
+        {/* Premium Centered Scroll Down Button (Gemini Style) */}
+        <AnimatePresence>
+          {showScrollBottom && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
+              animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
+              exit={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              onClick={scrollToBottom}
+              onPointerDown={(e) => e.preventDefault()}
+              style={{ 
+                bottom: isLargeViewport ? "8.5rem" : `calc(8.5rem + ${keyboardOffset}px)` 
+              }}
+              className="absolute left-1/2 z-40 p-2.5 rounded-full bg-[#1a1814]/80 backdrop-blur-md border border-[#2a2723] text-[#d4a373] shadow-xl shadow-black/40 hover:bg-[#2a2723] transition-all"
+              title="Scroll to Bottom"
+            >
+              <ArrowDown className="w-5 h-5" />
+            </motion.button>
+          )}
+        </AnimatePresence>
         <footer 
           style={{ 
             bottom: isLargeViewport ? 0 : `${keyboardOffset}px`,

@@ -193,7 +193,7 @@ export default function Home() {
       <motion.div
         initial={false}
         animate={{ 
-          width: isLargeViewport ? (showTasks ? 320 : 0) : "85%",
+          width: isLargeViewport ? (showTasks ? 320 : 0) : (showTasks ? "min(320px, 85vw)" : 0),
           opacity: isLargeViewport ? (showTasks ? 1 : 0) : (showTasks ? 1 : 0),
           x: isLargeViewport ? 0 : (showTasks ? 0 : "100%")
         }}
@@ -202,7 +202,7 @@ export default function Home() {
           isLargeViewport ? "relative border-l" : "absolute right-0 shadow-[-20px_0_40px_rgba(0,0,0,0.5)]"
         }`}
       >
-        <div className="w-[320px] sm:w-[320px] h-full">
+        <div className="w-full h-full">
           <TaskPanel 
             activeWorkspaceId={activeWorkspaceId}
             onSync={handleSyncFromPanel}
