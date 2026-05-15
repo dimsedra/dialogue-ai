@@ -1325,7 +1325,8 @@ export function Chat({
           animate={{ 
             y: isLargeViewport ? 0 : -keyboardOffset,
           }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
+          initial={false}
+          transition={{ duration: 0 }}
           className="absolute bottom-0 left-0 right-0 px-3 py-4 lg:p-8 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40"
         >
           {/* Attachment Tray */}

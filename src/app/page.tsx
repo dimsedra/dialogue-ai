@@ -31,12 +31,17 @@ export default function Home() {
     // Keyboard handling via Visual Viewport API
     const handleViewportChange = () => {
       if (window.visualViewport) {
-        const offset = window.innerHeight - (window.visualViewport.height + window.visualViewport.offsetTop);
-        setKeyboardOffset(Math.max(0, offset));
-        
-        if (offset > 0) {
-          window.scrollTo(0, 0);
-        }
+        requestAnimationFrame(() => {
+          const offset = window.innerHeight - (window.visualViewport!.height + window.visualViewport!.offsetTop);
+          setKeyboardOffset(Math.max(0, offset));
+          if (window.scrollY !== 0) window.scrollTo(0, 0);
+        });
+      }
+    };
+
+    const preventNativeScroll = (e: Event) => {
+      if (window.scrollY !== 0) {
+        window.scrollTo(0, 0);
       }
     };
 
@@ -44,6 +49,7 @@ export default function Home() {
       window.visualViewport.addEventListener("resize", handleViewportChange);
       window.visualViewport.addEventListener("scroll", handleViewportChange);
     }
+    window.addEventListener("scroll", preventNativeScroll, { passive: false });
 
     return () => {
       window.removeEventListener("resize", check);
@@ -51,6 +57,7 @@ export default function Home() {
         window.visualViewport.removeEventListener("resize", handleViewportChange);
         window.visualViewport.removeEventListener("scroll", handleViewportChange);
       }
+      window.removeEventListener("scroll", preventNativeScroll);
     };
   }, []);
 
@@ -133,17 +140,16 @@ export default function Home() {
 
       {/* Right Sidebar Toggle (Floating / FAB on Mobile) */}
       {!showTasks && (
-        <motion.button
-          animate={{ 
+        <button
+          onClick={() => handleSetShowTasks(true)}
+          style={{ 
             bottom: isLargeViewport ? "2rem" : `calc(6.5rem + ${keyboardOffset}px)` 
           }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-          onClick={() => handleSetShowTasks(true)}
           className="fixed right-6 z-40 p-4 lg:p-3 rounded-full lg:rounded-2xl bg-[#d4a373] lg:bg-[#1a1814] border border-[#d4a373]/20 lg:border-[#2a2723] text-[#0f0e0c] lg:text-[#a8a29e] hover:text-[#0f0e0c] lg:hover:text-[#d4a373] transition-all shadow-2xl lg:shadow-black/50 group flex items-center justify-center"
           title="Show Planner"
         >
           <Grid2x2 className="w-6 h-6 lg:w-5 lg:h-5 transition-transform group-hover:rotate-12" />
-        </motion.button>
+        </button>
       )}
 
       {/* Task Panel (Collapsible / Overlay) */}
