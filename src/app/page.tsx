@@ -34,6 +34,11 @@ export default function Home() {
         const offset = window.innerHeight - window.visualViewport.height;
         setKeyboardOffset(Math.max(0, offset));
         document.documentElement.style.setProperty('--keyboard-offset', `${Math.max(0, offset)}px`);
+        
+        // Prevent browser from scrolling the body up
+        if (offset > 0) {
+          window.scrollTo(0, 0);
+        }
       }
     };
 
@@ -49,6 +54,11 @@ export default function Home() {
         window.visualViewport.removeEventListener("scroll", handleViewportChange);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    // Force top scroll on mount to ensure header is visible
+    window.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {
@@ -92,7 +102,7 @@ export default function Home() {
   }, [isLargeViewport]);
 
   return (
-    <main className="h-screen flex overflow-hidden bg-[#0f0e0c] relative">
+    <main className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]">
       {/* Backdrops for Mobile Overlay */}
       <AnimatePresence>
         {(showHistory || showTasks) && (

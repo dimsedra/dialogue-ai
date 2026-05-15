@@ -1074,15 +1074,15 @@ export function Chat({
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-10 space-y-6 lg:space-y-12 relative"
         >
-          {/* Compact Scroll Down Button */}
+          {/* Premium Centered Scroll Down Button (Gemini Style) */}
           <AnimatePresence>
             {showScrollBottom && (
               <motion.button
-                initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                initial={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
+                animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
+                exit={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
                 onClick={scrollToBottom}
-                className="fixed bottom-24 lg:bottom-32 right-6 lg:right-12 z-40 p-3 rounded-full bg-[#d4a373] text-[#0f0e0c] shadow-2xl shadow-[#d4a373]/20 hover:bg-[#c39262] transition-all"
+                className="fixed bottom-28 lg:bottom-32 left-1/2 z-40 p-2.5 rounded-full bg-[#1a1814]/80 backdrop-blur-md border border-[#2a2723] text-[#d4a373] shadow-xl shadow-black/40 hover:bg-[#2a2723] transition-all"
                 title="Scroll to Bottom"
               >
                 <ArrowDown className="w-5 h-5" />
@@ -1327,7 +1327,7 @@ export function Chat({
             y: isLargeViewport ? 0 : -keyboardOffset
           }}
           transition={{ type: "spring", damping: 30, stiffness: 300, mass: 0.5 }}
-          className="p-3 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c] to-transparent z-20"
+          className="px-3 py-4 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-20"
         >
           {/* Attachment Tray */}
           <AnimatePresence>
@@ -1405,9 +1405,9 @@ export function Chat({
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Write a message..."}
+              placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Ask Dialogue..."}
               disabled={!activeSessionId || isUploading}
-              className="relative w-full bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] pl-12 lg:pl-14 pr-12 lg:pr-14 py-3.5 lg:py-4 rounded-xl lg:rounded-2xl focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-all duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl"
+              className="relative w-full bg-[#1a1814]/90 backdrop-blur-xl border border-[#2a2723] text-[#f2efeb] pl-12 lg:pl-14 pr-12 lg:pr-14 py-4 rounded-[2rem] focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-all duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl"
             />
             
             <button
