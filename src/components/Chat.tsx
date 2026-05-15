@@ -173,9 +173,7 @@ export function Chat({
   setActiveWorkspaceId,
   showHistory,
   setShowHistory,
-  onSyncRef,
-  isLargeViewport,
-  keyboardOffset
+  onSyncRef
 }: { 
   activeSessionId: Id<"chatSessions"> | null, 
   setActiveSessionId: (id: Id<"chatSessions"> | null) => void,
@@ -183,9 +181,7 @@ export function Chat({
   setActiveWorkspaceId: (id: Id<"workspaces"> | undefined, sessionId?: Id<"chatSessions"> | null) => void,
   showHistory: boolean,
   setShowHistory: (show: boolean) => void,
-  onSyncRef?: React.MutableRefObject<(() => void) | null>,
-  isLargeViewport: boolean,
-  keyboardOffset: number
+  onSyncRef?: React.MutableRefObject<(() => void) | null>
 }) {
   const workspaces = useQuery(api.workspaces.list);
   const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
@@ -1320,19 +1316,10 @@ export function Chat({
                 ))}
               </AnimatePresence>
             )}
-            <motion.div 
-              animate={{ height: isLargeViewport ? 16 : (keyboardOffset + 120) }}
-              transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
-            />
-            <div ref={messagesEndRef} className="h-1" />
+            <div ref={messagesEndRef} className="h-4" />
           </div>
         </main>
-        <motion.footer 
-          animate={{ 
-            y: isLargeViewport ? 0 : -keyboardOffset,
-            paddingBottom: isLargeViewport ? "2rem" : (keyboardOffset > 0 ? "0.5rem" : "1rem")
-          }}
-          transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
+        <footer 
           className="px-3 py-4 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-20"
         >
           {/* Attachment Tray */}
@@ -1429,7 +1416,7 @@ export function Chat({
             </button>
           </form>
           <p className="mt-2 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
-        </motion.footer>
+        </footer>
       </motion.div>
 
       {/* Global Workspace Creation Modal */}

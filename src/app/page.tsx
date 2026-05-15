@@ -21,7 +21,6 @@ export default function Home() {
   const [showTasks, setShowTasks] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLargeViewport, setIsLargeViewport] = useState(false);
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   useEffect(() => {
     const check = () => setIsLargeViewport(window.innerWidth >= 1024);
@@ -30,17 +29,7 @@ export default function Home() {
 
     // Keyboard handling via Visual Viewport API
     const handleViewportChange = () => {
-      if (window.visualViewport) {
-        // Calculate the actual distance from the bottom of the layout viewport to the top of the keyboard
-        const offset = window.innerHeight - (window.visualViewport.height + window.visualViewport.offsetTop);
-        setKeyboardOffset(Math.max(0, offset));
-        document.documentElement.style.setProperty('--keyboard-offset', `${Math.max(0, offset)}px`);
-        
-        // Prevent browser from scrolling the body up
-        if (offset > 0) {
-          window.scrollTo(0, 0);
-        }
-      }
+      // Manual offsets removed in favor of h-dvh
     };
 
     if (window.visualViewport) {
@@ -103,7 +92,7 @@ export default function Home() {
   }, [isLargeViewport]);
 
   return (
-    <main className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]">
+    <main className="h-dvh flex overflow-hidden bg-[#0f0e0c] relative">
       {/* Backdrops for Mobile Overlay */}
       <AnimatePresence>
         {(showHistory || showTasks) && (
@@ -131,8 +120,6 @@ export default function Home() {
           showHistory={showHistory}
           setShowHistory={handleSetShowHistory}
           onSyncRef={syncRef}
-          isLargeViewport={isLargeViewport}
-          keyboardOffset={keyboardOffset}
         />
       </motion.div>
 
@@ -140,7 +127,7 @@ export default function Home() {
       {!showTasks && (
         <motion.button
           animate={{ 
-            bottom: isLargeViewport ? "2rem" : `calc(6.5rem + ${keyboardOffset}px)` 
+            bottom: isLargeViewport ? "2rem" : "6.5rem" 
           }}
           transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
           onClick={() => handleSetShowTasks(true)}
