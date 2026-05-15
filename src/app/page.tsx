@@ -157,9 +157,9 @@ export default function Home() {
         <button
           onClick={() => handleSetShowTasks(true)}
           style={{ 
-            bottom: isLargeViewport ? "2rem" : `calc(6.5rem + ${keyboardOffset}px)` 
+            bottom: isLargeViewport ? "2rem" : `calc(5.2rem + ${keyboardOffset}px)` 
           }}
-          className="fixed right-6 z-40 p-4 lg:p-3 rounded-full lg:rounded-2xl bg-[#d4a373] lg:bg-[#1a1814] border border-[#d4a373]/20 lg:border-[#2a2723] text-[#0f0e0c] lg:text-[#a8a29e] hover:text-[#0f0e0c] lg:hover:text-[#d4a373] transition-all shadow-2xl lg:shadow-black/50 group flex items-center justify-center"
+          className="absolute right-6 z-40 p-4 lg:p-3 rounded-full lg:rounded-2xl bg-[#d4a373] lg:bg-[#1a1814] border border-[#d4a373]/20 lg:border-[#2a2723] text-[#0f0e0c] lg:text-[#a8a29e] hover:text-[#0f0e0c] lg:hover:text-[#d4a373] transition-all shadow-2xl lg:shadow-black/50 group flex items-center justify-center"
           title="Show Planner"
         >
           <Grid2x2 className="w-6 h-6 lg:w-5 lg:h-5 transition-transform group-hover:rotate-12" />
