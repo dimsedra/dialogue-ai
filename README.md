@@ -76,15 +76,6 @@ Dialogue is a high-performance, minimal productivity ecosystem engineered for ag
    npx convex dev
    ```
 
-## Roadmap and Future Implementation
-
-Detailed implementation plans for upcoming features can be found in the local `/future-impl/` directory:
-
-- [Multi-Tool Execution Fix](./future-impl/multi_tool_execution.md)
-- [Authentication Strategy](./future-impl/authentication_features.md)
-- [Urgency & Countdown Features](./future-impl/countdown_features.md)
-- [Rich UI Expansion](./future-impl/rich_ui_expansion.md)
-
 ---
 
 *Dialogue is engineered with a focus on intentionality, aesthetic minimalism, and high-performance AI integration.*
