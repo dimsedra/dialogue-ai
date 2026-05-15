@@ -1081,6 +1081,7 @@ export function Chat({
                 initial={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
                 animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
                 exit={{ opacity: 0, scale: 0.8, y: 10, x: "-50%" }}
+                transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
                 onClick={scrollToBottom}
                 className="fixed bottom-28 lg:bottom-32 left-1/2 z-40 p-2.5 rounded-full bg-[#1a1814]/80 backdrop-blur-md border border-[#2a2723] text-[#d4a373] shadow-xl shadow-black/40 hover:bg-[#2a2723] transition-all"
                 title="Scroll to Bottom"
@@ -1319,7 +1320,11 @@ export function Chat({
                 ))}
               </AnimatePresence>
             )}
-            <div ref={messagesEndRef} className="h-4" />
+            <motion.div 
+              animate={{ height: isLargeViewport ? 16 : (keyboardOffset + 120) }}
+              transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
+            />
+            <div ref={messagesEndRef} className="h-1" />
           </div>
         </main>
         <motion.footer 
@@ -1327,7 +1332,7 @@ export function Chat({
             y: isLargeViewport ? 0 : -keyboardOffset,
             paddingBottom: isLargeViewport ? "2rem" : (keyboardOffset > 0 ? "0.5rem" : "1rem")
           }}
-          transition={{ type: "spring", damping: 30, stiffness: 300, mass: 0.5 }}
+          transition={{ type: "spring", damping: 30, stiffness: 300, mass: 1, bounce: 0 }}
           className="px-3 py-4 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-20"
         >
           {/* Attachment Tray */}
