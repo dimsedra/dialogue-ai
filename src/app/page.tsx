@@ -32,13 +32,18 @@ export default function Home() {
     window.addEventListener("resize", check);
 
     // Keyboard handling via Visual Viewport API
+    // Keyboard handling via Visual Viewport API
     const handleViewportChange = () => {
       if (window.visualViewport) {
-        requestAnimationFrame(() => {
-          const offset = window.innerHeight - (window.visualViewport!.height + window.visualViewport!.offsetTop);
-          setKeyboardOffset(Math.max(0, offset));
-          if (window.scrollY !== 0) window.scrollTo(0, 0);
-        });
+        const viewportHeight = window.visualViewport.height;
+        // Use initialHeight as the baseline to avoid "stretching" math
+        const baseline = initialHeight || window.innerHeight;
+        const offset = baseline - viewportHeight;
+        
+        setKeyboardOffset(Math.max(0, offset));
+        
+        // Immediate correction
+        if (window.scrollY !== 0) window.scrollTo(0, 0);
       }
     };
 
@@ -62,7 +67,7 @@ export default function Home() {
       }
       window.removeEventListener("scroll", preventNativeScroll);
     };
-  }, []);
+  }, [initialHeight]);
 
   useEffect(() => {
     // Force top scroll on mount to ensure header is visible

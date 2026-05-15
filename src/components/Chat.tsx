@@ -1323,13 +1323,11 @@ export function Chat({
             <div ref={messagesEndRef} className="h-4" />
           </div>
         </main>
-        <motion.footer 
-          animate={{ 
-            bottom: isLargeViewport ? 0 : keyboardOffset,
+        <footer 
+          style={{ 
+            bottom: isLargeViewport ? 0 : `${keyboardOffset}px`,
           }}
-          initial={false}
-          transition={{ duration: 0 }}
-          className="absolute left-0 right-0 px-3 py-4 lg:p-8 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40"
+          className="absolute left-0 right-0 px-3 py-4 lg:p-8 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40 transition-none"
         >
           {/* Attachment Tray */}
           <AnimatePresence>
@@ -1425,7 +1423,7 @@ export function Chat({
             </button>
           </form>
           <p className="mt-2 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
-        </motion.footer>
+        </footer>
       </motion.div>
 
       {/* Global Workspace Creation Modal */}
