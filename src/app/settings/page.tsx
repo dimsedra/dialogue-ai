@@ -81,8 +81,8 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="h-screen overflow-y-auto bg-[#0f0e0c] text-[#f2efeb] selection:bg-[#d4a373]/30 custom-scrollbar">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-12">
+    <div className="min-h-screen overflow-y-auto bg-[#0f0e0c] text-[#f2efeb] selection:bg-[#d4a373]/30 custom-scrollbar">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-12 pb-32 md:pb-12">
         {/* Header */}
         <div className="flex flex-col items-start gap-2 mb-10">
           <div className="flex items-center gap-4">
