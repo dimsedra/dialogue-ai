@@ -32,16 +32,19 @@ export default function Home() {
     window.addEventListener("resize", check);
 
     // Keyboard handling via Visual Viewport API
-    // Keyboard handling via Visual Viewport API
-    // Keyboard handling via Visual Viewport API
     const handleViewportChange = () => {
       if (window.visualViewport) {
         // Force absolute top to prevent double scrollbar triggers
         window.scrollTo(0, 0);
         
         const viewportHeight = window.visualViewport.height;
+        const viewportOffsetTop = window.visualViewport.offsetTop;
+        
+        // Use initialHeight as the baseline to avoid "stretching" math
         const baseline = initialHeight || window.innerHeight;
-        const offset = baseline - viewportHeight;
+        
+        // Precise math for Android/Samsung viewport shifts
+        const offset = baseline - (viewportHeight + viewportOffsetTop);
         
         setKeyboardOffset(Math.max(0, offset));
       }
