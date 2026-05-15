@@ -131,9 +131,7 @@ export const chat = internalAction({
     const upcomingEventsContext = upcomingEvents
       .filter(e => e.startTime > Date.now() - 3600000)
       .map(e => {
-        const eventDate = args.timezoneOffset !== undefined
-          ? new Date(e.startTime - (args.timezoneOffset * 60000))
-          : new Date(e.startTime);
+        const eventDate = new Date(e.startTime);
         return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })})`;
       })
       .join("\n");
@@ -432,10 +430,8 @@ export const chat = internalAction({
           const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
           if (match) {
             const [, y, m, d, h, min] = match;
-            if (args.timezoneOffset !== undefined) {
-              return Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)) + (args.timezoneOffset * 60000);
-            }
-            return new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)).getTime();
+            // Server Blind: Treat local time components as UTC to preserve "face time" in DB
+            return Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h), Number(min));
           }
           return new Date(s).getTime();
         };
@@ -739,9 +735,7 @@ export const parseDate = action({
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
     const now = new Date();
-    if (args.timezoneOffset !== undefined) {
-      now.setMinutes(now.getMinutes() - args.timezoneOffset);
-    }
+    // Server Blind: Do not adjust 'now' for the parser, let it use server UTC which matches user's local "face time" logic
     const nowISO = now.toISOString();
 
     const prompt = `Convert this natural language date to an ISO-8601 string. 
