@@ -33,17 +33,17 @@ export default function Home() {
 
     // Keyboard handling via Visual Viewport API
     // Keyboard handling via Visual Viewport API
+    // Keyboard handling via Visual Viewport API
     const handleViewportChange = () => {
       if (window.visualViewport) {
+        // Force absolute top to prevent double scrollbar triggers
+        window.scrollTo(0, 0);
+        
         const viewportHeight = window.visualViewport.height;
-        // Use initialHeight as the baseline to avoid "stretching" math
         const baseline = initialHeight || window.innerHeight;
         const offset = baseline - viewportHeight;
         
         setKeyboardOffset(Math.max(0, offset));
-        
-        // Immediate correction
-        if (window.scrollY !== 0) window.scrollTo(0, 0);
       }
     };
 

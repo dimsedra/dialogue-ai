@@ -1072,7 +1072,7 @@ export function Chat({
 
         <main 
           onScroll={handleScroll}
-          className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 pb-4 lg:pb-10 space-y-6 lg:space-y-12"
+          className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 pb-4 lg:pb-10 space-y-6 lg:space-y-12 custom-scrollbar lg:scrollbar-default scrollbar-hide"
         >
           {/* Premium Centered Scroll Down Button (Gemini Style) */}
           <AnimatePresence>
