@@ -676,10 +676,10 @@ export function Chat({
       <AnimatePresence mode="wait">
         {showHistory && (
           <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: "288px", opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            initial={{ x: "-100%", opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "-100%", opacity: 0 }}
+            transition={{ type: "spring", damping: 28, stiffness: 220 }}
             className="h-full border-r border-[#2a2723] bg-[#1a1814] shrink-0 z-[100] lg:relative fixed left-0 w-[85%] sm:w-[288px] flex overflow-hidden"
           >
             {/* Mobile Workspace Rail (Inside the Drawer) */}
@@ -694,7 +694,12 @@ export function Chat({
               <div className="w-8 h-[1px] bg-[#2a2723]" />
               
               <div className="flex-1 flex flex-col items-center gap-4 overflow-y-auto scrollbar-hide w-full px-2 pt-4">
-                {workspaces?.map((ws) => (
+                {workspaces === undefined ? (
+                  // Workspace Skeletons
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="w-10 h-10 rounded-xl bg-[#1a1814] animate-pulse border border-[#2a2723]" />
+                  ))
+                ) : workspaces?.map((ws) => (
                   <button
                     key={ws._id}
                     onClick={() => setActiveWorkspaceId(ws._id)}
@@ -1096,8 +1101,26 @@ export function Chat({
           </AnimatePresence>
 
           <div className="max-w-4xl mx-auto space-y-6 lg:space-y-12">
-            {messages === undefined || !activeSessionId ? (
-              <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-in fade-in zoom-in duration-700">
+            {workspaces === undefined ? (
+              <div className="absolute inset-0 z-[100] bg-[#0f0e0c] flex flex-col items-center justify-center space-y-6 animate-in fade-in duration-500">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-[#d4a373]/20 blur-3xl rounded-full animate-pulse" />
+                  <Bot className="w-12 h-12 text-[#d4a373] animate-bounce relative z-10" />
+                </div>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="h-1 w-32 bg-[#1a1814] rounded-full overflow-hidden">
+                    <div className="h-full bg-[#d4a373] w-1/2 animate-[loading_1.5s_infinite_ease-in-out]" />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#d4a373]/40">Initialising</p>
+                </div>
+              </div>
+            ) : messages === undefined && activeSessionId ? (
+              <div className="flex flex-col items-center justify-center min-h-[75svh] space-y-6">
+                <Sparkles className="w-10 h-10 text-[#d4a373] animate-spin-slow" />
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#d4a373]/50">Synchronizing</p>
+              </div>
+            ) : messages === undefined || !activeSessionId ? (
+              <div className="flex flex-col items-center justify-center min-h-[75svh] space-y-8 animate-in fade-in zoom-in duration-700">
                 <div className="relative group">
                   <div className="absolute inset-0 bg-[#d4a373]/20 blur-3xl rounded-full group-hover:bg-[#d4a373]/30 transition-all duration-500" />
                   <div className="relative w-24 h-24 rounded-[32px] bg-[#1a1814] border border-[#d4a373]/20 flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:border-[#d4a373]/40 transition-all duration-500">

@@ -119,7 +119,7 @@ export default function Home() {
 
   return (
     <main 
-      style={{ height: initialHeight ? `${initialHeight}px` : "100vh" }}
+      style={{ height: initialHeight ? `${initialHeight}px` : "100svh" }}
       className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]"
     >
       {/* Backdrops for Mobile Overlay */}
@@ -170,11 +170,11 @@ export default function Home() {
       <AnimatePresence>
         {showTasks && (
           <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: "320px", opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="h-full border-l border-[#2a2723] bg-[#1a1814] shrink-0 overflow-hidden z-40 lg:relative lg:translate-x-0 absolute right-0 w-full sm:w-[320px] shadow-[-20px_0_40px_rgba(0,0,0,0.5)] lg:shadow-none"
+            initial={{ x: "100%", opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "100%", opacity: 0 }}
+            transition={{ type: "spring", damping: 28, stiffness: 220 }}
+            className="h-full border-l border-[#2a2723] bg-[#1a1814] shrink-0 overflow-hidden z-40 lg:relative lg:translate-x-0 absolute right-0 w-[85%] sm:w-[320px] shadow-[-20px_0_40px_rgba(0,0,0,0.5)] lg:shadow-none"
           >
             <TaskPanel 
               activeWorkspaceId={activeWorkspaceId}
