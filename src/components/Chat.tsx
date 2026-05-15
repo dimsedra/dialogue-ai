@@ -2,9 +2,9 @@
 
 import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2 } from "lucide-react";
+import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2, ArrowDown } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../convex/_generated/dataModel";
@@ -173,7 +173,9 @@ export function Chat({
   setActiveWorkspaceId,
   showHistory,
   setShowHistory,
-  onSyncRef
+  onSyncRef,
+  isLargeViewport,
+  keyboardOffset
 }: { 
   activeSessionId: Id<"chatSessions"> | null, 
   setActiveSessionId: (id: Id<"chatSessions"> | null) => void,
@@ -181,7 +183,9 @@ export function Chat({
   setActiveWorkspaceId: (id: Id<"workspaces"> | undefined, sessionId?: Id<"chatSessions"> | null) => void,
   showHistory: boolean,
   setShowHistory: (show: boolean) => void,
-  onSyncRef?: React.MutableRefObject<(() => void) | null>
+  onSyncRef?: React.MutableRefObject<(() => void) | null>,
+  isLargeViewport: boolean,
+  keyboardOffset: number
 }) {
   const workspaces = useQuery(api.workspaces.list);
   const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
@@ -247,6 +251,19 @@ export function Chat({
     }
     return "gemini";
   });
+  
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setShowScrollBottom(!isAtBottom);
+  };
 
   const [lastSyncedProfileId, setLastSyncedProfileId] = useState<Id<"userProfile"> | null>(null);
 
@@ -263,21 +280,17 @@ export function Chat({
     localStorage.setItem("dialogue_provider", p);
   };
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     if (sessions && sessions.length > 0 && !activeSessionId) {
       setActiveSessionId(sessions[0]._id);
     }
   }, [sessions, activeSessionId, setActiveSessionId]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
   // ---- Shared helper: run LM Studio logic for a given session + text ----
   const runLocalLLMForSession = async (
@@ -1057,7 +1070,26 @@ export function Chat({
           </h1>
         </div>
 
-        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-10 space-y-6 lg:space-y-12">
+        <main 
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-10 space-y-6 lg:space-y-12 relative"
+        >
+          {/* Compact Scroll Down Button */}
+          <AnimatePresence>
+            {showScrollBottom && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                onClick={scrollToBottom}
+                className="fixed bottom-24 lg:bottom-32 right-6 lg:right-12 z-40 p-3 rounded-full bg-[#d4a373] text-[#0f0e0c] shadow-2xl shadow-[#d4a373]/20 hover:bg-[#c39262] transition-all"
+                title="Scroll to Bottom"
+              >
+                <ArrowDown className="w-5 h-5" />
+              </motion.button>
+            )}
+          </AnimatePresence>
+
           <div className="max-w-4xl mx-auto space-y-6 lg:space-y-12">
             {messages === undefined || !activeSessionId ? (
               <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-in fade-in zoom-in duration-700">
@@ -1290,8 +1322,13 @@ export function Chat({
             <div ref={messagesEndRef} className="h-4" />
           </div>
         </main>
-
-        <footer className="p-3 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c] to-transparent">
+        <motion.footer 
+          animate={{ 
+            y: isLargeViewport ? 0 : -keyboardOffset
+          }}
+          transition={{ type: "spring", damping: 30, stiffness: 300, mass: 0.5 }}
+          className="p-3 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c] to-transparent z-20"
+        >
           {/* Attachment Tray */}
           <AnimatePresence>
             {selectedFiles.length > 0 && (
@@ -1386,7 +1423,7 @@ export function Chat({
             </button>
           </form>
           <p className="mt-2 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
-        </footer>
+        </motion.footer>
       </motion.div>
 
       {/* Global Workspace Creation Modal */}

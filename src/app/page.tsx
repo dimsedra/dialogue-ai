@@ -21,12 +21,34 @@ export default function Home() {
   const [showTasks, setShowTasks] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLargeViewport, setIsLargeViewport] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   useEffect(() => {
     const check = () => setIsLargeViewport(window.innerWidth >= 1024);
     check();
     window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
+
+    // Keyboard handling via Visual Viewport API
+    const handleViewportChange = () => {
+      if (window.visualViewport) {
+        const offset = window.innerHeight - window.visualViewport.height;
+        setKeyboardOffset(Math.max(0, offset));
+        document.documentElement.style.setProperty('--keyboard-offset', `${Math.max(0, offset)}px`);
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", handleViewportChange);
+      window.visualViewport.addEventListener("scroll", handleViewportChange);
+    }
+
+    return () => {
+      window.removeEventListener("resize", check);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", handleViewportChange);
+        window.visualViewport.removeEventListener("scroll", handleViewportChange);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -70,7 +92,7 @@ export default function Home() {
   }, [isLargeViewport]);
 
   return (
-    <main className="h-dvh flex overflow-hidden bg-[#0f0e0c] relative">
+    <main className="h-screen flex overflow-hidden bg-[#0f0e0c] relative">
       {/* Backdrops for Mobile Overlay */}
       <AnimatePresence>
         {(showHistory || showTasks) && (
@@ -98,12 +120,20 @@ export default function Home() {
           showHistory={showHistory}
           setShowHistory={handleSetShowHistory}
           onSyncRef={syncRef}
+          isLargeViewport={isLargeViewport}
+          keyboardOffset={keyboardOffset}
         />
       </motion.div>
 
       {/* Right Sidebar Toggle (Floating / FAB on Mobile) */}
       {!showTasks && (
-        <div className="fixed lg:absolute right-4 bottom-28 lg:right-6 lg:top-1/2 lg:-translate-y-1/2 z-50 h-fit w-fit">
+        <motion.div 
+          animate={{ 
+            bottom: isLargeViewport ? "auto" : 112 + keyboardOffset
+          }}
+          transition={{ type: "spring", damping: 30, stiffness: 300, mass: 0.5 }}
+          className="fixed lg:absolute right-4 lg:right-6 lg:top-1/2 lg:-translate-y-1/2 z-50 h-fit w-fit"
+        >
           <button
             onClick={() => handleSetShowTasks(true)}
             className="p-4 lg:p-3 rounded-full lg:rounded-2xl bg-[#d4a373] lg:bg-[#1a1814] border border-[#d4a373]/20 lg:border-[#2a2723] text-[#0f0e0c] lg:text-[#a8a29e] hover:text-[#0f0e0c] lg:hover:text-[#d4a373] transition-all shadow-2xl lg:shadow-black/50 group flex items-center justify-center"
@@ -111,7 +141,7 @@ export default function Home() {
           >
             <Grid2x2 className="w-6 h-6 lg:w-5 lg:h-5 transition-transform group-hover:rotate-12" />
           </button>
-        </div>
+        </motion.div>
       )}
 
       {/* Task Panel (Collapsible / Overlay) */}
