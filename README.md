@@ -46,9 +46,16 @@ Upload images, PDFs, or Word documents directly into the conversation. The agent
 
 When you need current information, the agent issues real-time web queries through Tavily or Serper — and can run multiple parallel searches in a single turn for complex questions. Results are synthesized directly into its response.
 
-### Rich Interaction Feedback
+### Sovereign Authentication
 
-Every agent action — adding a task, scheduling an event, running a search — produces a visual confirmation card in the chat. You always know what the agent did, in a format designed for a glance, not a parse.
+Your workspace is protected by **Convex Auth**, providing built-in, secure access across all your devices without compromising the "bring your own keys" philosophy. By using native authentication within your own database deployment, your identity and your data remain truly siloed and sovereign.
+
+### Premium Interaction Surface
+
+Dialogue isn't just a chat box; it's a living interface. It features:
+- **Compact Tool Cards**: Visual feedback for every action (tasks, events, searches) designed to support, not dominate, the conversation.
+- **Motion-Enabled Feedback**: Fluid animations and a non-intrusive typing indicator that provide a tactile sense of the agent's "thinking" process.
+- **Glassmorphism Aesthetic**: A meticulously crafted dark-themed workspace that feels premium, modern, and focused.
 
 ---
 
@@ -70,6 +77,7 @@ Every agent action — adding a task, scheduling an event, running a search — 
 | AI Providers | Google Gemini Pro / LM Studio |
 | Research | Tavily / Serper |
 | Language | TypeScript (strict) |
+| Auth | Convex Auth (@convex-dev/auth) |
 
 **Architecture note**: All temporal data is stored as raw Unix timestamps. No server-side timezone inference. All local time rendering happens at the client edge — a pattern we call "Server-Blind" infrastructure.
 
@@ -104,6 +112,9 @@ Every agent action — adding a task, scheduling an event, running a search — 
    # Research providers (optional but recommended)
    TAVILY_API_KEY=your_tavily_key
    SERPER_API_KEY=your_serper_key
+
+   # Authentication (Convex Auth)
+   # No external keys required; uses your Convex deployment.
    ```
 
 4. **Run**
