@@ -91,15 +91,12 @@ export function TaskPanel({
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];
-    if (view !== "tasks") return tasks;
     return tasks.filter(t => {
       const matchSearch = t.text.toLowerCase().includes(searchQuery.toLowerCase()) || 
                          t.category?.toLowerCase().includes(searchQuery.toLowerCase());
-      if (!matchSearch) return false;
-      if (!selectedDate) return true;
-      return t.dueDate ? isSameDay(new Date(t.dueDate), selectedDate) : false;
+      return matchSearch;
     });
-  }, [tasks, searchQuery, selectedDate, view]);
+  }, [tasks, searchQuery]);
 
   const sortedAndFilteredTasks = useMemo(() => {
     return [...filteredTasks].sort((a, b) => {

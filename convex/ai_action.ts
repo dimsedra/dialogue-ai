@@ -32,8 +32,10 @@ You must dynamically read the room and adjust your behavior based on what the us
 5. If a user mentions a potential task (e.g., "I need to do X"), ask: "Would you like me to add that to your tasks?"
 6. If a user says they finished something or want to remove it, ask: "Should I remove '[Task Name]' from your list?"
 7. Only call the tool AFTER the user explicitly says the plan is perfect.
-8. **WORKSPACE AWARENESS**: You are always operating within a specific Workspace (e.g., Work, Personal, Side Project). Respect the "WORKSPACE GOAL/CONTEXT" provided below. Your advice, tone, and task suggestions should align with the specific purpose of the current workspace.
-9. **NATURAL EXPRESSION MANDATE**: Never use rigid, repetitive, or "bot-like" sentence templates for tool confirmations. Avoid "I have added [X] to your list." Instead, weave confirmations into natural prose (e.g., "All set! I've carved out that hour for your workout so you can focus on hitting your goals."). Do not start every response with "Got it," "Understood," or "Okay." Vary your tone and sentence structure constantly.
+8. **GRACEFUL CANCELLATION**: If a user declines a plan, says "never mind", "cancel that", or expresses they no longer want to proceed with a task/event after you've proposed it, acknowledge the cancellation warmly and confirm that you have NOT taken any action. Do not call the tool.
+9. **WORKSPACE AWARENESS**: You are always operating within a specific Workspace (e.g., Work, Personal, Side Project). Respect the "WORKSPACE GOAL/CONTEXT" provided below. Your advice, tone, and task suggestions should align with the specific purpose of the current workspace.
+10. **NATURAL EXPRESSION MANDATE**: Never use rigid, repetitive, or "bot-like" sentence templates for tool confirmations. Avoid "I have added [X] to your list." Instead, weave confirmations into natural prose (e.g., "All set! I've carved out that hour for your workout so you can focus on hitting your goals."). Do not start every response with "Got it," "Understood," or "Okay." Vary your tone and sentence structure constantly.
+11. **MANDATORY CONVERSATIONAL TEXT**: Every turn where you call a tool MUST also include a natural language part. You are forbidden from sending a tool call in isolation. Tell the user what you are doing in your warm, adaptive tone.
 
 ## Multimodal Capabilities:
 You are a multimodal agent. You can see and analyze multiple images and documents (PDFs, Word docs, etc.) uploaded by the user.
@@ -223,16 +225,16 @@ export const chat = internalAction({
           },
           {
             name: "addEvent",
-            description: "Schedules a new event with start and end times. Use this for time-specific calendar items.",
+            description: "Adds a new event to the calendar. Use for meetings or time blocks.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
-                title: { type: SchemaType.STRING, description: "The event title" },
+                title: { type: SchemaType.STRING, description: "Event title" },
                 description: { type: SchemaType.STRING, description: "Optional description" },
                 startTime: { type: SchemaType.STRING, description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T14:00:00'). DO NOT append 'Z'." },
-                endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T15:00:00'). DO NOT append 'Z'." },
+                endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format)." },
                 location: { type: SchemaType.STRING, description: "Optional location" },
-                notes: { type: SchemaType.STRING, description: "Optional extra notes or context about the event" },
+                notes: { type: SchemaType.STRING, description: "Optional notes" },
               },
               required: ["title", "startTime", "endTime"],
             },
@@ -567,11 +569,31 @@ export const chat = internalAction({
           aiText = finalResult.response.text();
         }
 
+        // 3. Ensure we have a natural text response if the AI didn't provide one
+        if (!aiText && otherCalls.length > 0) {
+          const confirmationPrompt = {
+            contents: [
+              { role: "user", parts: [{ text: prompt }] },
+              { role: "model", parts: response.candidates?.[0]?.content?.parts || [] },
+              { role: "user", parts: [{ text: "The action was successful. Now, confirm this to the user in your natural, conversational tone. Do not use rigid templates." }] }
+            ]
+          };
+          const confirmResult = await model.generateContent(confirmationPrompt);
+          aiText = confirmResult.response.text();
+        }
+
         if (!aiText) {
           try {
             aiText = response.text();
           } catch {
-            aiText = "I've processed that for you.";
+            // Ultimate fallback - but make it dynamic
+            const variations = [
+              "All set! I've taken care of that for you.",
+              "Done. Everything's updated as we discussed.",
+              "Handled! Your workspace is synced up now.",
+              "Got it sorted. You're all set to go."
+            ];
+            aiText = variations[Math.floor(Math.random() * variations.length)];
           }
         }
       } else {
@@ -581,7 +603,7 @@ export const chat = internalAction({
       // 4. Send response with toolCall info
       await ctx.runMutation(api.messages.send, {
         sessionId: args.sessionId,
-        text: aiText || "I've processed your request.",
+        text: aiText || "I've updated your workspace with those changes.",
         author: "AI",
         toolCall: activeToolCall ? {
           name: activeToolCall.name,

@@ -20,6 +20,14 @@ export default function Home() {
   const [showHistory, setShowHistory] = useState(true);
   const [showTasks, setShowTasks] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isLargeViewport, setIsLargeViewport] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsLargeViewport(window.innerWidth >= 1024);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   useEffect(() => {
     // 1. Load preferences from storage
@@ -50,16 +58,16 @@ export default function Home() {
     syncRef.current?.();
   }, []);
 
-  // Sidebar Mutual Exclusivity Logic
+  // Sidebar Mutual Exclusivity Logic — only enforced on tablet/mobile
   const handleSetShowHistory = useCallback((val: boolean) => {
     setShowHistory(val);
-    if (val) setShowTasks(false);
-  }, []);
+    if (val && !isLargeViewport) setShowTasks(false);
+  }, [isLargeViewport]);
 
   const handleSetShowTasks = useCallback((val: boolean) => {
     setShowTasks(val);
-    if (val) setShowHistory(false);
-  }, []);
+    if (val && !isLargeViewport) setShowHistory(false);
+  }, [isLargeViewport]);
 
   return (
     <main className="h-dvh flex overflow-hidden bg-[#0f0e0c] relative">
