@@ -1369,7 +1369,7 @@ export function Chat({
 
                 {/* Ganjalan: Ensures last message is always pushed above the tray */}
                 <div 
-                  style={{ height: isLargeViewport ? "180px" : "120px" }} 
+                  style={{ height: isLargeViewport ? "180px" : `calc(120px + ${keyboardOffset}px)` }} 
                   className="w-full shrink-0"
                 />
                 <div ref={messagesEndRef} className="h-px w-full" />
