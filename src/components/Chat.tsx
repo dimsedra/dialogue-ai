@@ -4,7 +4,7 @@ import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Send, User, Bot, Sparkles, Calendar, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy } from "lucide-react";
+import { Send, User, Bot, Sparkles, Calendar, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../convex/_generated/dataModel";
@@ -117,6 +117,7 @@ export function Chat({
   
   const createWorkspace = useMutation(api.workspaces.create);
   const sendMessage = useMutation(api.messages.send);
+  const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
   const createSession = useMutation(api.messages.createSession);
   const deleteSession = useMutation(api.messages.deleteSession);
   const renameSession = useMutation(api.messages.renameSession);
@@ -141,6 +142,27 @@ export function Chat({
   // Settings / Provider State
   const [showSettings, setShowSettings] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<{ [name: string]: string }>({});
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const newPreviews: { [name: string]: string } = {};
+    const cleanupUrls: string[] = [];
+
+    selectedFiles.forEach(file => {
+      if (file.type.startsWith("image/")) {
+        const url = URL.createObjectURL(file);
+        newPreviews[file.name] = url;
+        cleanupUrls.push(url);
+      }
+    });
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPreviews(newPreviews);
+    return () => cleanupUrls.forEach(url => URL.revokeObjectURL(url));
+  }, [selectedFiles]);
   const profile = useQuery(api.ai.getProfile);
   const [provider, setProvider] = useState<"gemini" | "lmstudio">(() => {
     if (typeof window !== "undefined") {
@@ -262,23 +284,49 @@ export function Chat({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !activeSessionId) return;
+    if ((!input.trim() && selectedFiles.length === 0) || !activeSessionId || isUploading) return;
 
     const userText = input.trim();
+    const currentFiles = [...selectedFiles];
     setInput("");
+    setSelectedFiles([]);
+    setIsUploading(true);
 
-    // 1. Send the user message to Convex
-    await sendMessage({ 
-      sessionId: activeSessionId,
-      text: userText, 
-      author: "User",
-      timezoneOffset: new Date().getTimezoneOffset(),
-      provider
-    });
+    try {
+      // Parallel uploads
+      const uploadPromises = currentFiles.map(async (file) => {
+        const postUrl = await generateUploadUrl();
+        const result = await fetch(postUrl, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        const { storageId } = await result.json();
+        return {
+          storageId,
+          fileName: file.name,
+          fileType: file.type,
+        };
+      });
 
-    // 2. If LM Studio is selected, we do the LLM logic on the client
-    if (provider === "lmstudio") {
-      await runLocalLLMForSession(activeSessionId, userText);
+      const uploadedAttachments = await Promise.all(uploadPromises);
+
+      await sendMessage({
+        sessionId: activeSessionId,
+        text: userText || (uploadedAttachments.length > 0 ? `Attached ${uploadedAttachments.length} files` : ""),
+        author: "User",
+        timezoneOffset: new Date().getTimezoneOffset(),
+        provider,
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+      });
+
+      if (provider === "lmstudio") {
+        await runLocalLLMForSession(activeSessionId, userText);
+      }
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -447,55 +495,6 @@ export function Chat({
           </div>
         </div>
 
-        {/* Workspace Creation Modal */}
-        <AnimatePresence>
-          {isCreatingWorkspace && (
-            <>
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsCreatingWorkspace(false)}
-                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, x: -20 }}
-                animate={{ opacity: 1, scale: 1, x: 0 }}
-                exit={{ opacity: 0, scale: 0.9, x: -20 }}
-                className="fixed left-24 top-1/2 -translate-y-1/2 w-[320px] bg-[#1a1814] border border-[#d4a373]/30 rounded-[32px] p-8 shadow-[0_30px_60px_rgba(0,0,0,0.6)] z-[110] space-y-6"
-              >
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-[#f2efeb]">Create Workspace</h3>
-                  <p className="text-xs text-[#a8a29e]">Give your new context a name.</p>
-                </div>
-                <form onSubmit={handleAddWorkspace} className="space-y-4">
-                  <input
-                    autoFocus
-                    value={newWorkspaceName}
-                    onChange={(e) => setNewWorkspaceName(e.target.value)}
-                    placeholder="Workspace Name"
-                    className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-2xl px-5 py-4 text-sm text-[#f2efeb] focus:border-[#d4a373]/50 outline-none transition-all"
-                  />
-                  <div className="flex gap-3">
-                    <button 
-                      type="button"
-                      onClick={() => setIsCreatingWorkspace(false)}
-                      className="flex-1 py-3 rounded-2xl border border-[#2a2723] text-xs font-bold uppercase tracking-widest text-[#a8a29e] hover:text-[#f2efeb] transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      className="flex-1 py-3 rounded-2xl bg-[#d4a373] text-[#0f0e0c] text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/10"
-                    >
-                      Create
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>
 
         <div className="shrink-0 pb-8 flex flex-col gap-4">
           <Link 
@@ -915,16 +914,28 @@ export function Chat({
         <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-10 space-y-6 lg:space-y-12">
           <div className="max-w-4xl mx-auto space-y-6 lg:space-y-12">
             {messages === undefined || !activeSessionId ? (
-              <div className="flex flex-col items-center justify-center h-full space-y-6 opacity-40">
-                <div className="w-20 h-20 rounded-[32px] bg-[#1a1814] border border-[#2a2723] flex items-center justify-center shadow-2xl">
-                  <Bot className="w-10 h-10 text-[#d4a373]" />
+              <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-in fade-in zoom-in duration-700">
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-[#d4a373]/20 blur-3xl rounded-full group-hover:bg-[#d4a373]/30 transition-all duration-500" />
+                  <div className="relative w-24 h-24 rounded-[32px] bg-[#1a1814] border border-[#d4a373]/20 flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:border-[#d4a373]/40 transition-all duration-500">
+                    <Bot className="w-10 h-10 text-[#d4a373]" />
+                  </div>
                 </div>
-                <div className="text-center space-y-2">
-                  <h3 className="text-lg font-bold text-[#f2efeb]">Dialogue Initialized</h3>
-                  <p className="text-sm text-[#a8a29e] max-w-[240px]">
-                    Select a session from the history or start a new one to begin.
+                
+                <div className="text-center space-y-3">
+                  <h3 className="text-2xl font-bold text-[#f2efeb] tracking-tight">Dialogue Initialized</h3>
+                  <p className="text-sm text-[#a8a29e] max-w-[280px] leading-relaxed mx-auto">
+                    Select a session from the history or start a fresh conversation to begin.
                   </p>
                 </div>
+
+                <button
+                  onClick={handleNewChat}
+                  className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-[#d4a373] text-[#0f0e0c] font-bold text-sm uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-xl shadow-[#d4a373]/10 hover:shadow-[#d4a373]/20 hover:-translate-y-1 active:translate-y-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  Start New Chat
+                </button>
               </div>
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 max-w-sm mx-auto">
@@ -960,8 +971,65 @@ export function Chat({
                         <div className={`px-4 lg:px-5 py-2 lg:py-4 rounded-2xl lg:rounded-3xl min-w-0 ${
                           msg.author === "User"
                             ? "bg-[#1f1d19] border border-[#2a2723] text-[#f2efeb] rounded-tr-none"
-                            : "bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] rounded-tl-none prose prose-invert prose-sm max-w-none w-full"
+                            : "bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] rounded-tl-none prose prose-invert prose-sm max-w-none w-full shadow-[0_4px_20px_rgba(0,0,0,0.3)]"
                         }`}>
+                          {/* Unified Attachment Rendering */}
+                           {(() => {
+                             const allAtts = [...(msg.attachments || [])];
+                             if (msg.storageId && !allAtts.some(a => a.storageId === msg.storageId)) {
+                               allAtts.push({
+                                 storageId: msg.storageId,
+                                 fileName: msg.fileName || "File",
+                                 fileType: msg.fileType || "application/octet-stream"
+                               });
+                             }
+                             
+                             if (allAtts.length === 0) return null;
+
+                             return (
+                               <div className="flex flex-wrap gap-2 mb-3">
+                                 {allAtts.map((att, idx) => (
+                                   <div key={idx} className="group relative">
+                                     {att.fileType?.startsWith("image/") ? (
+                                       <div 
+                                         onClick={() => window.open(`${(process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL)?.replace(".cloud", ".site")}/api/storage?id=${att.storageId}`, "_blank")}
+                                         className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden border border-[#d4a373]/20 shadow-lg bg-black/40 hover:border-[#d4a373]/40 transition-all cursor-pointer"
+                                       >
+                                         {/* eslint-disable-next-line @next/next/no-img-element */}
+                                         <img 
+                                           src={`${(process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL)?.replace(".cloud", ".site")}/api/storage?id=${att.storageId}`} 
+                                           alt={att.fileName || "Attached image"} 
+                                           className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                         />
+                                         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                           <div className="p-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20">
+                                             <ExternalLink className="w-4 h-4 text-white" />
+                                           </div>
+                                         </div>
+                                       </div>
+                                     ) : (
+                                       <div 
+                                         onClick={() => window.open(`${(process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL)?.replace(".cloud", ".site")}/api/storage?id=${att.storageId}`, "_blank")}
+                                         className={`flex items-center gap-2 p-2 rounded-xl border max-w-[200px] ${
+                                         msg.author === "User" 
+                                           ? "bg-black/20 border-white/10" 
+                                           : "bg-[#0f0e0c] border-[#2a2723]"
+                                       } hover:border-[#d4a373]/30 transition-all cursor-pointer`}>
+                                         <div className="w-8 h-8 rounded-lg bg-[#1a1814] flex items-center justify-center border border-[#2a2723] shrink-0">
+                                           <FileIcon className="w-4 h-4 text-[#d4a373]" />
+                                         </div>
+                                         <div className="overflow-hidden">
+                                           <p className="text-[11px] font-bold text-[#f2efeb] truncate">{att.fileName || "File"}</p>
+                                           <p className="text-[9px] text-[#a8a29e] uppercase tracking-widest truncate">{att.fileType?.split("/")[1] || "Document"}</p>
+                                         </div>
+                                       </div>
+                                     )}
+                                   </div>
+                                 ))}
+                               </div>
+                             );
+                           })()}
+
                           {msg.author === "User" ? (
                             <p className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.6] whitespace-pre-wrap">{msg.text}</p>
                           ) : (
@@ -1078,27 +1146,163 @@ export function Chat({
         </main>
 
         <footer className="p-3 lg:p-8 shrink-0 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c] to-transparent">
+          {/* Attachment Tray */}
+          <AnimatePresence>
+            {selectedFiles.length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, y: 15, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 15, scale: 0.9 }}
+                className="flex flex-wrap gap-3 mb-3 lg:mb-4 ml-1 lg:mx-auto lg:max-w-4xl"
+              >
+                {selectedFiles.map((file, idx) => (
+                  <div key={`${file.name}-${idx}`} className="relative group/thumb">
+                    <div className="w-16 h-16 lg:w-20 lg:h-20 bg-[#1a1814]/80 backdrop-blur-2xl rounded-2xl border border-[#d4a373]/30 shadow-2xl flex flex-col items-center justify-center overflow-hidden group-hover:border-[#d4a373]/50 transition-all">
+                      {previews[file.name] ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img 
+                          src={previews[file.name]} 
+                          alt="Preview" 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5 p-2 text-center">
+                          <FileIcon className="w-6 h-6 text-[#d4a373]" />
+                          <span className="text-[8px] font-black uppercase tracking-widest text-[#a8a29e] truncate w-full px-1">
+                            {file.name.split('.').pop()}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Delete Overlay */}
+                      <button 
+                        onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
+                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                      >
+                        <X className="w-5 h-5 text-white" />
+                      </button>
+                    </div>
+                    
+                    {/* Filename Tag (Floating) */}
+                    <div className="absolute top-0 left-full ml-3 px-3 py-2 bg-[#1a1814]/90 backdrop-blur-xl rounded-xl border border-[#2a2723] shadow-xl pointer-events-none opacity-0 group-hover/thumb:opacity-100 transition-all -translate-x-2 group-hover/thumb:translate-x-0 hidden lg:block whitespace-nowrap z-[70]">
+                      <p className="text-[10px] font-bold text-[#f2efeb]">{file.name}</p>
+                      <p className="text-[8px] text-[#a8a29e] uppercase tracking-widest font-medium">{(file.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <form onSubmit={handleSend} className="relative group max-w-4xl mx-auto">
             <div className="absolute inset-0 bg-[#d4a373]/5 blur-2xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
+            
+            <input
+              type="file"
+              ref={fileInputRef}
+              multiple
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                setSelectedFiles(prev => [...prev, ...files]);
+                e.target.value = ""; // Reset to allow re-uploading the same file
+              }}
+              className="hidden"
+            />
+            
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute left-2 lg:left-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-[#a8a29e] hover:text-[#d4a373] hover:bg-[#d4a373]/10 transition-all z-10"
+              disabled={isUploading || !activeSessionId}
+            >
+              <PlusCircle className={`w-5 h-5 ${isUploading ? 'animate-spin' : ''}`} />
+            </button>
+
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={activeSessionId ? "Write a message..." : "Select a conversation"}
-              disabled={!activeSessionId}
-              className="relative w-full bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] pl-4 lg:pl-6 pr-12 lg:pr-14 py-3.5 lg:py-4 rounded-xl lg:rounded-2xl focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-all duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl"
+              placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Write a message..."}
+              disabled={!activeSessionId || isUploading}
+              className="relative w-full bg-[#1a1814] border border-[#2a2723] text-[#f2efeb] pl-12 lg:pl-14 pr-12 lg:pr-14 py-3.5 lg:py-4 rounded-xl lg:rounded-2xl focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-all duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl"
             />
+            
             <button
               type="submit"
-              disabled={!input.trim() || !activeSessionId}
+              disabled={(!input.trim() && selectedFiles.length === 0) || !activeSessionId || isUploading}
               className="absolute right-2 lg:right-2.5 top-1/2 -translate-y-1/2 p-2 lg:p-2.5 rounded-lg lg:rounded-xl bg-[#d4a373] text-[#0f0e0c] hover:bg-[#c39262] transition-all shadow-xl shadow-[#d4a373]/10 disabled:opacity-0 disabled:scale-90 z-10"
             >
-              <Send className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+              {isUploading ? (
+                <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+              )}
             </button>
           </form>
           <p className="mt-2 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
         </footer>
       </motion.div>
+
+      {/* Global Workspace Creation Modal */}
+      <AnimatePresence>
+        {isCreatingWorkspace && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCreatingWorkspace(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-[400px] bg-[#1a1814] border border-[#d4a373]/30 rounded-[32px] p-8 lg:p-10 shadow-[0_30px_90px_rgba(0,0,0,0.8)] space-y-8 overflow-hidden"
+            >
+              <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#d4a373]/10 blur-[80px] rounded-full" />
+              
+              <div className="space-y-3 relative">
+                <div className="w-12 h-12 rounded-2xl bg-[#d4a373]/10 border border-[#d4a373]/20 flex items-center justify-center mb-2">
+                  <Plus className="w-6 h-6 text-[#d4a373]" />
+                </div>
+                <h3 className="text-2xl font-bold text-[#f2efeb] tracking-tight">New Workspace</h3>
+                <p className="text-sm text-[#a8a29e] leading-relaxed">Create a focused environment for your projects and ideas.</p>
+              </div>
+
+              <form onSubmit={handleAddWorkspace} className="space-y-6 relative">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#a8a29e] ml-1">Workspace Name</label>
+                  <input
+                    autoFocus
+                    value={newWorkspaceName}
+                    onChange={(e) => setNewWorkspaceName(e.target.value)}
+                    placeholder="e.g. Creative Lab, Work, Studies..."
+                    className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-2xl px-6 py-4 text-sm text-[#f2efeb] focus:border-[#d4a373]/50 focus:ring-1 focus:ring-[#d4a373]/30 outline-none transition-all placeholder:text-[#2a2723]"
+                  />
+                </div>
+                
+                <div className="flex gap-4 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => setIsCreatingWorkspace(false)}
+                    className="flex-1 py-4 rounded-2xl border border-[#2a2723] text-xs font-bold uppercase tracking-widest text-[#a8a29e] hover:text-[#f2efeb] hover:bg-white/5 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={!newWorkspaceName.trim()}
+                    className="flex-1 py-4 rounded-2xl bg-[#d4a373] text-[#0f0e0c] text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-xl shadow-[#d4a373]/20 disabled:opacity-50 disabled:grayscale"
+                  >
+                    Create
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

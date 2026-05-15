@@ -9,8 +9,11 @@
  */
 
 import type * as ai from "../ai.js";
+import type * as ai_action from "../ai_action.js";
 import type * as events from "../events.js";
+import type * as http from "../http.js";
 import type * as messages from "../messages.js";
+import type * as messages_internal from "../messages_internal.js";
 import type * as tasks from "../tasks.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -22,8 +25,11 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  ai_action: typeof ai_action;
   events: typeof events;
+  http: typeof http;
   messages: typeof messages;
+  messages_internal: typeof messages_internal;
   tasks: typeof tasks;
   workspaces: typeof workspaces;
 }>;

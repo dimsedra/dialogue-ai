@@ -26,6 +26,15 @@ export default defineSchema({
       args: v.any(),
       result: v.optional(v.any()),
     })),
+    storageId: v.optional(v.id("_storage")),
+    fileType: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    attachments: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      fileType: v.string(),
+      extractedText: v.optional(v.string()),
+    }))),
   }).index("by_session", ["sessionId"]),
   tasks: defineTable({
     text: v.string(),

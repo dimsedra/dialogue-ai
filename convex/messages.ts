@@ -90,21 +90,81 @@ export const send = mutation({
       args: v.any(),
       result: v.optional(v.any()),
     })),
+    storageId: v.optional(v.id("_storage")),
+    fileType: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    attachments: v.optional(v.array(v.object({
+      storageId: v.id("_storage"),
+      fileName: v.string(),
+      fileType: v.string(),
+    }))),
   },
-  handler: async (ctx, { sessionId, text, author, timezoneOffset, brief, provider, toolCall }) => {
-    await ctx.db.insert("messages", {
+  handler: async (ctx, { sessionId, text, author, timezoneOffset, brief, provider, toolCall, storageId, fileType, fileName, attachments }) => {
+    const messageId = await ctx.db.insert("messages", {
       sessionId,
       text,
       author,
       timestamp: Date.now(),
       timezoneOffset,
       toolCall,
+      storageId,
+      fileType,
+      fileName,
+      attachments,
     });
 
     await ctx.db.patch(sessionId, { lastActivity: Date.now() });
 
     if (author !== "AI" && provider !== "lmstudio") {
-      await ctx.scheduler.runAfter(0, internal.ai.chat, { sessionId, text, author, timezoneOffset, brief });
+      await ctx.scheduler.runAfter(0, internal.ai_action.chat, { 
+        sessionId, 
+        messageId,
+        text, 
+        author, 
+        timezoneOffset, 
+        brief,
+        storageId,
+        fileName,
+        fileType,
+        attachments: attachments,
+      });
     }
+  },
+});
+
+export const generateUploadUrl = mutation(async (ctx) => {
+  return await ctx.storage.generateUploadUrl();
+});
+
+export const getFileMetadata = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    // Try legacy field first
+    const legacyMessage = await ctx.db
+      .query("messages")
+      .filter((q) => q.eq(q.field("storageId"), args.storageId))
+      .first();
+    
+    if (legacyMessage) {
+      return {
+        fileName: legacyMessage.fileName,
+        fileType: legacyMessage.fileType,
+      };
+    }
+
+    // Search in attachments array
+    const messages = await ctx.db
+      .query("messages")
+      .filter((q) => 
+        q.neq(q.field("attachments"), undefined)
+      )
+      .collect();
+    
+    for (const msg of messages) {
+      const att = msg.attachments?.find(a => a.storageId === args.storageId);
+      if (att) return att;
+    }
+    
+    return null;
   },
 });
