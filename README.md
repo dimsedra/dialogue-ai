@@ -1,81 +1,131 @@
-# Dialogue: Agent-Native Productivity Workspace
+# Dialogue
 
-Dialogue is a high-performance, minimal productivity ecosystem engineered for agentic AI collaboration. It provides a project-aware command center that integrates conversational intelligence with structured task and event management.
+**A sovereign, agent-native productivity workspace.**
 
-## Core Features
+Most AI productivity tools are built the same way: take an existing app (notes, to-dos, calendar), add a chat box, and call it "AI-powered." The AI is an afterthought. It can suggest things, but it cannot *act*.
 
-### Agent-Native Architecture
+Dialogue inverts this entirely. The agent is the product. Tasks, events, and memory are its native tools — not wrappers around a pre-existing system.
 
-- **Perfectionist Verification Policy**: The agent operates on a "Zero Assumption" mandate, requiring explicit user confirmation of metadata (priority, category, time) before executing any mutation.
-- **Semantic Memory System**: Incorporates a background reflection engine that analyzes interactions to synthesize persistent behavioral models and preferences.
-- **Intelligence Agnosticism**: Built with a "Bring Your Own Key" (BYOK) philosophy, supporting Google Gemini Pro for production and LM Studio for local, private inference.
-- **Research Engine**: Integrated multi-search capabilities using Tavily and Serper, allowing the agent to conduct complex, parallel research queries.
+---
 
-### Server-Blind Infrastructure
+## The Paradigm
 
-- **Timezone Integrity Protocol**: Utilizes a "Server-Blind" architecture where all temporal data is stored as raw Unix timestamps.
-- **Client-Side Parsing**: All human-readable time conversion and local formatting are handled at the edge, eliminating server-side timezone ambiguity and ensuring perfect calendar synchronization.
+Dialogue is built around a single idea: **your AI should work *for* you, not just respond *to* you.**
 
-### Hierarchical Workspace Management
+This means three things in practice:
 
-- **Project Silos**: Dedicated workspaces allow for total context isolation between different ventures, each with independent history, tasks, and visual identifiers.
-- **Navigation Stability**: Optimized for professional workflows with persistent layout states and synchronized sidebar configurations across sessions.
+1. **Agent-first, not AI-featured.** The agent can read your workspace context, cross-reference your schedule, execute mutations on your data, and remember your patterns — all within a single conversation. There is no "switch to the app to actually do the thing."
 
-### Integrated Productivity Suite
+2. **Sovereign by design.** You bring your own keys. Your data lives in your Convex deployment. You choose your inference provider — cloud (Gemini Pro) or fully local (LM Studio). Nothing phones home. Nothing is monetized. You own the stack.
 
-- **Structured Task Management**: Workspace-aware task panel featuring priority-based sorting, AI-driven categorization, and real-time status synchronization.
-- **Timeline and Scheduling**: Integrated event tracking and calendar views optimized for project-specific milestone management.
-- **Unified History**: Global archive of all conversational data, indexed by workspace and searchable across the entire ecosystem.
+3. **Human-in-the-loop, not autopilot.** The agent operates on a strict Verification Policy. It will not add a task, schedule an event, or delete anything without first presenting a plan and receiving explicit confirmation. It asks before it assumes. This is not a limitation — it is a design choice for people who care about precision.
+
+---
+
+## What It Does
+
+### Conversational Task and Event Management
+
+Tell Dialogue what you need to do. It will gather the details — priority, category, deadline — confirm the plan, and execute. Changes show up in real time across your workspace.
+
+Tasks support priority levels, category tags, and due dates. Events support both **interval scheduling** (meetings, focus blocks) and **point-in-time tracking** (releases, drops, launches, comebacks) — because not everything has a duration.
+
+### Multi-Workspace Context Isolation
+
+Every workspace is a complete silo: its own conversation history, task list, event calendar, and agent context. The agent knows which workspace it is operating in and calibrates its tone and advice accordingly.
+
+### Semantic Memory
+
+Every 20 messages, Dialogue runs a background reflection pass and synthesizes what it has learned about you — your work style, preferences, patterns — into a persistent memory layer. Future conversations build on this model. It gets more useful the more you use it.
+
+### Multimodal Reasoning
+
+Upload images, PDFs, or Word documents directly into the conversation. The agent reads them, reasons across them, and uses their content to inform its suggestions and actions. Hand it a meeting invite and it will offer to add it to your calendar. Hand it two financial reports and it will compare them.
+
+### Integrated Research Engine
+
+When you need current information, the agent issues real-time web queries through Tavily or Serper — and can run multiple parallel searches in a single turn for complex questions. Results are synthesized directly into its response.
+
+### Rich Interaction Feedback
+
+Every agent action — adding a task, scheduling an event, running a search — produces a visual confirmation card in the chat. You always know what the agent did, in a format designed for a glance, not a parse.
+
+---
+
+## What It Is Not
+
+- It is not a SaaS product with a subscription tier.
+- It is not a wrapper around someone else's productivity app.
+- It is not always listening, always processing, or sending your data anywhere you did not configure.
+
+---
 
 ## Technical Stack
 
-- **Framework**: Next.js 15 (App Router)
-- **Real-time Backend**: Convex
-- **Styling & Motion**: Tailwind CSS and Framer Motion
-- **AI Integration**: Google Gemini Pro API / LM Studio SDK
-- **Data Modeling**: TypeScript-first schema with numeric temporal validation
+| Layer | Technology |
+| --- | --- |
+| Framework | Next.js 15 (App Router) |
+| Real-time Backend | Convex |
+| Styling & Motion | Tailwind CSS + Framer Motion |
+| AI Providers | Google Gemini Pro / LM Studio |
+| Research | Tavily / Serper |
+| Language | TypeScript (strict) |
 
-## Setup and Installation
+**Architecture note**: All temporal data is stored as raw Unix timestamps. No server-side timezone inference. All local time rendering happens at the client edge — a pattern we call "Server-Blind" infrastructure.
 
-1. **Clone the Repository**
+---
+
+## Setup
+
+1. **Clone**
 
    ```bash
    git clone https://github.com/your-username/dialogue-ai.git
    cd dialogue-ai
    ```
 
-2. **Install Dependencies**
+2. **Install**
 
    ```bash
    npm install
    ```
 
-3. **Configure Environment Variables**
+3. **Configure environment**
 
-   Create a `.env.local` file with the following parameters:
+   Create `.env.local`:
 
    ```env
-   # Convex Configuration
    CONVEX_DEPLOYMENT=your_deployment_name
    NEXT_PUBLIC_CONVEX_URL=your_convex_url
 
-   # AI Provider Keys
+   # AI provider (at least one required)
    GEMINI_API_KEY=your_google_ai_key
+
+   # Research providers (optional but recommended)
    TAVILY_API_KEY=your_tavily_key
+   SERPER_API_KEY=your_serper_key
    ```
 
-4. **Initialize Development Environment**
-
-   Execute the following commands in parallel:
+4. **Run**
 
    ```bash
-   # Frontend Development Server
-   npm run dev
-
-   # Backend Development Environment
+   # In one terminal
    npx convex dev
+
+   # In another
+   npm run dev
    ```
 
 ---
 
-*Dialogue is engineered with a focus on intentionality, aesthetic minimalism, and high-performance AI integration.*
+## Deployment
+
+Dialogue is optimized for Vercel.
+
+1. Deploy backend functions: `npx convex deploy`
+2. Connect the repository to a new Vercel project.
+3. Set production environment variables in the Vercel dashboard.
+
+---
+
+*Built with intentionality. Designed to stay out of your way.*
