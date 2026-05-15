@@ -226,7 +226,40 @@ export function Chat({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<{ [name: string]: string }>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Minimum Loading Time for the Premium Splash Screen
+  useEffect(() => {
+    if (workspaces !== undefined) {
+      const timer = setTimeout(() => {
+        setShowSplash(false);
+      }, 1500); // 1.5s minimum splash time to "savor" the animation
+      return () => clearTimeout(timer);
+    }
+  }, [workspaces]);
+
+  // Minimum Sync Time to prevent flickering when switching sessions
+  useEffect(() => {
+    if (activeSessionId && messages === undefined) {
+      // Trigger sync state in the next tick
+      const syncTrigger = setTimeout(() => setIsSyncing(true), 0);
+      
+      // Guaranteed release after 800ms
+      setTimeout(() => {
+        setIsSyncing(false);
+      }, 800); 
+      
+      return () => {
+        clearTimeout(syncTrigger);
+        // Note: We intentionally don't clear the main 800ms timer here 
+        // to ensure the sync screen always finishes its animation cycle 
+        // even if data loads instantly.
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]); // Only trigger on session change to avoid stuck states
 
   useEffect(() => {
     const newPreviews: { [name: string]: string } = {};
@@ -673,15 +706,19 @@ export function Chat({
       </nav>
 
       {/* Sessions Sidebar */}
-      <AnimatePresence mode="wait">
-        {showHistory && (
-          <motion.div
-            initial={{ x: "-100%", opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "-100%", opacity: 0 }}
-            transition={{ type: "spring", damping: 28, stiffness: 220 }}
-            className="h-full border-r border-[#2a2723] bg-[#1a1814] shrink-0 z-[100] lg:relative fixed left-0 w-[85%] sm:w-[288px] flex overflow-hidden"
-          >
+      <motion.div
+        initial={false}
+        animate={{ 
+          width: showHistory ? (isLargeViewport ? 288 : "85%") : 0,
+          opacity: showHistory ? 1 : (isLargeViewport ? 0 : 1),
+          x: !showHistory && !isLargeViewport ? "-100%" : 0
+        }}
+        transition={{ type: "spring", damping: 30, stiffness: 250 }}
+        className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 z-[100] overflow-hidden ${
+          isLargeViewport ? "relative border-r" : "fixed left-0 shadow-[20px_0_40px_rgba(0,0,0,0.5)]"
+        }`}
+      >
+        <div className="w-[288px] sm:w-[288px] h-full flex overflow-hidden">
             {/* Mobile Workspace Rail (Inside the Drawer) */}
             <div className="lg:hidden w-[72px] h-full bg-[#141210] border-r border-[#2a2723] flex flex-col items-center pt-10 pb-6 gap-6 shrink-0">
               <button 
@@ -851,13 +888,13 @@ export function Chat({
               ))}
             </div>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+      </motion.div>
 
 
       {/* Main Chat Area */}
       <motion.div 
+        layout
         className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
       >
         {/* Floating Toggle for History (when collapsed) */}
@@ -1077,7 +1114,7 @@ export function Chat({
 
         <main 
           onScroll={handleScroll}
-          className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 pb-4 lg:pb-10 space-y-6 lg:space-y-12 custom-scrollbar lg:scrollbar-default scrollbar-hide"
+          className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 space-y-6 lg:space-y-12 custom-scrollbar lg:scrollbar-default scrollbar-hide"
         >
           {/* Premium Centered Scroll Down Button (Gemini Style) */}
           <AnimatePresence>
@@ -1100,9 +1137,16 @@ export function Chat({
             )}
           </AnimatePresence>
 
-          <div className="max-w-4xl mx-auto space-y-6 lg:space-y-12">
-            {workspaces === undefined ? (
-              <div className="absolute inset-0 z-[100] bg-[#0f0e0c] flex flex-col items-center justify-center space-y-6 animate-in fade-in duration-500">
+          <div className="max-w-4xl mx-auto h-full flex flex-col">
+            <AnimatePresence mode="wait">
+            {showSplash ? (
+              <motion.div 
+                key="initialising"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-[100] bg-[#0f0e0c] flex flex-col items-center justify-center space-y-6"
+              >
                 <div className="relative">
                   <div className="absolute inset-0 bg-[#d4a373]/20 blur-3xl rounded-full animate-pulse" />
                   <Bot className="w-12 h-12 text-[#d4a373] animate-bounce relative z-10" />
@@ -1113,14 +1157,33 @@ export function Chat({
                   </div>
                   <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#d4a373]/40">Initialising</p>
                 </div>
-              </div>
-            ) : messages === undefined && activeSessionId ? (
-              <div className="flex flex-col items-center justify-center min-h-[75svh] space-y-6">
+              </motion.div>
+            ) : (isSyncing || (messages === undefined && activeSessionId)) ? (
+              <motion.div 
+                key="synchronizing"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex-1 flex flex-col items-center justify-center min-h-[75svh] space-y-6"
+              >
                 <Sparkles className="w-10 h-10 text-[#d4a373] animate-spin-slow" />
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#d4a373]/50">Synchronizing</p>
-              </div>
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#d4a373]/50">Synchronizing</p>
+                  <div className="flex gap-1">
+                    <div className="w-1 h-1 rounded-full bg-[#d4a373]/30 animate-bounce [animation-delay:-0.3s]" />
+                    <div className="w-1 h-1 rounded-full bg-[#d4a373]/30 animate-bounce [animation-delay:-0.15s]" />
+                    <div className="w-1 h-1 rounded-full bg-[#d4a373]/30 animate-bounce" />
+                  </div>
+                </div>
+              </motion.div>
             ) : messages === undefined || !activeSessionId ? (
-              <div className="flex flex-col items-center justify-center min-h-[75svh] space-y-8 animate-in fade-in zoom-in duration-700">
+              <motion.div 
+                key="empty"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex-1 flex flex-col items-center justify-center min-h-[75svh] space-y-8"
+              >
                 <div className="relative group">
                   <div className="absolute inset-0 bg-[#d4a373]/20 blur-3xl rounded-full group-hover:bg-[#d4a373]/30 transition-all duration-500" />
                   <div className="relative w-24 h-24 rounded-[32px] bg-[#1a1814] border border-[#d4a373]/20 flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:border-[#d4a373]/40 transition-all duration-500">
@@ -1134,28 +1197,33 @@ export function Chat({
                     Select a session from the history or start a fresh conversation to begin.
                   </p>
                 </div>
-
-                <button
-                  onClick={handleNewChat}
-                  className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-[#d4a373] text-[#0f0e0c] font-bold text-sm uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-xl shadow-[#d4a373]/10 hover:shadow-[#d4a373]/20 hover:-translate-y-1 active:translate-y-0"
+              </motion.div>
+              ) : messages.length === 0 ? (
+                <motion.div 
+                  key="no-messages"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 max-w-sm mx-auto"
                 >
-                  <Plus className="w-4 h-4" />
-                  Start New Chat
-                </button>
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 max-w-sm mx-auto">
-                <div className="w-16 h-16 rounded-3xl bg-[#1a1814] border border-[#2a2723] flex items-center justify-center shadow-2xl">
-                  <Bot className="w-8 h-8 text-[#d4a373]/40" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-[#f2efeb] font-medium italic">&quot;The best way to predict the future is to create it.&quot;</p>
-                  <p className="text-[#a8a29e] text-xs leading-relaxed">Dialogue is ready to help you manage your tasks and thoughts with clarity.</p>
-                </div>
-              </div>
-            ) : (
-              <AnimatePresence initial={false}>
-                {[...messages].map((msg) => (
+                  <div className="w-16 h-16 rounded-3xl bg-[#1a1814] border border-[#2a2723] flex items-center justify-center shadow-2xl">
+                    <Bot className="w-8 h-8 text-[#d4a373]/40" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[#f2efeb] font-medium italic">&quot;The best way to predict the future is to create it.&quot;</p>
+                    <p className="text-[#a8a29e] text-xs leading-relaxed">Dialogue is ready to help you manage your tasks and thoughts with clarity.</p>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div 
+                  key="chat-messages"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-6 lg:space-y-12"
+                >
+                  <AnimatePresence initial={false}>
+                    {[...messages].map((msg) => (
                   <div key={msg._id}>
                     <motion.div
                       initial={{ opacity: 0, y: 12 }}
@@ -1344,19 +1412,20 @@ export function Chat({
                       </div>
                     </motion.div>
                   </div>
-                ))}
-              </AnimatePresence>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
             )}
-            {/* Dynamic Buffer: Ensures last message can always be scrolled above the floating tray/keyboard */}
-            <div 
-              style={{ 
-                height: isLargeViewport ? "4rem" : `calc(8rem + ${keyboardOffset}px)` 
-              }} 
-              className="transition-[height] duration-200"
-            />
-            <div ref={messagesEndRef} />
-          </div>
-        </main>
+          </AnimatePresence>
+
+          {/* Ganjalan: Ensures last message is always pushed above the tray */}
+          <div 
+            style={{ height: isLargeViewport ? "180px" : "120px" }} 
+            className="w-full shrink-0"
+          />
+          <div ref={messagesEndRef} className="h-px w-full" />
+        </div>
+      </main>
         <footer 
           style={{ 
             bottom: isLargeViewport ? 0 : `${keyboardOffset}px`,

@@ -137,6 +137,7 @@ export default function Home() {
 
       {/* Main Content Area */}
       <motion.div 
+        layout
         className="flex-1 flex h-full overflow-hidden relative"
       >
         <Chat 
@@ -153,37 +154,47 @@ export default function Home() {
       </motion.div>
 
       {/* Right Sidebar Toggle (Floating / FAB on Mobile) */}
-      {!showTasks && (
-        <button
-          onClick={() => handleSetShowTasks(true)}
-          style={{ 
-            bottom: isLargeViewport ? "2rem" : `calc(5.2rem + ${keyboardOffset}px)` 
-          }}
-          className="absolute right-6 z-40 p-4 lg:p-3 rounded-full lg:rounded-2xl bg-[#d4a373] lg:bg-[#1a1814] border border-[#d4a373]/20 lg:border-[#2a2723] text-[#0f0e0c] lg:text-[#a8a29e] hover:text-[#0f0e0c] lg:hover:text-[#d4a373] transition-all shadow-2xl lg:shadow-black/50 group flex items-center justify-center"
-          title="Show Planner"
-        >
-          <Grid2x2 className="w-6 h-6 lg:w-5 lg:h-5 transition-transform group-hover:rotate-12" />
-        </button>
-      )}
-
-      {/* Task Panel (Collapsible / Overlay) */}
       <AnimatePresence>
-        {showTasks && (
-          <motion.div
-            initial={{ x: "100%", opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "100%", opacity: 0 }}
-            transition={{ type: "spring", damping: 28, stiffness: 220 }}
-            className="h-full border-l border-[#2a2723] bg-[#1a1814] shrink-0 overflow-hidden z-40 lg:relative lg:translate-x-0 absolute right-0 w-[85%] sm:w-[320px] shadow-[-20px_0_40px_rgba(0,0,0,0.5)] lg:shadow-none"
+        {!showTasks && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={() => handleSetShowTasks(true)}
+            style={{ 
+              top: isLargeViewport ? "50%" : "auto",
+              bottom: isLargeViewport ? "auto" : `calc(6.5rem + ${keyboardOffset}px)`,
+              transform: isLargeViewport ? "translateY(-50%)" : "none"
+            }}
+            className="absolute right-6 z-40 p-4 lg:p-3 rounded-full lg:rounded-2xl bg-[#d4a373] lg:bg-[#1a1814] border border-[#d4a373]/20 lg:border-[#2a2723] text-[#0f0e0c] lg:text-[#a8a29e] hover:text-[#0f0e0c] lg:hover:text-[#d4a373] transition-all shadow-2xl lg:shadow-black/50 group flex items-center justify-center"
+            title="Show Planner"
           >
-            <TaskPanel 
-              activeWorkspaceId={activeWorkspaceId}
-              onSync={handleSyncFromPanel}
-              onClose={() => handleSetShowTasks(false)}
-            />
-          </motion.div>
+            <Grid2x2 className="w-6 h-6 lg:w-5 lg:h-5 transition-transform group-hover:rotate-12" />
+          </motion.button>
         )}
       </AnimatePresence>
+
+      {/* Task Panel (Collapsible / Overlay) */}
+      <motion.div
+        initial={false}
+        animate={{ 
+          width: showTasks ? (isLargeViewport ? 320 : "85%") : 0,
+          opacity: showTasks ? 1 : (isLargeViewport ? 0 : 1),
+          x: !showTasks && !isLargeViewport ? "100%" : 0
+        }}
+        transition={{ type: "spring", damping: 30, stiffness: 250 }}
+        className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 overflow-hidden z-40 ${
+          isLargeViewport ? "relative border-l" : "absolute right-0 shadow-[-20px_0_40px_rgba(0,0,0,0.5)]"
+        }`}
+      >
+        <div className="w-[320px] sm:w-[320px] h-full">
+          <TaskPanel 
+            activeWorkspaceId={activeWorkspaceId}
+            onSync={handleSyncFromPanel}
+            onClose={() => handleSetShowTasks(false)}
+          />
+        </div>
+      </motion.div>
     </main>
   );
 }
