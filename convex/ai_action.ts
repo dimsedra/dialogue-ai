@@ -1,5 +1,5 @@
 "use node";
-import { internalAction } from "./_generated/server";
+import { internalAction, action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
@@ -17,21 +17,23 @@ You must dynamically read the room and adjust your behavior based on what the us
    - Cleverly nudge them toward their goals when appropriate, but only when they are in a working mindset.
    - If they seem stressed, suggest breaking tasks down into bite-sized chunks.
 
-      ## STRICT RULES:
-1. **VERIFY BEFORE ADDING/DELETING**: Never call 'addTask' or 'deleteTask' without explicit user confirmation.
-2. **CLARIFY BEFORE ADDING**: When a user confirms they want to add a task, DO NOT just add it with defaults. Instead:
-   - Ask for a **Priority** (low, medium, high).
-   - Ask for a **Category** (e.g., Work, Personal, Side Project).
-   - Ask for a **Due Date** or time.
-   - Ask for any additional **Notes** or details if they seem relevant.
-   - Example: "Got it! Should I set a priority for this, or maybe add some notes about the requirements?"
-3. **PRECISE TIME PARSING**: When the user mentions a relative time (e.g., "tomorrow 7AM", "next Friday", "in 2 hours"), you MUST convert this to an absolute ISO-8601 string based on the "Current Time" provided below (e.g., "2026-05-15T07:00:00"). 
-   - Always use the ISO-8601 format for the 'dueDate' field of 'addTask' to ensure calendar reliability.
-   - You may still use human-readable dates in your chat response.
-4. If a user mentions a potential task (e.g., "I need to do X"), ask: "Would you like me to add that to your tasks?"
-5. If a user says they finished something or want to remove it, ask: "Should I remove '[Task Name]' from your list?"
-6. Only call the tool AFTER they have provided the details they want to include, or if they say "just add it" / "doesn't matter".
+       ## STRICT RULES:
+1. **VERIFICATION & PERFECTION POLICY**: Never call 'addTask', 'updateTask', 'addEvent', or 'deleteTask' without explicit user confirmation of the exact details. You must ensure the information you've gathered is **perfect as the user intended**.
+2. **CLARIFY & CONFIRM BEFORE ADDING**: When a user wants to add a task/event, you must gather and confirm the following before execution:
+   - **Priority** (low, medium, high).
+   - **Category** (e.g., Work, Personal, Side Project).
+   - **Due Date / Time** (Use the Time Integrity Protocol).
+   - **Notes** or specific details.
+   - **Action**: Summarize the plan (e.g., "I'll add 'Project Review' for 14:00 with High priority in 'Work'. Sound right?") and only call the tool AFTER they confirm.
+3. **ZERO ASSUMPTION POLICY**: If a detail is missing or ambiguous, ASK. Do not guess or use defaults unless the user says "just add it" or "you decide".
+4. **PRECISE TIME PARSING (TIME INTEGRITY PROTOCOL)**: When the user mentions a relative time, you MUST convert this to an absolute ISO-8601 string based on the "Current Time" provided below (e.g., "2026-05-15T07:00:00"). 
+   - You MUST ALWAYS use 24-hour military time in your ISO-8601 strings (e.g., 6:00 PM is 18:00:00).
+   - The 'Current Time' you are given is already pre-adjusted to the user's local timezone. You do not need to calculate offsets.
+5. If a user mentions a potential task (e.g., "I need to do X"), ask: "Would you like me to add that to your tasks?"
+6. If a user says they finished something or want to remove it, ask: "Should I remove '[Task Name]' from your list?"
+7. Only call the tool AFTER the user explicitly says the plan is perfect.
 8. **WORKSPACE AWARENESS**: You are always operating within a specific Workspace (e.g., Work, Personal, Side Project). Respect the "WORKSPACE GOAL/CONTEXT" provided below. Your advice, tone, and task suggestions should align with the specific purpose of the current workspace.
+9. **NATURAL EXPRESSION MANDATE**: Never use rigid, repetitive, or "bot-like" sentence templates for tool confirmations. Avoid "I have added [X] to your list." Instead, weave confirmations into natural prose (e.g., "All set! I've carved out that hour for your workout so you can focus on hitting your goals."). Do not start every response with "Got it," "Understood," or "Okay." Vary your tone and sentence structure constantly.
 
 ## Multimodal Capabilities:
 You are a multimodal agent. You can see and analyze multiple images and documents (PDFs, Word docs, etc.) uploaded by the user.
@@ -48,7 +50,7 @@ You are a multimodal agent. You can see and analyze multiple images and document
 - Purpose: Use this skill ONLY AFTER verification to PERMANENTLY remove a task.
 ### addEvent
 - Purpose: Use this skill ONLY AFTER verification to schedule a specific event with a start and end time. Events are time-blocks on a calendar.
-- Requirement: You MUST provide 'startTime' and 'endTime' as absolute ISO-8601 strings.
+- Requirement: You MUST provide 'startTime' and 'endTime' as absolute ISO-8601 strings in 24-hour format.
 ### deleteEvent
 - Purpose: Use this skill ONLY AFTER verification to remove a scheduled event.
 ### searchWeb
@@ -69,6 +71,7 @@ export const chat = internalAction({
     storageId: v.optional(v.id("_storage")),
     fileName: v.optional(v.string()),
     fileType: v.optional(v.string()),
+    dueDate: v.optional(v.number()),
     attachments: v.optional(v.array(v.object({
       storageId: v.id("_storage"),
       fileName: v.string(),
@@ -102,12 +105,12 @@ export const chat = internalAction({
       const localTime = new Date(now.getTime() - (args.timezoneOffset * 60000));
       nowString = localTime.toLocaleString("en-US", {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
       });
     } else {
       nowString = new Date().toLocaleString("en-US", {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short'
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZoneName: 'short'
       });
     }
 
@@ -117,12 +120,20 @@ export const chat = internalAction({
       : "No specific workspace context provided.";
 
     const briefing = await ctx.runQuery(api.tasks.getDailyBriefing, { workspaceId });
-    const pendingTasksContext = briefing.tasks.map(t => `- [${t._id}] ${t.text} (Priority: ${t.priority}, Category: ${t.category})`).join("\n");
+    const pendingTasksContext = briefing.tasks.map(t => {
+      const dateStr = t.dueDate ? ` | Due: ${new Date(t.dueDate).toLocaleString()}` : "";
+      return `- [${t._id}] ${t.text}${dateStr} (Priority: ${t.priority}, Category: ${t.category})`;
+    }).join("\n");
 
     const upcomingEvents = await ctx.runQuery(api.events.list, { workspaceId });
     const upcomingEventsContext = upcomingEvents
       .filter(e => e.startTime > Date.now() - 3600000)
-      .map(e => `- [${e._id}] ${e.title} (${new Date(e.startTime).toLocaleString()})`)
+      .map(e => {
+        const eventDate = args.timezoneOffset !== undefined
+          ? new Date(e.startTime - (args.timezoneOffset * 60000))
+          : new Date(e.startTime);
+        return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })})`;
+      })
       .join("\n");
 
     let briefingContext = "";
@@ -171,37 +182,41 @@ export const chat = internalAction({
         functionDeclarations: [
           {
             name: "addTask",
-            description: "Adds a new task to the user's list with optional priority and category.",
+            description: "Adds a new task to the user's list. Use for things to do.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
                 text: { type: SchemaType.STRING, description: "The task description" },
-                dueDate: { type: SchemaType.STRING, description: "Optional due date or time (e.g. 'tomorrow 10pm')" },
-                priority: { type: SchemaType.STRING, description: "Optional priority: 'low', 'medium', or 'high'" },
-                category: { type: SchemaType.STRING, description: "Optional category (e.g. 'Work', 'Personal', 'Health')" },
-                notes: { type: SchemaType.STRING, description: "Optional extra notes or context about the task" },
+                dueDate: { type: SchemaType.STRING, description: "ISO-8601 due date/time (24-hour format, e.g. '2026-05-15T14:00:00'). DO NOT append 'Z'." },
+                priority: { type: SchemaType.STRING, description: "Priority level: 'low', 'medium', or 'high'" },
+                category: { type: SchemaType.STRING, description: "Optional category" },
+                notes: { type: SchemaType.STRING, description: "Optional extra notes" },
               },
               required: ["text"],
             },
-          },
-          {
-            name: "completeTask",
-            description: "Marks a task as finished/completed by its ID.",
+          }, {
+            name: "updateTask",
+            description: "Updates an existing task.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
-                taskId: { type: SchemaType.STRING, description: "The ID of the task to complete (e.g. 'jh7...')" },
+                taskId: { type: SchemaType.STRING, description: "The ID of the task to update" },
+                text: { type: SchemaType.STRING, description: "Updated text" },
+                completed: { type: SchemaType.BOOLEAN, description: "Whether the task is finished" },
+                dueDate: { type: SchemaType.STRING, description: "Updated ISO-8601 due date (24-hour, e.g. '2026-05-15T14:00:00'). DO NOT append 'Z'." },
+                priority: { type: SchemaType.STRING, description: "Updated priority: 'low', 'medium', or 'high'" },
+                category: { type: SchemaType.STRING },
+                notes: { type: SchemaType.STRING },
               },
               required: ["taskId"],
             },
-          },
-          {
+          }, {
             name: "deleteTask",
-            description: "PERMANENTLY removes a task from the user's list by its ID.",
+            description: "Deletes a task.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
-                taskId: { type: SchemaType.STRING, description: "The ID of the task to delete (e.g. 'jh7...')" },
+                taskId: { type: SchemaType.STRING, description: "The ID of the task to delete" },
               },
               required: ["taskId"],
             },
@@ -214,12 +229,28 @@ export const chat = internalAction({
               properties: {
                 title: { type: SchemaType.STRING, description: "The event title" },
                 description: { type: SchemaType.STRING, description: "Optional description" },
-                startTime: { type: SchemaType.STRING, description: "ISO-8601 start time (e.g. 2026-05-15T14:00:00)" },
-                endTime: { type: SchemaType.STRING, description: "ISO-8601 end time" },
+                startTime: { type: SchemaType.STRING, description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T14:00:00'). DO NOT append 'Z'." },
+                endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T15:00:00'). DO NOT append 'Z'." },
                 location: { type: SchemaType.STRING, description: "Optional location" },
                 notes: { type: SchemaType.STRING, description: "Optional extra notes or context about the event" },
               },
               required: ["title", "startTime", "endTime"],
+            },
+          },
+          {
+            name: "updateEvent",
+            description: "Updates an existing scheduled event by its ID. Provide only the fields you want to change.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                eventId: { type: SchemaType.STRING, description: "The ID of the event to update" },
+                title: { type: SchemaType.STRING, description: "The new event title" },
+                startTime: { type: SchemaType.STRING, description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T11:50:00')" },
+                endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
+                location: { type: SchemaType.STRING, description: "Optional new location" },
+                notes: { type: SchemaType.STRING, description: "Optional new notes" },
+              },
+              required: ["eventId"],
             },
           },
           {
@@ -315,15 +346,15 @@ export const chat = internalAction({
           else if (lowerName.endsWith(".pdf")) mimeType = "application/pdf";
         }
         const fileBytes = await ctx.storage.get(storageId);
-        
+
         if (fileBytes) {
-          const isNativeMultimodal = 
-            mimeType.startsWith("image/") || 
+          const isNativeMultimodal =
+            mimeType.startsWith("image/") ||
             mimeType === "application/pdf" ||
             mimeType.startsWith("video/") ||
             mimeType.startsWith("audio/");
 
-          const isTextExtractable = 
+          const isTextExtractable =
             mimeType === "text/plain" ||
             mimeType === "text/csv" ||
             mimeType === "text/javascript" ||
@@ -333,13 +364,13 @@ export const chat = internalAction({
             mimeType === "application/json" ||
             fileName.endsWith(".md");
 
-          const isDocx = mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || 
-                         fileName.endsWith(".docx");
+          const isDocx = mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+            fileName.endsWith(".docx");
 
           if (isNativeMultimodal) {
             const arrayBuffer = await fileBytes.arrayBuffer();
             const base64Data = Buffer.from(arrayBuffer).toString("base64");
-            
+
             mediaParts.push({
               inlineData: {
                 data: base64Data,
@@ -383,7 +414,7 @@ export const chat = internalAction({
       }
 
       const promptParts: (string | Part)[] = [
-        prompt, 
+        prompt,
         ...mediaParts,
         ...(extractedTexts.length > 0 ? [`\n\nADDITIONAL ATTACHED FILE CONTENTS:\n${extractedTexts.join("\n\n---\n\n")}`] : [])
       ];
@@ -395,33 +426,78 @@ export const chat = internalAction({
         const searchCalls = calls.filter(c => c.name === "searchWeb");
         const otherCalls = calls.filter(c => c.name !== "searchWeb");
 
+        const parseLocal = (s: string) => {
+          const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+          if (match) {
+            const [, y, m, d, h, min] = match;
+            if (args.timezoneOffset !== undefined) {
+              return Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)) + (args.timezoneOffset * 60000);
+            }
+            return new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)).getTime();
+          }
+          return new Date(s).getTime();
+        };
+
         for (const call of otherCalls) {
-          if (call.name === "addTask") {
-            const taskArgs = {
+          // --- Task Tool Handlers ---
+          if (call.name === "addTask" || call.name === "updateTask") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const taskArgs = call.args as any;
+
+            if (call.name === "addTask") {
+              await ctx.runMutation(api.ai.addTask, {
+                ...taskArgs,
+                dueDate: taskArgs.dueDate ? parseLocal(taskArgs.dueDate as string) : undefined,
+                workspaceId
+              });
+              activeToolCall = { name: "addTask", args: call.args };
+            } else {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ...(call.args as any),
-              workspaceId
-            };
-            await ctx.runMutation(api.ai.addTask, taskArgs);
-            activeToolCall = { name: "addTask", args: call.args };
-          } else if (call.name === "completeTask") {
-            const { taskId } = call.args as { taskId: string };
-            await ctx.runMutation(api.tasks.toggleCompleted, { id: taskId as Id<"tasks"> });
-            activeToolCall = { name: "completeTask", args: call.args };
+              const taskUpdates: Record<string, any> = {};
+              if (taskArgs.text) taskUpdates.text = taskArgs.text;
+              if (taskArgs.completed !== undefined) taskUpdates.completed = taskArgs.completed;
+              if (taskArgs.priority) taskUpdates.priority = taskArgs.priority;
+              if (taskArgs.category) taskUpdates.category = taskArgs.category;
+              if (taskArgs.notes) taskUpdates.notes = taskArgs.notes;
+              if (taskArgs.dueDate) taskUpdates.dueDate = parseLocal(taskArgs.dueDate as string);
+
+              await ctx.runMutation(api.tasks.updateTask, {
+                id: taskArgs.taskId as Id<"tasks">,
+                ...taskUpdates
+              });
+              activeToolCall = { name: "updateTask", args: call.args };
+            }
           } else if (call.name === "deleteTask") {
             const { taskId } = call.args as { taskId: string };
             await ctx.runMutation(api.tasks.deleteTask, { id: taskId as Id<"tasks"> });
             activeToolCall = { name: "deleteTask", args: call.args };
-          } else if (call.name === "addEvent") {
+          // --- Event Tool Handlers ---
+          } else if (call.name === "addEvent" || call.name === "updateEvent") {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const eventArgs = call.args as any;
-            await ctx.runMutation(api.events.add, {
-              ...eventArgs,
-              startTime: new Date(eventArgs.startTime).getTime(),
-              endTime: new Date(eventArgs.endTime).getTime(),
-              workspaceId
-            });
-            activeToolCall = { name: "addEvent", args: call.args };
+
+            if (call.name === "addEvent") {
+              await ctx.runMutation(api.events.add, {
+                ...eventArgs,
+                startTime: parseLocal(eventArgs.startTime as string),
+                endTime: parseLocal(eventArgs.endTime as string),
+                workspaceId
+              });
+              activeToolCall = { name: "addEvent", args: call.args };
+            } else {
+              const updates: Record<string, string | number> = {};
+              if (eventArgs.title) updates.title = eventArgs.title;
+              if (eventArgs.location) updates.location = eventArgs.location;
+              if (eventArgs.notes) updates.notes = eventArgs.notes;
+              if (eventArgs.startTime) updates.startTime = parseLocal(eventArgs.startTime as string);
+              if (eventArgs.endTime) updates.endTime = parseLocal(eventArgs.endTime as string);
+
+              await ctx.runMutation(api.events.update, {
+                id: eventArgs.eventId as Id<"events">,
+                ...updates
+              });
+              activeToolCall = { name: "updateEvent", args: call.args };
+            }
           } else if (call.name === "deleteEvent") {
             const { eventId } = call.args as { eventId: string };
             await ctx.runMutation(api.events.remove, { id: eventId as Id<"events"> });
@@ -438,11 +514,11 @@ export const chat = internalAction({
           const serperKey = process.env.SERPER_API_KEY;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const searchProvider = (profile?.preferences as any)?.searchProvider || "tavily";
-          
+
           const searchResults = await Promise.all(searchCalls.map(async (call) => {
             const { query } = call.args as { query: string };
             let content = "Search failed.";
-            
+
             if (searchProvider === "serper" && serperKey) {
               try {
                 const serperRes = await fetch("https://google.serper.dev/search", {
@@ -473,7 +549,12 @@ export const chat = internalAction({
             return { name: "searchWeb", response: { result: content } };
           }));
 
-          activeToolCall = { name: "multiSearch", args: { count: searchCalls.length } };
+          if (searchCalls.length === 1) {
+            activeToolCall = { name: "searchWeb", args: searchCalls[0].args };
+          } else {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            activeToolCall = { name: "multiSearch", args: { count: searchCalls.length, queries: searchCalls.map(c => (c.args as any).query) } };
+          }
 
           const feedbackPrompt = {
             contents: [
@@ -622,4 +703,34 @@ export const generateSessionTitle = internalAction({
       await ctx.runMutation(api.messages.updateSessionTitle, { id: args.sessionId, title });
     }
   }
+});
+export const parseDate = action({
+  args: {
+    text: v.string(),
+    timezoneOffset: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+
+    const now = new Date();
+    if (args.timezoneOffset !== undefined) {
+      now.setMinutes(now.getMinutes() - args.timezoneOffset);
+    }
+    const nowISO = now.toISOString();
+
+    const prompt = `Convert this natural language date to an ISO-8601 string. 
+Current time: ${nowISO}
+Input: "${args.text}"
+Respond ONLY with the ISO-8601 string or "null" if invalid.`;
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text().trim();
+
+    if (responseText === "null") return null;
+    return responseText;
+  },
 });

@@ -21,12 +21,12 @@ export const getPromptContext = query({
       const localTime = new Date(now.getTime() - (args.timezoneOffset * 60000));
       nowString = localTime.toLocaleString("en-US", {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
       });
     } else {
       nowString = new Date().toLocaleString("en-US", {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short'
+        hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short', hour12: false
       });
     }
 
@@ -38,14 +38,22 @@ export const getPromptContext = query({
     const tasks = workspaceId 
       ? await ctx.db.query("tasks").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).filter((q) => q.eq(q.field("completed"), false)).collect()
       : await ctx.db.query("tasks").filter((q) => q.eq(q.field("completed"), false)).collect();
-    const pendingTasksContext = tasks.map(t => `- [${t._id}] ${t.text} (Priority: ${t.priority}, Category: ${t.category})`).join("\n");
+    const pendingTasksContext = tasks.map(t => {
+      const dateStr = t.dueDate ? ` | Due: ${t.dueDate}` : "";
+      return `- [${t._id}] ${t.text}${dateStr} (Priority: ${t.priority}, Category: ${t.category})`;
+    }).join("\n");
 
     const events = workspaceId
       ? await ctx.db.query("events").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect()
       : await ctx.db.query("events").collect();
     const upcomingEventsContext = events
       .filter(e => e.startTime > Date.now() - 3600000)
-      .map(e => `- [${e._id}] ${e.title} (${new Date(e.startTime).toLocaleString()})`)
+      .map(e => {
+        const eventDate = args.timezoneOffset !== undefined
+          ? new Date(e.startTime - (args.timezoneOffset * 60000))
+          : new Date(e.startTime);
+        return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })})`;
+      })
       .join("\n");
 
     const systemInstruction = `
@@ -70,6 +78,13 @@ export const getPromptContext = query({
       
       Personality Fragments:
       - ${personalityFragments || "No specific patterns learned yet."}
+
+       ## STRICT RULES:
+       1. **VERIFICATION & PERFECTION POLICY**: Never call tools like 'addTask' or 'addEvent' without explicit user confirmation of the exact details. You must ensure the information you've gathered is **perfect as the user intended**.
+       2. **CLARIFY & CONFIRM BEFORE ADDING**: When a user wants to add a task/event, you must gather and confirm: Priority, Category, Due Date/Time, and any Notes.
+       3. **ZERO ASSUMPTION POLICY**: If a detail is missing or ambiguous, ASK. Do not guess or use defaults.
+       4. **TIME INTEGRITY PROTOCOL**: ALWAYS use 24-hour format (00:00-23:59). ALWAYS provide dates/times in ISO-8601 format (YYYY-MM-DDTHH:mm:ss). Current local time is provided as ${nowString}.
+       5. Only call tools AFTER the user explicitly says the plan is perfect.
 
       (Note: LM Studio does not support advanced multi-search or multi-attachment reasoning natively in this current implementation. Focus on core task management and chat.)
     `;
@@ -164,7 +179,7 @@ export const addTask = mutation({
   args: {
     text: v.string(),
     workspaceId: v.optional(v.id("workspaces")),
-    dueDate: v.optional(v.string()),
+    dueDate: v.optional(v.number()),
     priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),

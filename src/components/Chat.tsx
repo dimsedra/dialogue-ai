@@ -4,7 +4,7 @@ import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Send, User, Bot, Sparkles, Calendar, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink } from "lucide-react";
+import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../convex/_generated/dataModel";
@@ -20,17 +20,7 @@ interface ToolCall {
   result?: Record<string, unknown>;
 }
 
-const formatDate = (dateStr: string | undefined) => {
-  if (!dateStr) return "";
-  try {
-    if (dateStr.includes("T") || dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
-      return format(parseISO(dateStr), "MMM d, h:mm a");
-    }
-    return dateStr;
-  } catch {
-    return dateStr;
-  }
-};
+
 
 function ToolCard({ toolCall }: { toolCall: ToolCall }) {
   if (!toolCall) return null;
@@ -43,51 +33,133 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       category?: string; 
     };
     return (
-      <div className="mt-3 p-4 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-3 shadow-sm">
-        <div className="flex items-center gap-2 text-[#d4a373]">
-          <Calendar className="w-4 h-4" />
-          <span className="text-[10px] font-bold uppercase tracking-widest">New Task Added</span>
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-4 p-5 rounded-3xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-4 shadow-xl shadow-black/20"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5 text-[#d4a373]">
+            <div className="p-1.5 rounded-lg bg-[#d4a373]/10">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Task Created</span>
+          </div>
+          {priority && (
+            <span className={`text-[9px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border ${
+              priority === "high" ? "bg-red-500/10 border-red-500/20 text-red-400" :
+              priority === "medium" ? "bg-orange-500/10 border-orange-500/20 text-orange-400" :
+              "bg-blue-500/10 border-blue-500/20 text-blue-400"
+            }`}>
+              {priority}
+            </span>
+          )}
         </div>
-        <div className="space-y-1">
-          <p className="text-sm text-[#f2efeb] font-medium leading-relaxed">{text}</p>
-          <div className="flex flex-wrap gap-2">
-            {priority && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1f1d19] text-[#a8a29e] border border-[#2a2723]">
-                {priority}
-              </span>
-            )}
+        <div className="space-y-3">
+          <p className="text-[15px] text-[#f2efeb] font-semibold leading-relaxed">{text}</p>
+          <div className="flex flex-wrap gap-4 pt-1">
             {category && (
-              <div className="flex items-center gap-1 text-[10px] text-[#a8a29e]">
-                <Tag className="w-3 h-3" />
+              <div className="flex items-center gap-2 text-[11px] text-[#a8a29e] font-medium">
+                <Tag className="w-3.5 h-3.5 text-[#d4a373]/60" />
                 {category}
               </div>
             )}
-            {dueDate && (
-              <div className="flex items-center gap-1.5 text-[10px] text-[#d4a373]/70 font-medium">
-                <Clock className="w-3 h-3" />
-                Due {formatDate(dueDate)}
+                {dueDate && (
+              <div className="flex items-center gap-2 text-[11px] text-[#d4a373] font-bold">
+                <Clock className="w-3.5 h-3.5" />
+                {format(parseISO(dueDate), "eee, MMM d, HH:mm")}
               </div>
             )}
           </div>
         </div>
-        <div className="flex justify-end pt-1">
-          <button className="text-[10px] text-[#a8a29e] hover:text-[#d4a373] transition-colors flex items-center gap-1 font-medium">
-            <Trash2 className="w-3 h-3" />
-            Cancel
-          </button>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "addEvent") {
+    const { title, startTime, location } = toolCall.args as { 
+      title: string; 
+      startTime: string; 
+      location?: string;
+    };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-4 p-5 rounded-3xl bg-[#8b5cf6]/5 border border-[#8b5cf6]/10 space-y-4 shadow-xl shadow-black/20"
+      >
+        <div className="flex items-center gap-2.5 text-[#8b5cf6]">
+          <div className="p-1.5 rounded-lg bg-[#8b5cf6]/10">
+            <CalendarDays className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Event Scheduled</span>
         </div>
+        <div className="space-y-3">
+          <p className="text-[15px] text-[#f2efeb] font-semibold leading-relaxed">{title}</p>
+          <div className="flex flex-wrap gap-4 pt-1">
+            <div className="flex items-center gap-2 text-[11px] text-[#8b5cf6] font-bold">
+              <Clock className="w-3.5 h-3.5" />
+              {(() => {
+                // Hyper-robust local parsing for the UI card
+                const s = startTime;
+                const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+                if (match) {
+                  const [, y, m, d, h, min] = match;
+                  return format(new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)), "eee, MMM d, HH:mm");
+                }
+                return format(parseISO(s), "eee, MMM d, HH:mm");
+              })()}
+              <span className="text-[9px] opacity-40 font-black ml-1 uppercase tracking-tighter">
+                {new Intl.DateTimeFormat().resolvedOptions().timeZone.split("/").pop()?.replace("_", " ")}
+              </span>
+            </div>
+            {location && (
+              <div className="flex items-center gap-2 text-[11px] text-[#a8a29e] font-medium">
+                <MapPin className="w-3.5 h-3.5 text-[#8b5cf6]/60" />
+                {location}
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "searchWeb" || toolCall.name === "multiSearch") {
+    const isMulti = toolCall.name === "multiSearch";
+    const query = !isMulti ? (toolCall.args as { query: string }).query : undefined;
+    const count = isMulti ? (toolCall.args as { count: number }).count : 1;
+    
+    return (
+      <div className="mt-2 flex items-center gap-2.5 py-1.5 px-3 rounded-full bg-[#3b82f6]/[0.03] border border-[#3b82f6]/10 w-fit">
+        <Search className="w-3 h-3 text-[#3b82f6]/60" />
+        <span className="text-[9px] font-bold uppercase tracking-wider text-[#3b82f6]/80 whitespace-nowrap">
+          {isMulti ? `${count} Research Queries` : "Researching"}
+        </span>
+        {query && (
+          <>
+            <div className="w-[1px] h-2 bg-[#3b82f6]/20" />
+            <span className="text-[9px] text-[#a8a29e]/60 truncate max-w-[150px] font-medium">&quot;{query}&quot;</span>
+          </>
+        )}
       </div>
     );
   }
 
   if (toolCall.name === "updateMemory") {
     return (
-      <div className="mt-3 flex items-center gap-2 p-3 rounded-xl bg-emerald-500/[0.03] border border-emerald-500/10">
-        <Sparkles className="w-3.5 h-3.5 text-emerald-500/60" />
-        <span className="text-xs text-emerald-500/70 font-medium italic">
-          Dialogue updated its memory of you.
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="mt-3 flex items-center gap-3 p-3 rounded-2xl bg-emerald-500/[0.03] border border-emerald-500/10 shadow-sm"
+      >
+        <div className="p-1.5 rounded-lg bg-emerald-500/10">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+        </div>
+        <span className="text-[11px] text-[#a8a29e] font-medium italic">
+          Dialogue learned something new about you.
         </span>
-      </div>
+      </motion.div>
     );
   }
 
@@ -125,8 +197,12 @@ export function Chat({
   
   // Tool Mutations for local LLM
   const addTask = useMutation(api.ai.addTask);
+  const addEvent = useMutation(api.events.add);
+  const updateEvent = useMutation(api.events.update);
+  const deleteEvent = useMutation(api.events.remove);
   const completeTask = useMutation(api.tasks.toggleCompleted);
   const deleteTask = useMutation(api.tasks.deleteTask);
+  const updateTask = useMutation(api.tasks.updateTask);
   const updateMemory = useMutation(api.ai.updateProfile);
 
   const convex = useConvex();
@@ -138,6 +214,7 @@ export function Chat({
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [isEditingWorkspaceContext, setIsEditingWorkspaceContext] = useState(false);
   const [tempContext, setTempContext] = useState("");
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState<{ id: Id<"chatSessions">; title: string } | null>(null);
   
   // Settings / Provider State
   const [showSettings, setShowSettings] = useState(false);
@@ -225,7 +302,70 @@ export function Chat({
 
       if (result.toolCall) {
         const { name, args } = result.toolCall;
-        if (name === "addTask") await addTask({ ...args, workspaceId: promptCtx.workspaceId });
+        
+        const parseLocal = (s: string) => {
+          const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+          if (match) {
+            const [, y, m, d, h, min] = match;
+            return new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)).getTime();
+          }
+          return new Date(s).getTime();
+        };
+
+        if (name === "addTask" || name === "updateTask") {
+          if (name === "addTask") {
+            await addTask({ 
+              ...args, 
+              dueDate: args.dueDate ? parseLocal(args.dueDate as string) : undefined,
+              workspaceId: promptCtx.workspaceId 
+            });
+          } else {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const taskUpdates: Record<string, any> = {};
+            if (args.text) taskUpdates.text = args.text;
+            if (args.completed !== undefined) taskUpdates.completed = args.completed;
+            if (args.priority) taskUpdates.priority = args.priority;
+            if (args.category) taskUpdates.category = args.category;
+            if (args.notes) taskUpdates.notes = args.notes;
+            if (args.dueDate) taskUpdates.dueDate = parseLocal(args.dueDate as string);
+
+            await updateTask({
+              id: args.taskId as Id<"tasks">,
+              ...taskUpdates
+            });
+          }
+        }
+        else if (name === "addEvent" || name === "updateEvent") {
+          // Explicitly parse the ISO string to avoid any UTC fallback
+          // This ensures that "11:50" from the AI is ALWAYS 11:50 in the user's local time
+
+          if (name === "addEvent") {
+            const startTime = parseLocal(args.startTime as string);
+            const endTime = parseLocal(args.endTime as string);
+            
+            await addEvent({ 
+              ...args, 
+              startTime, 
+              endTime, 
+              workspaceId: promptCtx.workspaceId 
+            });
+          } else {
+            const updates: Record<string, string | number> = {};
+            if (args.title) updates.title = args.title;
+            if (args.location) updates.location = args.location;
+            if (args.notes) updates.notes = args.notes;
+            if (args.startTime) updates.startTime = parseLocal(args.startTime as string);
+            if (args.endTime) updates.endTime = parseLocal(args.endTime as string);
+
+            await updateEvent({
+              id: args.eventId as Id<"events">,
+              ...updates
+            });
+          }
+        }
+        else if (name === "deleteEvent") {
+          await deleteEvent({ id: args.eventId as Id<"events"> });
+        }
         else if (name === "completeTask") await completeTask({ id: args.taskId as Id<"tasks"> });
         else if (name === "deleteTask") await deleteTask({ id: args.taskId as Id<"tasks"> });
         else if (name === "updateMemory") await updateMemory({ bio: args.bio as string });
@@ -369,10 +509,18 @@ export function Chat({
 
   const handleDeleteChat = async (id: Id<"chatSessions">, e: React.MouseEvent) => {
     e.stopPropagation();
+    const session = sessions?.find(s => s._id === id);
+    if (session) {
+      setConfirmDeleteSession({ id, title: session.title || "Untitled Session" });
+    }
+  };
+
+  const executeDeleteChat = async (id: Id<"chatSessions">) => {
     await deleteSession({ id });
     if (activeSessionId === id) {
       setActiveSessionId(null);
     }
+    setConfirmDeleteSession(null);
   };
 
   const startEditing = (id: Id<"chatSessions">, title: string, e: React.MouseEvent) => {
@@ -568,16 +716,7 @@ export function Chat({
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={() => setShowHistory(false)}
-                className="hidden lg:block absolute right-0 top-1/2 -translate-y-1/2 z-10 p-2 rounded-l-xl bg-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb] transition-all border-l border-y border-[#3a3733] shadow-[-4px_0_10px_rgba(0,0,0,0.3)]"
-                title="Hide History"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            
-            <header className="p-4 lg:p-6 shrink-0 space-y-4 lg:space-y-6">
-              <div className="space-y-4">
+              <header className="p-4 lg:p-6 shrink-0 space-y-4 lg:space-y-6">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-[#d4a373]" />
@@ -587,6 +726,13 @@ export function Chat({
                         : "Universal Chat"}
                     </span>
                   </div>
+                  <button
+                    onClick={() => setShowHistory(false)}
+                    className="hidden lg:flex p-1.5 rounded-lg text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
+                    title="Hide History"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
                 </div>
 
                 <button 
@@ -596,8 +742,7 @@ export function Chat({
                   <Plus className="w-4 h-4" />
                   New Session
                 </button>
-              </div>
-            </header>
+              </header>
 
             
             <style>{`
@@ -641,6 +786,7 @@ export function Chat({
                     ) : (
                       <div className="flex flex-col min-w-0">
                         <span className="text-sm font-medium truncate">{session.title}</span>
+
                         {!activeWorkspaceId && session.workspaceId && (
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <div 
@@ -1157,7 +1303,7 @@ export function Chat({
               >
                 {selectedFiles.map((file, idx) => (
                   <div key={`${file.name}-${idx}`} className="relative group/thumb">
-                    <div className="w-16 h-16 lg:w-20 lg:h-20 bg-[#1a1814]/80 backdrop-blur-2xl rounded-2xl border border-[#d4a373]/30 shadow-2xl flex flex-col items-center justify-center overflow-hidden group-hover:border-[#d4a373]/50 transition-all">
+                    <div className="w-16 h-16 lg:w-20 lg:h-20 bg-[#1a1814]/80 backdrop-blur-2xl rounded-2xl border border-[#d4a373]/30 shadow-2xl flex flex-col items-center justify-center overflow-hidden group-hover/thumb:border-[#d4a373]/50 transition-all">
                       {previews[file.name] ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img 
@@ -1301,6 +1447,50 @@ export function Chat({
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+      {/* Confirmation Modal for Session Deletion */}
+      <AnimatePresence>
+        {confirmDeleteSession && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-sm p-6"
+            onClick={() => setConfirmDeleteSession(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[320px] bg-[#1a1814] border border-[#d4a373]/20 rounded-2xl p-6 shadow-2xl"
+            >
+              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-[#f2efeb] mb-2 leading-tight">
+                Delete Session?
+              </h3>
+              <p className="text-sm text-[#a8a29e] mb-6 leading-relaxed">
+                Are you sure you want to delete <span className="text-[#f2efeb] font-semibold italic">&quot;{confirmDeleteSession.title}&quot;</span>? All messages and context from this session will be lost.
+              </p>
+              <div className="flex flex-col gap-2">
+                <button 
+                  onClick={() => executeDeleteChat(confirmDeleteSession.id)}
+                  className="w-full py-3 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                >
+                  Delete Session
+                </button>
+                <button 
+                  onClick={() => setConfirmDeleteSession(null)}
+                  className="w-full py-3 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

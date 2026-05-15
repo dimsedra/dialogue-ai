@@ -32,7 +32,7 @@ export async function processLocalLLMRequest({
           type: "object",
           properties: {
             text: { type: "string", description: "The task description" },
-            dueDate: { type: "string", description: "Optional due date or time (e.g. 'tomorrow 10pm')" },
+            dueDate: { type: "string", description: "Mandatory ISO-8601 due date/time (e.g. '2026-05-15T22:00:00'). Use 24-hour format." },
             priority: { type: "string", enum: ["low", "medium", "high"], description: "Optional priority" },
             category: { type: "string", description: "Optional category" },
             notes: { type: "string", description: "Optional extra notes or context" },
@@ -78,8 +78,8 @@ export async function processLocalLLMRequest({
           type: "object",
           properties: {
             title: { type: "string", description: "The event title" },
-            startTime: { type: "string", description: "ISO-8601 start time" },
-            endTime: { type: "string", description: "ISO-8601 end time" },
+            startTime: { type: "string", description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T11:50:00')" },
+            endTime: { type: "string", description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
             location: { type: "string", description: "Optional location" },
             notes: { type: "string", description: "Optional extra notes or context" },
           },
@@ -96,6 +96,25 @@ export async function processLocalLLMRequest({
           type: "object",
           properties: {
             eventId: { type: "string", description: "The ID of the event to delete" },
+          },
+          required: ["eventId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "updateEvent",
+        description: "Updates an existing scheduled event by its ID. Provide only the fields you want to change.",
+        parameters: {
+          type: "object",
+          properties: {
+            eventId: { type: "string", description: "The ID of the event to update" },
+            title: { type: "string", description: "The new event title" },
+            startTime: { type: "string", description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T11:50:00')" },
+            endTime: { type: "string", description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
+            location: { type: "string", description: "Optional new location" },
+            notes: { type: "string", description: "Optional new notes" },
           },
           required: ["eventId"],
         },

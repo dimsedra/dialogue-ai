@@ -40,7 +40,7 @@ export default defineSchema({
     text: v.string(),
     workspaceId: v.optional(v.id("workspaces")),
     completed: v.boolean(),
-    dueDate: v.optional(v.string()), // For human readable dates or ISO
+    dueDate: v.optional(v.number()), // Unix timestamp moment
     priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),

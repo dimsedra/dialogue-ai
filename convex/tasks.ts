@@ -41,6 +41,20 @@ export const deleteTask = mutation({
   },
 });
 
+export const updateTask = mutation({
+  args: { 
+    id: v.id("tasks"),
+    text: v.optional(v.string()),
+    priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
+    category: v.optional(v.string()),
+    dueDate: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    await ctx.db.patch(id, updates);
+  },
+});
+
 export const getDailyBriefing = query({
   args: { workspaceId: v.optional(v.id("workspaces")) },
   handler: async (ctx, args) => {

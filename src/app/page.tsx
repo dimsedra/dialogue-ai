@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Chat } from "@/components/Chat";
 import { TaskPanel } from "@/components/TaskPanel";
 import { Id } from "../../convex/_generated/dataModel";
-import { ChevronRight, Grid2x2 } from "lucide-react";
+import { Grid2x2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Home() {
@@ -50,6 +50,17 @@ export default function Home() {
     syncRef.current?.();
   }, []);
 
+  // Sidebar Mutual Exclusivity Logic
+  const handleSetShowHistory = useCallback((val: boolean) => {
+    setShowHistory(val);
+    if (val) setShowTasks(false);
+  }, []);
+
+  const handleSetShowTasks = useCallback((val: boolean) => {
+    setShowTasks(val);
+    if (val) setShowHistory(false);
+  }, []);
+
   return (
     <main className="h-dvh flex overflow-hidden bg-[#0f0e0c] relative">
       {/* Backdrops for Mobile Overlay */}
@@ -77,7 +88,7 @@ export default function Home() {
           activeWorkspaceId={activeWorkspaceId}
           setActiveWorkspaceId={handleWorkspaceChange}
           showHistory={showHistory}
-          setShowHistory={setShowHistory}
+          setShowHistory={handleSetShowHistory}
           onSyncRef={syncRef}
         />
       </motion.div>
@@ -86,7 +97,7 @@ export default function Home() {
       {!showTasks && (
         <div className="fixed lg:absolute right-4 bottom-28 lg:right-6 lg:top-1/2 lg:-translate-y-1/2 z-50 h-fit w-fit">
           <button
-            onClick={() => setShowTasks(true)}
+            onClick={() => handleSetShowTasks(true)}
             className="p-4 lg:p-3 rounded-full lg:rounded-2xl bg-[#d4a373] lg:bg-[#1a1814] border border-[#d4a373]/20 lg:border-[#2a2723] text-[#0f0e0c] lg:text-[#a8a29e] hover:text-[#0f0e0c] lg:hover:text-[#d4a373] transition-all shadow-2xl lg:shadow-black/50 group flex items-center justify-center"
             title="Show Planner"
           >
@@ -105,16 +116,10 @@ export default function Home() {
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="h-full border-l border-[#2a2723] bg-[#1a1814] shrink-0 overflow-hidden z-40 lg:relative lg:translate-x-0 absolute right-0 w-full sm:w-[320px] shadow-[-20px_0_40px_rgba(0,0,0,0.5)] lg:shadow-none"
           >
-            <button
-              onClick={() => setShowTasks(false)}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 rounded-r-xl bg-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb] transition-all shadow-lg border-r border-[#3a3733]"
-              title="Hide Planner"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
             <TaskPanel 
               activeWorkspaceId={activeWorkspaceId}
               onSync={handleSyncFromPanel}
+              onClose={() => handleSetShowTasks(false)}
             />
           </motion.div>
         )}
