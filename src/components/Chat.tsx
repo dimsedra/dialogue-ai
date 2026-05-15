@@ -853,7 +853,7 @@ export function Chat({
 
       {/* Main Chat Area */}
       <motion.div 
-        className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c]"
+        className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
       >
         {/* Floating Toggle for History (when collapsed) */}
         
