@@ -23,12 +23,25 @@ export const list = query({
   },
 });
 
+export const get = query({
+  args: { id: v.id("tasks"), userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    const task = await ctx.db.get(args.id);
+    if (!task || task.userId !== userId) return null;
+    return task;
+  },
+});
+
 export const toggleCompleted = mutation({
   args: { id: v.id("tasks"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const task = await ctx.db.get(args.id);
-    if (!task || task.userId !== userId) throw new Error("Unauthorized");
+    if (!task || task.userId !== userId) {
+      console.error("Unauthorized task toggle attempt:", { taskId: args.id, taskOwner: task?.userId, requestingUser: userId, taskFound: !!task });
+      throw new Error("Unauthorized");
+    }
     
     const completed = !task.completed;
     await ctx.db.patch(args.id, { 
@@ -43,7 +56,10 @@ export const completeTask = mutation({
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const task = await ctx.db.get(args.id);
-    if (!task || task.userId !== userId) throw new Error("Unauthorized");
+    if (!task || task.userId !== userId) {
+      console.error("Unauthorized task completion attempt:", { taskId: args.id, taskOwner: task?.userId, requestingUser: userId, taskFound: !!task });
+      throw new Error("Unauthorized");
+    }
 
     await ctx.db.patch(args.id, { completed: true });
   },
@@ -54,7 +70,10 @@ export const deleteTask = mutation({
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const task = await ctx.db.get(args.id);
-    if (!task || task.userId !== userId) throw new Error("Unauthorized");
+    if (!task || task.userId !== userId) {
+      console.error("Unauthorized task deletion attempt:", { taskId: args.id, taskOwner: task?.userId, requestingUser: userId, taskFound: !!task });
+      throw new Error("Unauthorized");
+    }
     
     await ctx.db.delete(args.id);
   },
@@ -74,16 +93,23 @@ export const updateTask = mutation({
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const task = await ctx.db.get(args.id);
-    if (!task || task.userId !== userId) throw new Error("Unauthorized");
+    if (!task || task.userId !== userId) {
+      console.error("Unauthorized task update attempt:", {
+        taskId: args.id,
+        taskOwner: task?.userId,
+        requestingUser: userId,
+        taskFound: !!task
+      });
+      throw new Error("Unauthorized");
+    }
 
-    await ctx.db.patch(args.id, {
-      text: args.text,
-      completed: args.completed,
-      dueDate: args.dueDate,
-      priority: args.priority,
-      category: args.category,
-      notes: args.notes,
-    });
+    const updates: Record<string, string | boolean | number | undefined> = {};
+    for (const [key, value] of Object.entries(args)) {
+      if (value !== undefined && key !== "id" && key !== "userId") {
+        updates[key] = value;
+      }
+    }
+    await ctx.db.patch(args.id, updates);
   },
 });
 

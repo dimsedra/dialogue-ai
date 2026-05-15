@@ -72,12 +72,33 @@ export async function processLocalLLMRequest({
     {
       type: "function",
       function: {
+        name: "updateTask",
+        description: "Updates an existing task. Provide only the fields you want to change.",
+        parameters: {
+          type: "object",
+          properties: {
+            taskId: { type: "string", description: "The ID of the task to update" },
+            text: { type: "string", description: "Updated task description" },
+            completed: { type: "boolean", description: "Whether the task is finished" },
+            dueDate: { type: "string", description: "Updated ISO-8601 due date/time (24-hour, e.g. '2026-05-15T14:00:00')." },
+            priority: { type: "string", enum: ["low", "medium", "high"], description: "Updated priority" },
+            category: { type: "string", description: "Updated category" },
+            notes: { type: "string", description: "Updated notes" },
+          },
+          required: ["taskId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "addEvent",
         description: "Schedules a new event with start and end times. Events are time-blocks on a calendar.",
         parameters: {
           type: "object",
           properties: {
             title: { type: "string", description: "The event title" },
+            description: { type: "string", description: "Optional description" },
             startTime: { type: "string", description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T11:50:00')" },
             endTime: { type: "string", description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
             location: { type: "string", description: "Optional location" },
@@ -111,6 +132,7 @@ export async function processLocalLLMRequest({
           properties: {
             eventId: { type: "string", description: "The ID of the event to update" },
             title: { type: "string", description: "The new event title" },
+            description: { type: "string", description: "The new description" },
             startTime: { type: "string", description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T11:50:00')" },
             endTime: { type: "string", description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
             location: { type: "string", description: "Optional new location" },

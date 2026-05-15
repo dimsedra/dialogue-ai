@@ -25,6 +25,16 @@ export const list = query({
   },
 });
 
+export const get = query({
+  args: { id: v.id("events"), userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    const event = await ctx.db.get(args.id);
+    if (!event || event.userId !== userId) return null;
+    return event;
+  },
+});
+
 export const add = mutation({
   args: {
     title: v.string(),
@@ -34,13 +44,20 @@ export const add = mutation({
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
+    const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) throw new Error("Unauthorized");
 
     return await ctx.db.insert("events", {
-      ...args,
+      title: args.title,
+      startTime: args.startTime,
+      endTime: args.endTime,
+      description: args.description,
+      location: args.location,
+      notes: args.notes,
+      workspaceId: args.workspaceId,
       userId,
       createdAt: Date.now(),
     });
@@ -48,9 +65,9 @@ export const add = mutation({
 });
 
 export const remove = mutation({
-  args: { id: v.id("events") },
+  args: { id: v.id("events"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
+    const userId = args.userId ?? (await auth.getUserId(ctx));
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== userId) throw new Error("Unauthorized");
     
@@ -67,13 +84,19 @@ export const update = mutation({
     endTime: v.optional(v.number()),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
+    const userId = args.userId ?? (await auth.getUserId(ctx));
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== userId) throw new Error("Unauthorized");
 
-    const { id, ...updates } = args;
-    await ctx.db.patch(id, updates);
+    const updates: Record<string, string | number | undefined> = {};
+    for (const [key, value] of Object.entries(args)) {
+      if (value !== undefined && key !== "id" && key !== "userId") {
+        updates[key] = value;
+      }
+    }
+    await ctx.db.patch(args.id, updates);
   },
 });

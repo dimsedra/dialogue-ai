@@ -5,10 +5,13 @@ import { auth } from "./auth";
 import { Id } from "./_generated/dataModel";
 
 export const list = query({
-  args: { sessionId: v.optional(v.id("chatSessions")) },
+  args: { 
+    sessionId: v.optional(v.id("chatSessions")),
+    userId: v.optional(v.id("users"))
+  },
   handler: async (ctx, args) => {
     if (!args.sessionId) return [];
-    const userId = await auth.getUserId(ctx);
+    const userId = args.userId ?? (await auth.getUserId(ctx));
     const session = await ctx.db.get(args.sessionId);
     if (!session || session.userId !== userId) return [];
 
@@ -45,9 +48,9 @@ export const listSessions = query({
 });
 
 export const getSession = query({
-  args: { id: v.id("chatSessions") },
+  args: { id: v.id("chatSessions"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
+    const userId = args.userId ?? (await auth.getUserId(ctx));
     const session = await ctx.db.get(args.id);
     if (!session || session.userId !== userId) return null;
     return session;

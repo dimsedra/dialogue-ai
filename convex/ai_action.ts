@@ -95,7 +95,7 @@ export const chat = internalAction({
       return;
     }
 
-    const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId });
+    const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId, userId: args.userId });
     const workspaceId = session?.workspaceId;
 
     // 1. Fetch user profile and relevant memories
@@ -127,8 +127,8 @@ export const chat = internalAction({
     const briefing = await ctx.runQuery(api.tasks.getDailyBriefing, { workspaceId, userId: args.userId });
     const pendingTasksContext = briefing.tasks.map(t => {
       const eventDate = t.dueDate ? (
-        args.timezoneOffset !== undefined 
-          ? new Date(t.dueDate - (args.timezoneOffset * 60000)) 
+        args.timezoneOffset !== undefined
+          ? new Date(t.dueDate - (args.timezoneOffset * 60000))
           : new Date(t.dueDate)
       ) : null;
       const dateStr = eventDate ? ` | Due: ${eventDate.toLocaleString("en-US", { hour12: false })}` : "";
@@ -301,10 +301,13 @@ export const chat = internalAction({
     ];
 
     try {
-      const recentMessages = await ctx.runQuery(api.messages.list, { sessionId: args.sessionId });
+      const recentMessages = await ctx.runQuery(api.messages.list, {
+        sessionId: args.sessionId,
+        userId: args.userId
+      });
       const transcript = recentMessages
-        .filter(m => m.text !== args.text)
-        .slice(-10)
+        .filter(m => m._id !== args.messageId)
+        .slice(-20)
         .map((msg) => {
           const attachmentContext = (msg.attachments || [])
             .map(a => `[File: ${a.fileName}${a.extractedText ? ` (Content: ${a.extractedText.substring(0, 500)}...)` : ""}]`)
@@ -428,7 +431,22 @@ export const chat = internalAction({
         ...mediaParts,
         ...(extractedTexts.length > 0 ? [`\n\nADDITIONAL ATTACHED FILE CONTENTS:\n${extractedTexts.join("\n\n---\n\n")}`] : [])
       ];
-      const result = await model.generateContent(promptParts);
+      let result;
+      try {
+        result = await model.generateContent(promptParts);
+      } catch (err) {
+        const error = err as { status?: number; message?: string };
+        if (error?.status === 429 || error?.message?.includes("429")) {
+          console.error("Gemini Rate Limit Hit:", err);
+          await ctx.runMutation(internal.messages.internalSend, {
+            sessionId: args.sessionId,
+            text: "Waduh, sepertinya saya sedang menerima terlalu banyak permintaan (Rate Limit). Coba lagi dalam beberapa saat ya! 🙏",
+            author: "AI",
+          });
+          return;
+        }
+        throw err;
+      }
       const response = result.response;
 
       const calls = response.functionCalls();
@@ -454,81 +472,144 @@ export const chat = internalAction({
         for (const call of otherCalls) {
           // --- Task Tool Handlers ---
           if (call.name === "addTask" || call.name === "updateTask") {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const taskArgs = call.args as any;
+            const taskArgs = call.args as {
+              taskId?: string;
+              text?: string;
+              completed?: boolean;
+              dueDate?: string;
+              priority?: "low" | "medium" | "high";
+              category?: string;
+              notes?: string;
+            };
 
             if (call.name === "addTask") {
               await ctx.runMutation(api.ai.addTask, {
-                ...taskArgs,
-                dueDate: taskArgs.dueDate ? parseLocal(taskArgs.dueDate as string) : undefined,
+                text: taskArgs.text!,
+                priority: taskArgs.priority,
+                category: taskArgs.category,
+                notes: taskArgs.notes,
+                dueDate: taskArgs.dueDate ? parseLocal(taskArgs.dueDate) : undefined,
                 workspaceId,
                 userId: args.userId
               });
               activeToolCall = { name: "addTask", args: call.args };
             } else {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const taskUpdates: Record<string, any> = {};
+              const oldTask = await ctx.runQuery(api.tasks.get, { id: taskArgs.taskId as Id<"tasks">, userId: args.userId });
+
+              const taskUpdates: Record<string, string | boolean | number | undefined> = {};
               if (taskArgs.text) taskUpdates.text = taskArgs.text;
               if (taskArgs.completed !== undefined) taskUpdates.completed = taskArgs.completed;
               if (taskArgs.priority) taskUpdates.priority = taskArgs.priority;
               if (taskArgs.category) taskUpdates.category = taskArgs.category;
               if (taskArgs.notes) taskUpdates.notes = taskArgs.notes;
-              if (taskArgs.dueDate) taskUpdates.dueDate = parseLocal(taskArgs.dueDate as string);
+              if (taskArgs.dueDate) taskUpdates.dueDate = parseLocal(taskArgs.dueDate);
 
               await ctx.runMutation(api.tasks.updateTask, {
-                id: taskArgs.taskId as Id<"tasks">,
+                id: taskArgs.taskId! as Id<"tasks">,
+                userId: args.userId,
                 ...taskUpdates
               });
-              activeToolCall = { name: "updateTask", args: call.args };
+
+              activeToolCall = {
+                name: "updateTask",
+                args: {
+                  ...call.args,
+                  titleHint: oldTask?.text,
+                  oldValues: oldTask ? {
+                    priority: oldTask.priority,
+                    category: oldTask.category,
+                    dueDate: oldTask.dueDate,
+                    text: oldTask.text,
+                    completed: oldTask.completed
+                  } : undefined
+                }
+              };
             }
           } else if (call.name === "deleteTask") {
             const { taskId } = call.args as { taskId: string };
-            await ctx.runMutation(api.tasks.deleteTask, { id: taskId as Id<"tasks"> });
-            activeToolCall = { name: "deleteTask", args: call.args };
-          // --- Event Tool Handlers ---
+            const task = await ctx.runQuery(api.tasks.get, { id: taskId as Id<"tasks">, userId: args.userId });
+            await ctx.runMutation(api.tasks.deleteTask, { id: taskId as Id<"tasks">, userId: args.userId });
+            activeToolCall = { name: "deleteTask", args: { ...call.args, titleHint: task?.text } };
+          } else if (call.name === "completeTask") {
+            const { taskId } = call.args as { taskId: string };
+            const task = await ctx.runQuery(api.tasks.get, { id: taskId as Id<"tasks">, userId: args.userId });
+            await ctx.runMutation(api.tasks.completeTask, { id: taskId as Id<"tasks">, userId: args.userId });
+            activeToolCall = { name: "completeTask", args: { ...call.args, titleHint: task?.text } };
+            // --- Event Tool Handlers ---
           } else if (call.name === "addEvent" || call.name === "updateEvent") {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const eventArgs = call.args as any;
+            const eventArgs = call.args as {
+              eventId?: string;
+              title?: string;
+              location?: string;
+              notes?: string;
+              startTime?: string;
+              endTime?: string;
+            };
 
             if (call.name === "addEvent") {
               await ctx.runMutation(api.events.add, {
-                ...eventArgs,
-                startTime: parseLocal(eventArgs.startTime as string),
-                endTime: parseLocal(eventArgs.endTime as string),
+                title: eventArgs.title!,
+                location: eventArgs.location,
+                notes: eventArgs.notes,
+                startTime: parseLocal(eventArgs.startTime!),
+                endTime: parseLocal(eventArgs.endTime!),
                 workspaceId,
                 userId: args.userId
               });
               activeToolCall = { name: "addEvent", args: call.args };
             } else {
+              const oldEvent = await ctx.runQuery(api.events.get, { id: eventArgs.eventId as Id<"events">, userId: args.userId });
+
               const updates: Record<string, string | number> = {};
               if (eventArgs.title) updates.title = eventArgs.title;
               if (eventArgs.location) updates.location = eventArgs.location;
               if (eventArgs.notes) updates.notes = eventArgs.notes;
-              if (eventArgs.startTime) updates.startTime = parseLocal(eventArgs.startTime as string);
-              if (eventArgs.endTime) updates.endTime = parseLocal(eventArgs.endTime as string);
+              if (eventArgs.startTime) updates.startTime = parseLocal(eventArgs.startTime);
+              if (eventArgs.endTime) updates.endTime = parseLocal(eventArgs.endTime);
 
               await ctx.runMutation(api.events.update, {
-                id: eventArgs.eventId as Id<"events">,
+                id: eventArgs.eventId! as Id<"events">,
+                userId: args.userId,
                 ...updates
               });
-              activeToolCall = { name: "updateEvent", args: call.args };
+
+              activeToolCall = {
+                name: "updateEvent",
+                args: {
+                  ...call.args,
+                  titleHint: oldEvent?.title,
+                  oldValues: oldEvent ? {
+                    title: oldEvent.title,
+                    startTime: oldEvent.startTime,
+                    endTime: oldEvent.endTime,
+                    location: oldEvent.location,
+                  } : undefined
+                }
+              };
             }
           } else if (call.name === "deleteEvent") {
             const { eventId } = call.args as { eventId: string };
-            await ctx.runMutation(api.events.remove, { id: eventId as Id<"events"> });
-            activeToolCall = { name: "deleteEvent", args: call.args };
+            const event = await ctx.runQuery(api.events.get, { id: eventId as Id<"events">, userId: args.userId });
+            await ctx.runMutation(api.events.remove, { id: eventId as Id<"events">, userId: args.userId });
+            activeToolCall = { name: "deleteEvent", args: { ...call.args, titleHint: event?.title } };
           } else if (call.name === "updateMemory") {
             const updates = call.args as { bio: string };
+            const oldProfile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
             await ctx.runMutation(api.ai.updateProfile, { ...updates, userId: args.userId });
-            activeToolCall = { name: "updateMemory", args: call.args };
+            activeToolCall = {
+              name: "updateMemory",
+              args: {
+                ...call.args,
+                oldBio: oldProfile?.bio
+              }
+            };
           }
         }
 
         if (searchCalls.length > 0) {
           const tavilyKey = process.env.TAVILY_API_KEY;
           const serperKey = process.env.SERPER_API_KEY;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const searchProvider = (profile?.preferences as any)?.searchProvider || "tavily";
+          const searchProvider = (profile?.preferences as { searchProvider?: string })?.searchProvider || "tavily";
 
           const searchResults = await Promise.all(searchCalls.map(async (call) => {
             const { query } = call.args as { query: string };
@@ -631,7 +712,7 @@ export const chat = internalAction({
 
       // Auto-title if it's the first few messages and title is default
       if (recentMessages.length >= 1 && recentMessages.length <= 4) {
-        const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId });
+        const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId, userId: args.userId });
         if (session && session.title && (session.title.startsWith("Chat") || session.title === "New Chat")) {
           await ctx.scheduler.runAfter(0, internal.ai_action.generateSessionTitle, { sessionId: args.sessionId, userId: args.userId });
         }

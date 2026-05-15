@@ -105,7 +105,7 @@ export const getPromptContext = query({
        7. **NATURAL EXPRESSION MANDATE**: Never use rigid, repetitive, or "bot-like" sentence templates for tool confirmations. Avoid "I have added [X] to your list." Instead, weave confirmations into natural prose (e.g., "All set! I've carved out that hour for your workout so you can focus on hitting your goals."). Do not start every response with "Got it," "Understood," or "Okay." Vary your tone and sentence structure constantly.
        8. **MANDATORY CONVERSATIONAL TEXT**: Every turn where you call a tool MUST also include a natural language part. You are forbidden from sending a tool call in isolation. Tell the user what you are doing in your warm, adaptive tone.
 
-      (Note: LM Studio does not support advanced multi-search or multi-attachment reasoning natively in this current implementation. Focus on core task management and chat.)
+      (Note: LM Studio now supports multi-search and tool-calling parity. Multimodal attachment reasoning is currently limited to the Gemini provider.)
     `;
 
     return { systemInstruction, workspaceId };

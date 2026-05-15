@@ -21,11 +21,87 @@ interface ToolCall {
   result?: Record<string, unknown>;
 }
 
+interface DiffViewProps {
+  label: string;
+  oldVal: string | number | boolean | undefined | null;
+  newVal: string | number | boolean | undefined | null;
+  type?: "text" | "priority" | "date";
+}
+
+const DiffView = ({ label, oldVal, newVal, type = "text" }: DiffViewProps) => {
+  if (newVal === undefined || oldVal === newVal) return null;
+  
+  const formatValue = (v: string | number | boolean | undefined | null) => {
+    if (v === undefined || v === null) return "None";
+    if (type === "date") {
+      try {
+        return format(new Date(v as string | number), "MMM d, HH:mm");
+      } catch {
+        return String(v);
+      }
+    }
+    return String(v);
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-[10px] py-1">
+      <span className="text-[#a8a29e] font-medium uppercase tracking-wider w-16">{label}:</span>
+      <div className="flex items-center gap-1.5 overflow-hidden">
+        <span className="text-[#a8a29e]/50 line-through truncate max-w-[80px]">{formatValue(oldVal)}</span>
+        <ArrowDown className="w-2.5 h-2.5 -rotate-90 text-[#d4a373]/40" />
+        <span className={`font-bold truncate max-w-[100px] ${
+          type === "priority" ? (
+            newVal === "high" ? "text-red-400" :
+            newVal === "medium" ? "text-orange-400" :
+            "text-blue-400"
+          ) : "text-[#f2efeb]"
+        }`}>{formatValue(newVal)}</span>
+      </div>
+    </div>
+  );
+};
+
+interface TaskToolArgs {
+  text: string;
+  dueDate?: string;
+  priority?: string;
+  category?: string;
+  titleHint?: string;
+  oldValues?: {
+    text?: string;
+    priority?: string;
+    category?: string;
+    dueDate?: number;
+    completed?: boolean;
+  };
+}
+
+interface EventToolArgs {
+  title: string;
+  startTime: string;
+  endTime?: string;
+  location?: string;
+  titleHint?: string;
+  oldValues?: {
+    title?: string;
+    startTime?: number;
+    endTime?: number;
+    location?: string;
+  };
+}
+
+interface EnrichedToolArgs extends Record<string, unknown> {
+  titleHint?: string;
+  oldValues?: Record<string, unknown>;
+  oldBio?: string;
+}
+
 
 
 function ToolCard({ toolCall }: { toolCall: ToolCall }) {
   if (!toolCall) return null;
 
+  // --- Task Tools ---
   if (toolCall.name === "addTask") {
     const { text, dueDate, priority, category } = toolCall.args as { 
       text: string; 
@@ -37,17 +113,15 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-4 p-5 rounded-3xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-4 shadow-xl shadow-black/20"
+        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 text-[#d4a373]">
-            <div className="p-1.5 rounded-lg bg-[#d4a373]/10">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Task Created</span>
+          <div className="flex items-center gap-2 text-[#d4a373]">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Task Created</span>
           </div>
           {priority && (
-            <span className={`text-[9px] px-2.5 py-1 rounded-full font-bold uppercase tracking-widest border ${
+            <span className={`text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border ${
               priority === "high" ? "bg-red-500/10 border-red-500/20 text-red-400" :
               priority === "medium" ? "bg-orange-500/10 border-orange-500/20 text-orange-400" :
               "bg-blue-500/10 border-blue-500/20 text-blue-400"
@@ -56,19 +130,19 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
             </span>
           )}
         </div>
-        <div className="space-y-3">
-          <p className="text-[15px] text-[#f2efeb] font-semibold leading-relaxed">{text}</p>
-          <div className="flex flex-wrap gap-4 pt-1">
+        <div className="space-y-2">
+          <p className="text-sm text-[#f2efeb] font-semibold leading-snug">{text}</p>
+          <div className="flex flex-wrap gap-3">
             {category && (
-              <div className="flex items-center gap-2 text-[11px] text-[#a8a29e] font-medium">
-                <Tag className="w-3.5 h-3.5 text-[#d4a373]/60" />
+              <div className="flex items-center gap-1.5 text-[10px] text-[#a8a29e] font-medium">
+                <Tag className="w-3 h-3 text-[#d4a373]/60" />
                 {category}
               </div>
             )}
-                {dueDate && (
-              <div className="flex items-center gap-2 text-[11px] text-[#d4a373] font-bold">
-                <Clock className="w-3.5 h-3.5" />
-                {format(parseISO(dueDate), "eee, MMM d, HH:mm")}
+            {dueDate && (
+              <div className="flex items-center gap-1.5 text-[10px] text-[#d4a373] font-bold">
+                <Clock className="w-3 h-3" />
+                {format(parseISO(dueDate), "MMM d, HH:mm")}
               </div>
             )}
           </div>
@@ -77,6 +151,72 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
     );
   }
 
+  if (toolCall.name === "updateTask") {
+    const { titleHint, oldValues, text, priority, category, dueDate } = toolCall.args as unknown as TaskToolArgs;
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-orange-500/5 border border-orange-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-orange-400">
+            <Edit3 className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Task Updated</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[13px] text-[#f2efeb] font-semibold truncate opacity-90">{titleHint || text}</p>
+          <div className="bg-black/20 rounded-xl p-2.5 border border-white/5 space-y-0.5">
+            <DiffView label="Title" oldVal={oldValues?.text} newVal={text} />
+            <DiffView label="Priority" oldVal={oldValues?.priority} newVal={priority} type="priority" />
+            <DiffView label="Category" oldVal={oldValues?.category} newVal={category} />
+            <DiffView label="Due Date" oldVal={oldValues?.dueDate} newVal={dueDate ? parseISO(dueDate).getTime() : undefined} type="date" />
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "completeTask") {
+    const { titleHint } = toolCall.args as { titleHint?: string };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="mt-3 p-2.5 pr-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex items-center gap-3 shadow-md shadow-black/10 w-fit max-w-full"
+      >
+        <div className="p-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
+          <Check className="w-4 h-4 stroke-[3]" />
+        </div>
+        <div className="min-w-0">
+          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-500/60 block">Done</span>
+          <p className="text-[13px] text-[#f2efeb] font-bold truncate">{titleHint || "Task Finished"}</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "deleteTask") {
+    const { titleHint } = toolCall.args as { titleHint?: string };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: -5 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="mt-3 p-2.5 pr-4 rounded-2xl bg-slate-500/5 border border-slate-500/10 flex items-center gap-3 opacity-80 w-fit max-w-full"
+      >
+        <div className="p-1.5 rounded-lg bg-slate-500/10 text-slate-400 shrink-0">
+          <Trash2 className="w-3.5 h-3.5" />
+        </div>
+        <div className="min-w-0">
+          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500/60 block">Removed</span>
+          <p className="text-[12px] text-[#a8a29e] font-medium truncate line-through">{titleHint || "Deleted Task"}</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // --- Event Tools ---
   if (toolCall.name === "addEvent") {
     const { title, startTime, location } = toolCall.args as { 
       title: string; 
@@ -87,36 +227,30 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-4 p-5 rounded-3xl bg-[#8b5cf6]/5 border border-[#8b5cf6]/10 space-y-4 shadow-xl shadow-black/20"
+        className="mt-3 p-3.5 rounded-2xl bg-[#8b5cf6]/5 border border-[#8b5cf6]/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
       >
-        <div className="flex items-center gap-2.5 text-[#8b5cf6]">
-          <div className="p-1.5 rounded-lg bg-[#8b5cf6]/10">
-            <CalendarDays className="w-4 h-4" />
-          </div>
-          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Event Scheduled</span>
+        <div className="flex items-center gap-2 text-[#8b5cf6]">
+          <CalendarDays className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Event Scheduled</span>
         </div>
-        <div className="space-y-3">
-          <p className="text-[15px] text-[#f2efeb] font-semibold leading-relaxed">{title}</p>
-          <div className="flex flex-wrap gap-4 pt-1">
-            <div className="flex items-center gap-2 text-[11px] text-[#8b5cf6] font-bold">
-              <Clock className="w-3.5 h-3.5" />
+        <div className="space-y-2">
+          <p className="text-sm text-[#f2efeb] font-semibold leading-snug">{title}</p>
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center gap-1.5 text-[10px] text-[#8b5cf6] font-bold">
+              <Clock className="w-3 h-3" />
               {(() => {
-                // Hyper-robust local parsing for the UI card
                 const s = startTime;
                 const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
                 if (match) {
                   const [, y, m, d, h, min] = match;
-                  return format(new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)), "eee, MMM d, HH:mm");
+                  return format(new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)), "MMM d, HH:mm");
                 }
-                return format(parseISO(s), "eee, MMM d, HH:mm");
+                return format(parseISO(s), "MMM d, HH:mm");
               })()}
-              <span className="text-[9px] opacity-40 font-black ml-1 uppercase tracking-tighter">
-                {new Intl.DateTimeFormat().resolvedOptions().timeZone.split("/").pop()?.replace("_", " ")}
-              </span>
             </div>
             {location && (
-              <div className="flex items-center gap-2 text-[11px] text-[#a8a29e] font-medium">
-                <MapPin className="w-3.5 h-3.5 text-[#8b5cf6]/60" />
+              <div className="flex items-center gap-1.5 text-[10px] text-[#a8a29e] font-medium">
+                <MapPin className="w-3 h-3 text-[#8b5cf6]/60" />
                 {location}
               </div>
             )}
@@ -126,6 +260,51 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
     );
   }
 
+  if (toolCall.name === "updateEvent") {
+    const { titleHint, oldValues, title, startTime, endTime, location } = toolCall.args as unknown as EventToolArgs;
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center gap-2 text-indigo-400">
+          <CalendarDays className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Event Updated</span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[13px] text-[#f2efeb] font-semibold truncate opacity-90">{titleHint || title}</p>
+          <div className="bg-black/20 rounded-xl p-2.5 border border-white/5 space-y-0.5">
+            <DiffView label="Title" oldVal={oldValues?.title} newVal={title} />
+            <DiffView label="Start" oldVal={oldValues?.startTime} newVal={startTime ? parseISO(startTime).getTime() : undefined} type="date" />
+            <DiffView label="End" oldVal={oldValues?.endTime} newVal={endTime ? parseISO(endTime).getTime() : undefined} type="date" />
+            <DiffView label="Location" oldVal={oldValues?.location} newVal={location} />
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "deleteEvent") {
+    const { titleHint } = toolCall.args as { titleHint?: string };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 5 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="mt-3 p-2.5 pr-4 rounded-2xl bg-rose-500/5 border border-rose-500/10 flex items-center gap-3 opacity-80 w-fit max-w-full"
+      >
+        <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 shrink-0">
+          <CalendarDays className="w-3.5 h-3.5" />
+        </div>
+        <div className="min-w-0">
+          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-rose-500/60 block">Cancelled</span>
+          <p className="text-[12px] text-[#a8a29e] font-medium truncate line-through">{titleHint || "Deleted Event"}</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // --- Other Tools ---
   if (toolCall.name === "searchWeb" || toolCall.name === "multiSearch") {
     const isMulti = toolCall.name === "multiSearch";
     const query = !isMulti ? (toolCall.args as { query: string }).query : undefined;
@@ -231,6 +410,7 @@ export function Chat({
   const [previews, setPreviews] = useState<{ [name: string]: string }>({});
   const [isUploading, setIsUploading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Minimum Sync Time to prevent flickering when switching sessions
@@ -320,7 +500,15 @@ export function Chat({
     if (!showScrollBottom) {
       scrollToBottom();
     }
-  }, [messages, scrollToBottom, showScrollBottom]);
+    
+    // Clear typing indicator when messages update and last message is from AI
+    if (isTyping && messages && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.author === "AI") {
+        setTimeout(() => setIsTyping(false), 0);
+      }
+    }
+  }, [messages, isTyping, scrollToBottom, showScrollBottom]);
 
   // ---- Shared helper: run LM Studio logic for a given session + text ----
   const runLocalLLMForSession = async (
@@ -355,6 +543,9 @@ export function Chat({
           return new Date(s).getTime();
         };
 
+        // Enrich metadata for the UI before sending
+        const enrichedArgs = { ...args } as EnrichedToolArgs;
+
         if (name === "addTask" || name === "updateTask") {
           if (name === "addTask") {
             await addTask({ 
@@ -363,8 +554,8 @@ export function Chat({
               workspaceId: promptCtx.workspaceId 
             });
           } else {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const taskUpdates: Record<string, any> = {};
+            const oldTask = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
+            const taskUpdates: Record<string, string | number | boolean | undefined> = {};
             if (args.text) taskUpdates.text = args.text;
             if (args.completed !== undefined) taskUpdates.completed = args.completed;
             if (args.priority) taskUpdates.priority = args.priority;
@@ -376,12 +567,18 @@ export function Chat({
               id: args.taskId as Id<"tasks">,
               ...taskUpdates
             });
+
+            enrichedArgs.titleHint = oldTask?.text;
+            enrichedArgs.oldValues = oldTask ? {
+              text: oldTask.text,
+              priority: oldTask.priority,
+              category: oldTask.category,
+              dueDate: oldTask.dueDate,
+              completed: oldTask.completed
+            } : undefined;
           }
         }
         else if (name === "addEvent" || name === "updateEvent") {
-          // Explicitly parse the ISO string to avoid any UTC fallback
-          // This ensures that "11:50" from the AI is ALWAYS 11:50 in the user's local time
-
           if (name === "addEvent") {
             const startTime = parseLocal(args.startTime as string);
             const endTime = parseLocal(args.endTime as string);
@@ -393,6 +590,7 @@ export function Chat({
               workspaceId: promptCtx.workspaceId 
             });
           } else {
+            const oldEvent = await convex.query(api.events.get, { id: args.eventId as Id<"events"> });
             const updates: Record<string, string | number> = {};
             if (args.title) updates.title = args.title;
             if (args.location) updates.location = args.location;
@@ -404,24 +602,49 @@ export function Chat({
               id: args.eventId as Id<"events">,
               ...updates
             });
+
+            enrichedArgs.titleHint = oldEvent?.title;
+            enrichedArgs.oldValues = oldEvent ? {
+              title: oldEvent.title,
+              startTime: oldEvent.startTime,
+              endTime: oldEvent.endTime,
+              location: oldEvent.location,
+            } : undefined;
           }
         }
         else if (name === "deleteEvent") {
+          const event = await convex.query(api.events.get, { id: args.eventId as Id<"events"> });
           await deleteEvent({ id: args.eventId as Id<"events"> });
+          enrichedArgs.titleHint = event?.title;
         }
-        else if (name === "completeTask") await completeTask({ id: args.taskId as Id<"tasks"> });
-        else if (name === "deleteTask") await deleteTask({ id: args.taskId as Id<"tasks"> });
-        else if (name === "updateMemory") await updateMemory({ bio: args.bio as string });
-      }
+        else if (name === "completeTask") {
+          const task = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
+          await completeTask({ id: args.taskId as Id<"tasks"> });
+          enrichedArgs.titleHint = task?.text;
+        }
+        else if (name === "deleteTask") {
+          const task = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
+          await deleteTask({ id: args.taskId as Id<"tasks"> });
+          enrichedArgs.titleHint = task?.text;
+        }
+        else if (name === "updateMemory") {
+          await updateMemory({ bio: args.bio as string });
+          enrichedArgs.oldBio = profile?.bio;
+        }
 
-      await sendMessage({
-        sessionId,
-        text: result.aiText || "Done!",
-        author: "AI",
-        toolCall: result.toolCall
-          ? { name: result.toolCall.name, args: result.toolCall.args, result: { status: "success" } }
-          : undefined,
-      });
+        await sendMessage({
+          sessionId,
+          text: result.aiText || "Done!",
+          author: "AI",
+          toolCall: { name, args: enrichedArgs, result: { status: "success" } },
+        });
+      } else {
+        await sendMessage({
+          sessionId,
+          text: result.aiText || "Done!",
+          author: "AI",
+        });
+      }
     } catch (error) {
       console.error("LM Studio Error:", error);
       await sendMessage({
@@ -454,8 +677,14 @@ export function Chat({
       provider,
     });
 
+    setIsTyping(true);
+
     if (provider === "lmstudio") {
-      await runLocalLLMForSession(sessionId, syncText, { brief: true });
+      try {
+        await runLocalLLMForSession(sessionId, syncText, { brief: true });
+      } finally {
+        setIsTyping(false);
+      }
     }
     // Gemini path: the Convex scheduler handles it automatically via messages.send
   };
@@ -503,11 +732,18 @@ export function Chat({
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
       });
 
+      setIsTyping(true);
+
       if (provider === "lmstudio") {
-        await runLocalLLMForSession(activeSessionId, userText);
+        try {
+          await runLocalLLMForSession(activeSessionId, userText);
+        } finally {
+          setIsTyping(false);
+        }
       }
     } catch (err) {
       console.error("Failed to send message:", err);
+      setIsTyping(false);
     } finally {
       setIsUploading(false);
     }
@@ -1379,6 +1615,38 @@ export function Chat({
                     </motion.div>
                   </div>
                   ))}
+                  
+                  {/* Typing Indicator */}
+                  {isTyping && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex gap-3 lg:gap-5"
+                    >
+                      <div className="w-8 h-8 lg:w-9 lg:h-9 rounded-xl lg:rounded-2xl bg-[#d4a373] flex-shrink-0 flex items-center justify-center shadow-lg shadow-[#d4a373]/10">
+                        <Bot className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-[#0f0e0c]" />
+                      </div>
+                      <div className="flex flex-col space-y-2">
+                        <div className="px-4 py-3 rounded-2xl lg:rounded-3xl bg-[#1a1814] border border-[#2a2723] rounded-tl-none shadow-xl flex items-center gap-1.5 h-[44px]">
+                          <motion.div 
+                            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 1, 0.3] }}
+                            transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+                            className="w-1.5 h-1.5 rounded-full bg-[#d4a373]" 
+                          />
+                          <motion.div 
+                            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 1, 0.3] }}
+                            transition={{ repeat: Infinity, duration: 1.4, delay: 0.2, ease: "easeInOut" }}
+                            className="w-1.5 h-1.5 rounded-full bg-[#d4a373]" 
+                          />
+                          <motion.div 
+                            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 1, 0.3] }}
+                            transition={{ repeat: Infinity, duration: 1.4, delay: 0.4, ease: "easeInOut" }}
+                            className="w-1.5 h-1.5 rounded-full bg-[#d4a373]" 
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
                 </AnimatePresence>
 
                 {/* Ganjalan: Ensures last message is always pushed above the tray */}
