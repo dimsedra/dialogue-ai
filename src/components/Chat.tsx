@@ -1108,7 +1108,7 @@ export function Chat({
           className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 space-y-6 lg:space-y-12 custom-scrollbar lg:scrollbar-default scrollbar-hide"
         >
 
-          <div className="max-w-4xl mx-auto h-full flex flex-col">
+          <div className="max-w-4xl mx-auto flex flex-col">
             <AnimatePresence mode="wait">
             {(isSyncing || (messages === undefined && activeSessionId)) ? (
               <motion.div 
@@ -1366,16 +1366,16 @@ export function Chat({
                   </div>
                   ))}
                 </AnimatePresence>
+
+                {/* Ganjalan: Ensures last message is always pushed above the tray */}
+                <div 
+                  style={{ height: isLargeViewport ? "180px" : "120px" }} 
+                  className="w-full shrink-0"
+                />
+                <div ref={messagesEndRef} className="h-px w-full" />
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Ganjalan: Ensures last message is always pushed above the tray */}
-          <div 
-            style={{ height: isLargeViewport ? "180px" : "120px" }} 
-            className="w-full shrink-0"
-          />
-          <div ref={messagesEndRef} className="h-px w-full" />
         </div>
       </main>
 
