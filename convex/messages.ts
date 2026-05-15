@@ -1,7 +1,8 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
+import { Id } from "./_generated/dataModel";
 
 export const list = query({
   args: { sessionId: v.optional(v.id("chatSessions")) },
@@ -117,65 +118,93 @@ export const updateSessionTitle = mutation({
   },
 });
 
+const sendArgs = { 
+  sessionId: v.id("chatSessions"),
+  text: v.string(), 
+  author: v.string(), 
+  timezoneOffset: v.optional(v.number()),
+  brief: v.optional(v.boolean()),
+  provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"))),
+  toolCall: v.optional(v.object({
+    name: v.string(),
+    args: v.any(),
+    result: v.optional(v.any()),
+  })),
+  storageId: v.optional(v.id("_storage")),
+  fileType: v.optional(v.string()),
+  fileName: v.optional(v.string()),
+  attachments: v.optional(v.array(v.object({
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    fileType: v.string(),
+  }))),
+};
+
 export const send = mutation({
-  args: { 
-    sessionId: v.id("chatSessions"),
-    text: v.string(), 
-    author: v.string(), 
-    timezoneOffset: v.optional(v.number()),
-    brief: v.optional(v.boolean()),
-    provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"))),
-    toolCall: v.optional(v.object({
-      name: v.string(),
-      args: v.any(),
-      result: v.optional(v.any()),
-    })),
-    storageId: v.optional(v.id("_storage")),
-    fileType: v.optional(v.string()),
-    fileName: v.optional(v.string()),
-    attachments: v.optional(v.array(v.object({
-      storageId: v.id("_storage"),
-      fileName: v.string(),
-      fileType: v.string(),
-    }))),
-  },
-  handler: async (ctx, { sessionId, text, author, timezoneOffset, brief, provider, toolCall, storageId, fileType, fileName, attachments }) => {
+  args: sendArgs,
+  handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
-    const session = await ctx.db.get(sessionId);
+    const session = await ctx.db.get(args.sessionId);
     if (!session || session.userId !== userId) throw new Error("Unauthorized");
 
-    const messageId = await ctx.db.insert("messages", {
-      sessionId,
-      text,
-      author,
-      timestamp: Date.now(),
-      timezoneOffset,
-      toolCall,
-      storageId,
-      fileType,
-      fileName,
-      attachments,
-    });
+    const messageId = await sendImplementation(ctx, args);
 
-    await ctx.db.patch(sessionId, { lastActivity: Date.now() });
-
-    if (author !== "AI" && provider !== "lmstudio") {
+    if (args.author !== "AI" && args.provider !== "lmstudio") {
       await ctx.scheduler.runAfter(0, internal.ai_action.chat, { 
-        sessionId, 
-        userId,
+        sessionId: args.sessionId, 
+        userId: userId!,
         messageId,
-        text, 
-        author, 
-        timezoneOffset, 
-        brief,
-        storageId,
-        fileName,
-        fileType,
-        attachments: attachments,
+        text: args.text, 
+        author: args.author, 
+        timezoneOffset: args.timezoneOffset, 
+        brief: args.brief,
+        storageId: args.storageId,
+        fileName: args.fileName,
+        fileType: args.fileType,
+        attachments: args.attachments,
       });
     }
+
+    return messageId;
   },
 });
+
+export const internalSend = internalMutation({
+  args: sendArgs,
+  handler: async (ctx, args) => {
+    return await sendImplementation(ctx, args);
+  },
+});
+
+async function sendImplementation(ctx: MutationCtx, args: {
+  sessionId: Id<"chatSessions">;
+  text: string;
+  author: string;
+  timezoneOffset?: number;
+  toolCall?: { name: string; args: Record<string, unknown>; result?: unknown };
+  storageId?: Id<"_storage">;
+  fileType?: string;
+  fileName?: string;
+  attachments?: { storageId: Id<"_storage">; fileName: string; fileType: string }[];
+}) {
+  const { sessionId, text, author, timezoneOffset, toolCall, storageId, fileType, fileName, attachments } = args;
+  
+  const messageId = await ctx.db.insert("messages", {
+    sessionId,
+    text,
+    author,
+    timestamp: Date.now(),
+    timezoneOffset,
+    toolCall,
+    storageId,
+    fileType,
+    fileName,
+    attachments,
+  });
+
+  await ctx.db.patch(sessionId, { lastActivity: Date.now() });
+  return messageId;
+}
 
 export const generateUploadUrl = mutation(async (ctx) => {
   return await ctx.storage.generateUploadUrl();

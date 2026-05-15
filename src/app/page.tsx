@@ -6,9 +6,8 @@ import { TaskPanel } from "@/components/TaskPanel";
 import { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { Authenticated, Unauthenticated, useQuery } from "convex/react";
-import { Grid2x2, Bot, LogOut } from "lucide-react";
+import { Grid2x2, Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuthActions } from "@convex-dev/auth/react";
 import { SignInForm } from "@/components/auth/SignInForm";
 
 export default function Home() {
@@ -134,7 +133,6 @@ export default function Home() {
     if (val && !isLargeViewport) setShowHistory(false);
   }, [isLargeViewport]);
 
-  const { signOut } = useAuthActions();
 
   return (
     <>
@@ -175,20 +173,6 @@ export default function Home() {
               isLargeViewport={isLargeViewport}
               keyboardOffset={keyboardOffset}
             />
-
-            {/* Global Sign Out Button - Clean & Minimal */}
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              onClick={() => signOut()}
-              className="absolute top-6 right-6 z-[60] p-2.5 rounded-xl bg-[#1a1814]/40 backdrop-blur-md border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/20 transition-all group hidden lg:flex items-center gap-2"
-              title="Sign Out"
-            >
-              <LogOut className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-              <span className="text-[10px] font-bold uppercase tracking-widest pr-1">Sign Out</span>
-            </motion.button>
-
-            {/* Mobile Sign Out (Inside History or Tasks logic? No, let's just put it in Chat for now or as a floating button) */}
           </motion.div>
 
           {/* Right Sidebar Toggle (Floating / FAB on Mobile) */}

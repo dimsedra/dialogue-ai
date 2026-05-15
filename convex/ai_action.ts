@@ -87,7 +87,7 @@ export const chat = internalAction({
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.error("GEMINI_API_KEY is not set in environment variables.");
-      await ctx.runMutation(api.messages.send, {
+      await ctx.runMutation(internal.messages.internalSend, {
         sessionId: args.sessionId,
         text: "I'm sorry, I can't process your request right now because my API key is missing.",
         author: "AI",
@@ -614,7 +614,7 @@ export const chat = internalAction({
       }
 
       // 4. Send response with toolCall info
-      await ctx.runMutation(api.messages.send, {
+      await ctx.runMutation(internal.messages.internalSend, {
         sessionId: args.sessionId,
         text: aiText || "I've updated your workspace with those changes.",
         author: "AI",
@@ -639,7 +639,7 @@ export const chat = internalAction({
 
     } catch (error) {
       console.error("Gemini API Error Detail:", error);
-      await ctx.runMutation(api.messages.send, {
+      await ctx.runMutation(internal.messages.internalSend, {
         sessionId: args.sessionId,
         text: "I encountered an error while thinking. Could you try rephrasing?",
         author: "AI",
