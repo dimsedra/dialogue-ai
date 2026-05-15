@@ -226,19 +226,10 @@ export function Chat({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<{ [name: string]: string }>({});
   const [isUploading, setIsUploading] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Minimum Loading Time for the Premium Splash Screen
-  useEffect(() => {
-    if (workspaces !== undefined) {
-      const timer = setTimeout(() => {
-        setShowSplash(false);
-      }, 1500); // 1.5s minimum splash time to "savor" the animation
-      return () => clearTimeout(timer);
-    }
-  }, [workspaces]);
+  // Minimum Sync Time to prevent flickering when switching sessions
 
   // Minimum Sync Time to prevent flickering when switching sessions
   useEffect(() => {
@@ -709,9 +700,9 @@ export function Chat({
       <motion.div
         initial={false}
         animate={{ 
-          width: showHistory ? (isLargeViewport ? 288 : "85%") : 0,
-          opacity: showHistory ? 1 : (isLargeViewport ? 0 : 1),
-          x: !showHistory && !isLargeViewport ? "-100%" : 0
+          width: isLargeViewport ? (showHistory ? 288 : 0) : "85%",
+          opacity: isLargeViewport ? (showHistory ? 1 : 0) : (showHistory ? 1 : 0),
+          x: isLargeViewport ? 0 : (showHistory ? 0 : "-100%")
         }}
         transition={{ type: "spring", damping: 30, stiffness: 250 }}
         className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 z-[100] overflow-hidden ${
@@ -1139,26 +1130,7 @@ export function Chat({
 
           <div className="max-w-4xl mx-auto h-full flex flex-col">
             <AnimatePresence mode="wait">
-            {showSplash ? (
-              <motion.div 
-                key="initialising"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 z-[100] bg-[#0f0e0c] flex flex-col items-center justify-center space-y-6"
-              >
-                <div className="relative">
-                  <div className="absolute inset-0 bg-[#d4a373]/20 blur-3xl rounded-full animate-pulse" />
-                  <Bot className="w-12 h-12 text-[#d4a373] animate-bounce relative z-10" />
-                </div>
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-1 w-32 bg-[#1a1814] rounded-full overflow-hidden">
-                    <div className="h-full bg-[#d4a373] w-1/2 animate-[loading_1.5s_infinite_ease-in-out]" />
-                  </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#d4a373]/40">Initialising</p>
-                </div>
-              </motion.div>
-            ) : (isSyncing || (messages === undefined && activeSessionId)) ? (
+            {(isSyncing || (messages === undefined && activeSessionId)) ? (
               <motion.div 
                 key="synchronizing"
                 initial={{ opacity: 0 }}
