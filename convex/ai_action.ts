@@ -36,6 +36,8 @@ You must dynamically read the room and adjust your behavior based on what the us
 9. **WORKSPACE AWARENESS**: You are always operating within a specific Workspace (e.g., Work, Personal, Side Project). Respect the "WORKSPACE GOAL/CONTEXT" provided below. Your advice, tone, and task suggestions should align with the specific purpose of the current workspace.
 10. **NATURAL EXPRESSION MANDATE**: Never use rigid, repetitive, or "bot-like" sentence templates for tool confirmations. Avoid "I have added [X] to your list." Instead, weave confirmations into natural prose (e.g., "All set! I've carved out that hour for your workout so you can focus on hitting your goals."). Do not start every response with "Got it," "Understood," or "Okay." Vary your tone and sentence structure constantly.
 11. **MANDATORY CONVERSATIONAL TEXT**: Every turn where you call a tool MUST also include a natural language part. You are forbidden from sending a tool call in isolation. Tell the user what you are doing in your warm, adaptive tone.
+12. **MULTILINGUAL FLUIDITY**: You must always respond in the same language the user is using. If the user speaks Indonesian, respond in natural, warm, and culturally appropriate Indonesian. Adapt your slang and level of formality to match the user's vibe. Crucially, when calling tools (like addTask or addEvent), all user-visible strings (titles, descriptions, notes) MUST be in the same language the user used. Technical fields like ISO dates or priority levels must remain in their specified formats.
+13. **WORKSPACE PRECEDENCE**: The "WORKSPACE CONTEXT" provided below is your **ABSOLUTE AUTHORITY**. It defines your persona, goals, and rules for the current session. You must prioritize these instructions over your default "Adaptive Persona". If the context demands a specific tone (e.g., cynical, formal, or strict), adopt it fully and do not blend it with your default personality.
 
 ## Multimodal Capabilities:
 You are a multimodal agent. You can see and analyze multiple images and documents (PDFs, Word docs, etc.) uploaded by the user.
@@ -118,12 +120,17 @@ export const chat = internalAction({
 
     const workspace = workspaceId ? await ctx.runQuery(api.workspaces.get, { id: workspaceId }) : null;
     const workspaceContext = workspace?.context
-      ? `ACTIVE WORKSPACE: "${workspace.name}"\nWORKSPACE GOAL/CONTEXT: "${workspace.context}"\nTailor your advice and tone to this specific context.`
-      : "No specific workspace context provided.";
+      ? `ACTIVE WORKSPACE: "${workspace.name}"\nWORKSPACE CONTEXT/RULES: "${workspace.context}"\n(Reminder: This context takes precedence over your default persona)`
+      : "No specific workspace context provided. Follow your default adaptive persona.";
 
     const briefing = await ctx.runQuery(api.tasks.getDailyBriefing, { workspaceId });
     const pendingTasksContext = briefing.tasks.map(t => {
-      const dateStr = t.dueDate ? ` | Due: ${new Date(t.dueDate).toLocaleString()}` : "";
+      const eventDate = t.dueDate ? (
+        args.timezoneOffset !== undefined 
+          ? new Date(t.dueDate - (args.timezoneOffset * 60000)) 
+          : new Date(t.dueDate)
+      ) : null;
+      const dateStr = eventDate ? ` | Due: ${eventDate.toLocaleString("en-US", { hour12: false })}` : "";
       return `- [${t._id}] ${t.text}${dateStr} (Priority: ${t.priority}, Category: ${t.category})`;
     }).join("\n");
 
@@ -131,7 +138,9 @@ export const chat = internalAction({
     const upcomingEventsContext = upcomingEvents
       .filter(e => e.startTime > Date.now() - 3600000)
       .map(e => {
-        const eventDate = new Date(e.startTime);
+        const eventDate = args.timezoneOffset !== undefined
+          ? new Date(e.startTime - (args.timezoneOffset * 60000))
+          : new Date(e.startTime);
         return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })})`;
       })
       .join("\n");
@@ -430,8 +439,13 @@ export const chat = internalAction({
           const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
           if (match) {
             const [, y, m, d, h, min] = match;
-            // Server Blind: Treat local time components as UTC to preserve "face time" in DB
-            return Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h), Number(min));
+            const utcBase = Date.UTC(Number(y), Number(m) - 1, Number(d), Number(h), Number(min));
+            // Industry Standard: Store as true UTC (Local Intent + Offset)
+            // Note: getTimezoneOffset() is (UTC - Local), so adding it converts Local to UTC
+            if (args.timezoneOffset !== undefined) {
+              return utcBase + (args.timezoneOffset * 60000);
+            }
+            return utcBase;
           }
           return new Date(s).getTime();
         };
