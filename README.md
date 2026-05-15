@@ -5,72 +5,85 @@ Dialogue is a high-performance, minimal productivity ecosystem engineered for ag
 ## Core Features
 
 ### Agent-Native Architecture
-*   **Semantic Memory System**: Dialogue incorporates a background reflection engine that analyzes user interactions every 20 messages to synthesize persistent behavioral models and preferences.
-*   **Intelligence Agnosticism**: Built with a "Bring Your Own Key" (BYOK) philosophy, supporting Google Gemini Pro for production and LM Studio for local, private inference.
-*   **Contextual Awareness**: The internal agent maintains real-time awareness of active workspace data, including tasks, project history, and scheduled milestones.
+
+- **Perfectionist Verification Policy**: The agent operates on a "Zero Assumption" mandate, requiring explicit user confirmation of metadata (priority, category, time) before executing any mutation.
+- **Semantic Memory System**: Incorporates a background reflection engine that analyzes interactions to synthesize persistent behavioral models and preferences.
+- **Intelligence Agnosticism**: Built with a "Bring Your Own Key" (BYOK) philosophy, supporting Google Gemini Pro for production and LM Studio for local, private inference.
+- **Research Engine**: Integrated multi-search capabilities using Tavily and Serper, allowing the agent to conduct complex, parallel research queries.
+
+### Server-Blind Infrastructure
+
+- **Timezone Integrity Protocol**: Utilizes a "Server-Blind" architecture where all temporal data is stored as raw Unix timestamps.
+- **Client-Side Parsing**: All human-readable time conversion and local formatting are handled at the edge, eliminating server-side timezone ambiguity and ensuring perfect calendar synchronization.
 
 ### Hierarchical Workspace Management
-*   **Project Silos**: Dedicated workspaces allow for total context isolation between different ventures, each with independent history, tasks, and visual identifiers.
-*   **Navigation Stability**: Optimized for professional workflows with persistent layout states and synchronized sidebar configurations across sessions.
+
+- **Project Silos**: Dedicated workspaces allow for total context isolation between different ventures, each with independent history, tasks, and visual identifiers.
+- **Navigation Stability**: Optimized for professional workflows with persistent layout states and synchronized sidebar configurations across sessions.
 
 ### Integrated Productivity Suite
-*   **Structured Task Management**: Workspace-aware task panel featuring priority-based sorting, AI-driven categorization, and real-time status synchronization.
-*   **Timeline and Scheduling**: Integrated event tracking and calendar views optimized for project-specific milestone management.
-*   **Unified History**: Global archive of all conversational data, indexed by workspace and searchable across the entire ecosystem.
 
-### Ergonomics and Performance
-*   **Mobile-First Engineering**: Fluid, width-based transitions eliminate layout shifts and provide native-quality responsiveness on smaller viewports.
-*   **Persistence Layer**: Intelligent synchronization between local state and cloud functions ensures a seamless transition between devices and sessions.
+- **Structured Task Management**: Workspace-aware task panel featuring priority-based sorting, AI-driven categorization, and real-time status synchronization.
+- **Timeline and Scheduling**: Integrated event tracking and calendar views optimized for project-specific milestone management.
+- **Unified History**: Global archive of all conversational data, indexed by workspace and searchable across the entire ecosystem.
 
 ## Technical Stack
 
-*   **Framework**: Next.js 15 (App Router)
-*   **Real-time Backend**: Convex
-*   **Styling & Motion**: Tailwind CSS and Framer Motion
-*   **AI Integration**: Google Gemini Pro API / LM Studio SDK
-*   **Data Modeling**: TypeScript-first schema with validation
+- **Framework**: Next.js 15 (App Router)
+- **Real-time Backend**: Convex
+- **Styling & Motion**: Tailwind CSS and Framer Motion
+- **AI Integration**: Google Gemini Pro API / LM Studio SDK
+- **Data Modeling**: TypeScript-first schema with numeric temporal validation
 
 ## Setup and Installation
 
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/your-username/dialogue-ai.git
-    cd dialogue-ai
-    ```
+1. **Clone the Repository**
 
-2.  **Install Dependencies**
-    ```bash
-    npm install
-    ```
+   ```bash
+   git clone https://github.com/your-username/dialogue-ai.git
+   cd dialogue-ai
+   ```
 
-3.  **Configure Environment Variables**
-    Create a `.env.local` file with the following parameters:
-    ```env
-    # Convex Configuration
-    CONVEX_DEPLOYMENT=your_deployment_name
-    NEXT_PUBLIC_CONVEX_URL=your_convex_url
+2. **Install Dependencies**
 
-    # AI Provider Keys
-    GEMINI_API_KEY=your_google_ai_key
-    ```
+   ```bash
+   npm install
+   ```
 
-4.  **Initialize Development Environment**
-    Execute the following commands in parallel:
-    ```bash
-    # Frontend Development Server
-    npm run dev
+3. **Configure Environment Variables**
 
-    # Backend Development Environment
-    npx convex dev
-    ```
+   Create a `.env.local` file with the following parameters:
 
-## Deployment
+   ```env
+   # Convex Configuration
+   CONVEX_DEPLOYMENT=your_deployment_name
+   NEXT_PUBLIC_CONVEX_URL=your_convex_url
 
-Dialogue is optimized for deployment on the Vercel platform.
+   # AI Provider Keys
+   GEMINI_API_KEY=your_google_ai_key
+   TAVILY_API_KEY=your_tavily_key
+   ```
 
-1.  Synchronize production backend functions: `npx convex deploy`
-2.  Link the repository to a new Vercel project.
-3.  Configure production environment variables (`CONVEX_DEPLOYMENT`, `NEXT_PUBLIC_CONVEX_URL`, `GEMINI_API_KEY`).
+4. **Initialize Development Environment**
+
+   Execute the following commands in parallel:
+
+   ```bash
+   # Frontend Development Server
+   npm run dev
+
+   # Backend Development Environment
+   npx convex dev
+   ```
+
+## Roadmap and Future Implementation
+
+Detailed implementation plans for upcoming features can be found in the local `/future-impl/` directory:
+
+- [Multi-Tool Execution Fix](./future-impl/multi_tool_execution.md)
+- [Authentication Strategy](./future-impl/authentication_features.md)
+- [Urgency & Countdown Features](./future-impl/countdown_features.md)
+- [Rich UI Expansion](./future-impl/rich_ui_expansion.md)
 
 ---
 
