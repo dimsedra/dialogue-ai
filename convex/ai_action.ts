@@ -864,7 +864,7 @@ export const generateSessionTitle = internalAction({
     const title = result.response.text().trim().replace(/["']/g, '');
 
     if (title && title.length > 2) {
-      await ctx.runMutation(api.messages.updateSessionTitle, { id: args.sessionId, title });
+      await ctx.runMutation(internal.messages.updateSessionTitle, { id: args.sessionId, title, userId: args.userId });
     }
   }
 });

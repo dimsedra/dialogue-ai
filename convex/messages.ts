@@ -110,12 +110,11 @@ export const renameSession = mutation({
   },
 });
 
-export const updateSessionTitle = mutation({
-  args: { id: v.id("chatSessions"), title: v.string() },
+export const updateSessionTitle = internalMutation({
+  args: { id: v.id("chatSessions"), title: v.string(), userId: v.id("users") },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
     const session = await ctx.db.get(args.id);
-    if (!session || session.userId !== userId) throw new Error("Unauthorized");
+    if (!session || session.userId !== args.userId) throw new Error("Unauthorized");
 
     await ctx.db.patch(args.id, { title: args.title });
   },
