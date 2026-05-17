@@ -4,7 +4,7 @@ import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2, ArrowDown, LogOut, RefreshCw } from "lucide-react";
+import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2, ArrowDown, LogOut, RefreshCw, ChevronsUpDown } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../convex/_generated/dataModel";
@@ -497,8 +497,29 @@ export function Chat({
   const [isSyncing, setIsSyncing] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isScrollable, setIsScrollable] = useState(false);
 
-  // Minimum Sync Time to prevent flickering when switching sessions
+  const handleInputResize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+    const maxHeight = isMobile ? 84 : 160;
+    el.style.height = "auto";
+    const nextHeight = Math.min(Math.max(el.scrollHeight, 56), maxHeight);
+    el.style.height = `${nextHeight}px`;
+    setIsScrollable(el.scrollHeight > maxHeight);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const isTouchDevice = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+    if (e.key === "Enter" && !e.shiftKey && !isTouchDevice) {
+      e.preventDefault();
+      if (input.trim() || selectedFiles.length > 0) {
+        handleSend(e as unknown as React.FormEvent);
+      }
+    }
+  };
 
   // Minimum Sync Time to prevent flickering when switching sessions
   useEffect(() => {
@@ -804,6 +825,10 @@ export function Chat({
     setInput("");
     setSelectedFiles([]);
     setIsUploading(true);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "56px";
+      setIsScrollable(false);
+    }
 
     try {
       // Parallel uploads
@@ -1854,32 +1879,47 @@ export function Chat({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="absolute left-2 lg:left-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-[#a8a29e] hover:text-[#d4a373] hover:bg-[#d4a373]/10 transition-all z-10"
+              className="absolute left-2 lg:left-3 top-[28px] -translate-y-1/2 p-2 rounded-lg text-[#a8a29e] hover:text-[#d4a373] hover:bg-[#d4a373]/10 transition-all z-10"
               disabled={isUploading || !activeSessionId}
             >
               <PlusCircle className={`w-5 h-5 ${isUploading ? 'animate-spin' : ''}`} />
             </button>
 
-            <input
-              type="text"
+            <textarea
+              ref={textareaRef}
+              name="dialogue-chat-input"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="sentences"
+              rows={1}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Ask Dialogue..."}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setTimeout(handleInputResize, 0);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Ask Dialogue... (Shift + Enter for newline)"}
               disabled={!activeSessionId || isUploading}
-              className="relative w-full bg-[#1a1814]/90 backdrop-blur-xl border border-[#2a2723] text-[#f2efeb] pl-12 lg:pl-14 pr-12 lg:pr-14 py-4 rounded-[2rem] focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-all duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl"
+              style={{ minHeight: "56px" }}
+              className="relative w-full bg-[#1a1814]/90 backdrop-blur-xl border border-[#2a2723] text-[#f2efeb] pl-12 lg:pl-14 pr-16 lg:pr-20 py-4 rounded-[2rem] focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-shadow duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl resize-none leading-relaxed outline-none scrollbar-none [&::-webkit-scrollbar]:hidden"
             />
             
-            <button
-              type="submit"
-              disabled={(!input.trim() && selectedFiles.length === 0) || !activeSessionId || isUploading}
-              className="absolute right-2 lg:right-2.5 top-1/2 -translate-y-1/2 p-2 lg:p-2.5 rounded-lg lg:rounded-xl bg-[#d4a373] text-[#0f0e0c] hover:bg-[#c39262] transition-all shadow-xl shadow-[#d4a373]/10 disabled:opacity-0 disabled:scale-90 z-10"
-            >
-              {isUploading ? (
-                <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
-              ) : (
-                <Send className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <div className="absolute right-2 lg:right-2.5 top-[28px] -translate-y-1/2 flex items-center gap-1 z-10">
+              {isScrollable && (
+                <ChevronsUpDown className="w-4 h-4 text-[#a8a29e]/50 animate-pulse hidden sm:block" />
               )}
-            </button>
+              <button
+                type="submit"
+                disabled={(!input.trim() && selectedFiles.length === 0) || !activeSessionId || isUploading}
+                className="p-2 lg:p-2.5 rounded-lg lg:rounded-xl bg-[#d4a373] text-[#0f0e0c] hover:bg-[#c39262] transition-all shadow-xl shadow-[#d4a373]/10 disabled:opacity-0 disabled:scale-90"
+              >
+                {isUploading ? (
+                  <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+                )}
+              </button>
+            </div>
           </form>
           <p className="mt-2 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
         </footer>
