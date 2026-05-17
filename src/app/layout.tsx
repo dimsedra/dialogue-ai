@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Dialogue | Productivity reimagined",
   description: "A clean, minimal chat interface for focused productivity.",
+  appleWebApp: {
+    title: "Dialogue",
+    statusBarStyle: "black-translucent",
+    capable: true,
+  },
 };
 
 export const viewport: Viewport = {
@@ -24,6 +29,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   interactiveWidget: "resizes-content",
+  themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({

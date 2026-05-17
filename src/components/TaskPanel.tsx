@@ -281,6 +281,7 @@ export function TaskPanel({
 
       if (editingEventObj && editingEventObj.recurrence && editingEventTimestamp) {
         setConfirmEditRecurring({ id, event: editingEventObj, updates, timestamp: editingEventTimestamp });
+        setEditingEventId(null);
         setIsSubmitting(false);
         return;
       }
@@ -489,7 +490,7 @@ export function TaskPanel({
                               </p>
                             </div>
                             <div className="mt-1 shrink-0 flex items-center gap-1">
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all mr-2">
+                              <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all mr-2">
                                 <button 
                                   onClick={(e) => { 
                                     e.stopPropagation(); 
@@ -525,7 +526,7 @@ export function TaskPanel({
                               {expandedTaskId === task._id ? (
                                 <ChevronUp className="w-3.5 h-3.5 text-[#a8a29e]/40" />
                               ) : (
-                                <ChevronDown className="w-3.5 h-3.5 text-[#a8a29e]/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <ChevronDown className="w-3.5 h-3.5 text-[#a8a29e]/40 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity" />
                               )}
                             </div>
                         </div>
@@ -544,53 +545,45 @@ export function TaskPanel({
                           )}
                         </div>
 
-                        <AnimatePresence>
-                          {expandedTaskId === task._id && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: "auto", opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.3 }}
-                              className="pt-4 mt-4 border-t border-[#2a2723] space-y-4"
-                            >
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Priority</span>
-                                  <div className="flex items-center gap-1.5">
-                                    <AlertCircle className={`w-3 h-3 ${
-                                      task.priority === "high" ? "text-red-400" : 
-                                      task.priority === "medium" ? "text-orange-400" : "text-blue-400"
-                                    }`} />
-                                    <span className="text-[11px] text-[#f2efeb] capitalize font-medium">{task.priority || "Medium"}</span>
-                                  </div>
-                                </div>
-                                <div className="space-y-1">
-                                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Category</span>
-                                  <div className="flex items-center gap-1.5">
-                                    <Tag className="w-3 h-3 text-[#d4a373]/60" />
-                                    <span className="text-[11px] text-[#f2efeb] font-medium">{task.category || "Uncategorized"}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              
+                        {expandedTaskId === task._id && (
+                          <div className="pt-4 mt-4 border-t border-[#2a2723] space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-1">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Timeline</span>
+                                <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Priority</span>
                                 <div className="flex items-center gap-1.5">
-                                  <Clock className="w-3 h-3 text-[#a8a29e]/40" />
-                                  <span className="text-[11px] text-[#f2efeb] font-medium">
-                                    {task.dueDate ? `Due ${formatDateLabel(task.dueDate)}` : "No due date set"}
-                                  </span>
+                                  <AlertCircle className={`w-3 h-3 ${
+                                    task.priority === "high" ? "text-red-400" : 
+                                    task.priority === "medium" ? "text-orange-400" : "text-blue-400"
+                                  }`} />
+                                  <span className="text-[11px] text-[#f2efeb] capitalize font-medium">{task.priority || "Medium"}</span>
                                 </div>
                               </div>
-
-                              <div className="pt-2">
-                                <span className="text-[9px] text-[#a8a29e]/30 italic">
-                                  Created {new Date(task.createdAt).toLocaleDateString()}
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Category</span>
+                                <div className="flex items-center gap-1.5">
+                                  <Tag className="w-3 h-3 text-[#d4a373]/60" />
+                                  <span className="text-[11px] text-[#f2efeb] font-medium">{task.category || "Uncategorized"}</span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Timeline</span>
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="w-3 h-3 text-[#a8a29e]/40" />
+                                <span className="text-[11px] text-[#f2efeb] font-medium">
+                                  {task.dueDate ? `Due ${formatDateLabel(task.dueDate)}` : "No due date set"}
                                 </span>
                               </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                            </div>
+
+                            <div className="pt-2">
+                              <span className="text-[9px] text-[#a8a29e]/30 italic">
+                                Created {new Date(task.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -649,7 +642,7 @@ export function TaskPanel({
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
                         <button 
                           onClick={(e) => { 
                             e.stopPropagation(); 
@@ -947,30 +940,59 @@ export function TaskPanel({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[100] flex items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-sm p-6"
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-md p-0 sm:p-6"
             onClick={() => setConfirmDelete(null)}
           >
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              initial={{ y: "100%", opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: "100%", opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[280px] bg-[#1a1814] border border-[#d4a373]/20 rounded-2xl p-6 shadow-2xl"
+              className="w-full max-w-lg bg-[#1a1814] border border-[#d4a373]/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
             >
-              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-                <Trash2 className="w-6 h-6 text-red-400" />
+              <div className="flex items-center justify-between pb-4 border-b border-[#2a2723]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Delete {confirmDelete.type === "task" ? "Task" : "Event"}</h3>
+                    <span className="text-[10px] text-[#a8a29e]">Confirm deletion</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(null)}
+                  className="p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <h3 className="text-lg font-bold text-[#f2efeb] mb-2 leading-tight">
-                Delete {confirmDelete.type === "task" ? "Task" : "Event"}?
-              </h3>
-              <p className="text-sm text-[#a8a29e] mb-6 leading-relaxed">
-                {confirmDelete.type === "event" && confirmDelete.event?.recurrence
-                  ? "This is a repeating event. You can delete just this occurrence or the entire series."
-                  : `This action cannot be undone. All data associated with this ${confirmDelete.type} will be permanently removed.`}
-              </p>
-              <div className="flex flex-col gap-2">
+
+              <div className="space-y-4 text-sm text-[#a8a29e] leading-relaxed">
+                <p>
+                  {confirmDelete.type === "event" && confirmDelete.event?.recurrence
+                    ? "This is a repeating event. You can delete just this occurrence or the entire series."
+                    : `This action cannot be undone. All data associated with this ${confirmDelete.type} will be permanently removed.`}
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-[#2a2723] justify-end">
                 {confirmDelete.type === "event" && confirmDelete.event?.recurrence ? (
                   <>
+                    <button 
+                      onClick={() => setConfirmDelete(null)}
+                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all sm:order-1"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={() => executeDeleteEvent(confirmDelete.id as Id<"events">)}
+                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all sm:order-2"
+                    >
+                      Entire Series
+                    </button>
                     <button 
                       onClick={() => {
                         if (confirmDelete.event) {
@@ -978,37 +1000,33 @@ export function TaskPanel({
                           setConfirmDelete(null);
                         }
                       }}
-                      className="w-full py-3 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg"
+                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 sm:order-3"
                     >
-                      Delete Occurrence Only
-                    </button>
-                    <button 
-                      onClick={() => executeDeleteEvent(confirmDelete.id as Id<"events">)}
-                      className="w-full py-3 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
-                    >
-                      Delete Entire Series
+                      This Date Only
                     </button>
                   </>
                 ) : (
-                  <button 
-                    onClick={() => {
-                      if (confirmDelete.type === "task") {
-                        executeDeleteTask(confirmDelete.id as Id<"tasks">);
-                      } else {
-                        executeDeleteEvent(confirmDelete.id as Id<"events">);
-                      }
-                    }}
-                    className="w-full py-3 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
-                  >
-                    Delete Permanently
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => setConfirmDelete(null)}
+                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all sm:order-1"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (confirmDelete.type === "task") {
+                          executeDeleteTask(confirmDelete.id as Id<"tasks">);
+                        } else {
+                          executeDeleteEvent(confirmDelete.id as Id<"events">);
+                        }
+                      }}
+                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 sm:order-2"
+                    >
+                      Delete {confirmDelete.type === "task" ? "Task" : "Event"}
+                    </button>
+                  </>
                 )}
-                <button 
-                  onClick={() => setConfirmDelete(null)}
-                  className="w-full py-3 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all"
-                >
-                  Cancel
-                </button>
               </div>
             </motion.div>
           </motion.div>
@@ -1018,26 +1036,81 @@ export function TaskPanel({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[100] flex items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-sm p-6"
-            onClick={() => setConfirmEditRecurring(null)}
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-md p-0 sm:p-6"
+            onClick={() => {
+              setConfirmEditRecurring(null);
+              setEditingEventObj(null);
+              setEditingEventTimestamp(null);
+            }}
           >
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              initial={{ y: "100%", opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: "100%", opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-[280px] bg-[#1a1814] border border-[#d4a373]/20 rounded-2xl p-6 shadow-2xl space-y-4"
+              className="w-full max-w-lg bg-[#1a1814] border border-[#d4a373]/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
             >
-              <div className="w-12 h-12 rounded-full bg-[#d4a373]/10 flex items-center justify-center mb-2">
-                <Edit3 className="w-6 h-6 text-[#d4a373]" />
+              <div className="flex items-center justify-between pb-4 border-b border-[#2a2723]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-[#d4a373]/15 flex items-center justify-center text-[#d4a373]">
+                    <Edit3 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Save Recurring Event</h3>
+                    <span className="text-[10px] text-[#a8a29e]">Modifying a repeating event</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmEditRecurring(null);
+                    setEditingEventObj(null);
+                    setEditingEventTimestamp(null);
+                  }}
+                  className="p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <h3 className="text-lg font-bold text-[#f2efeb] leading-tight">
-                Save Recurring Event?
-              </h3>
-              <p className="text-sm text-[#a8a29e] leading-relaxed">
-                You are modifying a repeating event. Do you want to save changes for this specific date only, or for the entire repeating series?
-              </p>
-              <div className="flex flex-col gap-2 pt-2">
+
+              <div className="space-y-4 text-sm text-[#a8a29e] leading-relaxed">
+                <p>
+                  You are modifying a repeating event. Do you want to save changes for this specific date only, or for the entire repeating series?
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-[#2a2723] justify-end">
+                <button 
+                  onClick={() => {
+                    setConfirmEditRecurring(null);
+                    setEditingEventObj(null);
+                    setEditingEventTimestamp(null);
+                  }}
+                  className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all sm:order-1"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={async () => {
+                    setIsSubmitting(true);
+                    try {
+                      await updateEvent({
+                        id: confirmEditRecurring.id,
+                        ...confirmEditRecurring.updates,
+                      });
+                      setConfirmEditRecurring(null);
+                      setEditingEventId(null);
+                      setEditingEventObj(null);
+                      setEditingEventTimestamp(null);
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-[#2a2723] text-[#f2efeb] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#3a3630] transition-all sm:order-2"
+                >
+                  Entire Series
+                </button>
                 <button 
                   onClick={async () => {
                     setIsSubmitting(true);
@@ -1060,35 +1133,9 @@ export function TaskPanel({
                       setIsSubmitting(false);
                     }
                   }}
-                  className="w-full py-3 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg"
+                  className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg sm:order-3"
                 >
-                  This Occurrence Only
-                </button>
-                <button 
-                  onClick={async () => {
-                    setIsSubmitting(true);
-                    try {
-                      await updateEvent({
-                        id: confirmEditRecurring.id,
-                        ...confirmEditRecurring.updates,
-                      });
-                      setConfirmEditRecurring(null);
-                      setEditingEventId(null);
-                      setEditingEventObj(null);
-                      setEditingEventTimestamp(null);
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                  className="w-full py-3 bg-[#2a2723] text-[#f2efeb] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#3a3630] transition-all"
-                >
-                  Entire Repeating Series
-                </button>
-                <button 
-                  onClick={() => setConfirmEditRecurring(null)}
-                  className="w-full py-3 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all"
-                >
-                  Cancel
+                  This Date Only
                 </button>
               </div>
             </motion.div>

@@ -27,6 +27,7 @@ export default function Home() {
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [initialHeight, setInitialHeight] = useState<number | null>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [chatInputOffset, setChatInputOffset] = useState(0);
 
   const workspaces = useQuery(api.workspaces.list, {});
 
@@ -117,11 +118,6 @@ export default function Home() {
       localStorage.setItem("dialogue_show_tasks", showTasks.toString());
     }
   }, [showTasks, isLoaded]);
-  const syncRef = useRef<(() => void) | null>(null);
-  const handleSyncFromPanel = useCallback(() => {
-    syncRef.current?.();
-  }, []);
-
   // Sidebar Mutual Exclusivity Logic — only enforced on tablet/mobile
   const handleSetShowHistory = useCallback((val: boolean) => {
     setShowHistory(val);
@@ -132,6 +128,14 @@ export default function Home() {
     setShowTasks(val);
     if (val && !isLargeViewport) setShowHistory(false);
   }, [isLargeViewport]);
+
+  const syncRef = useRef<(() => void) | null>(null);
+  const handleSyncFromPanel = useCallback(() => {
+    syncRef.current?.();
+    if (!isLargeViewport) {
+      handleSetShowTasks(false);
+    }
+  }, [isLargeViewport, handleSetShowTasks]);
 
 
   return (
@@ -172,6 +176,7 @@ export default function Home() {
               onSyncRef={syncRef}
               isLargeViewport={isLargeViewport}
               keyboardOffset={keyboardOffset}
+              onChatInputResize={setChatInputOffset}
             />
           </motion.div>
 
@@ -185,7 +190,7 @@ export default function Home() {
                 onClick={() => handleSetShowTasks(true)}
                 style={{ 
                   top: isLargeViewport ? "50%" : "auto",
-                  bottom: isLargeViewport ? "auto" : `calc(6.5rem + ${keyboardOffset}px)`,
+                  bottom: isLargeViewport ? "auto" : `calc(7.25rem + ${keyboardOffset + chatInputOffset}px)`,
                   transform: isLargeViewport ? "translateY(-50%)" : "none"
                 }}
                 className="absolute right-6 z-40 p-4 lg:p-3 rounded-full lg:rounded-2xl bg-[#d4a373] lg:bg-[#1a1814] border border-[#d4a373]/20 lg:border-[#2a2723] text-[#0f0e0c] lg:text-[#a8a29e] hover:text-[#0f0e0c] lg:hover:text-[#d4a373] transition-all shadow-2xl lg:shadow-black/50 group flex items-center justify-center"
@@ -204,7 +209,7 @@ export default function Home() {
               opacity: isLargeViewport ? (showTasks ? 1 : 0) : (showTasks ? 1 : 0),
               x: isLargeViewport ? 0 : (showTasks ? 0 : "100%")
             }}
-            transition={{ type: "spring", damping: 30, stiffness: 250 }}
+            transition={isLargeViewport ? { type: "spring", damping: 30, stiffness: 250 } : { duration: 0 }}
             className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 overflow-hidden z-40 ${
               isLargeViewport ? "relative border-l" : "absolute right-0 shadow-[-20px_0_40px_rgba(0,0,0,0.5)]"
             }`}

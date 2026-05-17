@@ -439,7 +439,8 @@ export function Chat({
   setShowHistory,
   onSyncRef,
   isLargeViewport,
-  keyboardOffset
+  keyboardOffset,
+  onChatInputResize
 }: { 
   activeSessionId: Id<"chatSessions"> | null, 
   setActiveSessionId: (id: Id<"chatSessions"> | null) => void,
@@ -449,7 +450,8 @@ export function Chat({
   setShowHistory: (show: boolean) => void,
   onSyncRef?: React.MutableRefObject<(() => void) | null>,
   isLargeViewport: boolean,
-  keyboardOffset: number
+  keyboardOffset: number,
+  onChatInputResize?: (offset: number) => void
 }) {
   const workspaces = useQuery(api.workspaces.list, {});
   const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
@@ -509,7 +511,8 @@ export function Chat({
     const nextHeight = Math.min(Math.max(el.scrollHeight, 56), maxHeight);
     el.style.height = `${nextHeight}px`;
     setIsScrollable(el.scrollHeight > maxHeight);
-  }, []);
+    onChatInputResize?.(Math.max(0, nextHeight - 56));
+  }, [onChatInputResize]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const isTouchDevice = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
@@ -828,6 +831,7 @@ export function Chat({
     if (textareaRef.current) {
       textareaRef.current.style.height = "56px";
       setIsScrollable(false);
+      onChatInputResize?.(0);
     }
 
     try {
@@ -1215,7 +1219,7 @@ export function Chat({
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                  <div className="flex items-center shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
                     {editingSessionId !== session._id && (
                       <>
                         <button 
@@ -1844,7 +1848,7 @@ export function Chat({
                       {/* Delete Overlay */}
                       <button 
                         onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
-                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-100 lg:opacity-0 lg:group-hover/thumb:opacity-100 transition-opacity"
                       >
                         <X className="w-5 h-5 text-white" />
                       </button>
@@ -1898,7 +1902,7 @@ export function Chat({
                 setTimeout(handleInputResize, 0);
               }}
               onKeyDown={handleKeyDown}
-              placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Ask Dialogue... (Shift + Enter for newline)"}
+              placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Ask Dialogue..."}
               disabled={!activeSessionId || isUploading}
               style={{ minHeight: "56px" }}
               className="relative w-full bg-[#1a1814]/90 backdrop-blur-xl border border-[#2a2723] text-[#f2efeb] pl-12 lg:pl-14 pr-16 lg:pr-20 py-4 rounded-[2rem] focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-shadow duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl resize-none leading-relaxed outline-none scrollbar-none [&::-webkit-scrollbar]:hidden"
