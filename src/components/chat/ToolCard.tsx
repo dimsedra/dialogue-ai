@@ -1,0 +1,321 @@
+import { CheckCircle2, Tag, Clock, Edit3, Check, Trash2, Zap, CalendarDays, MapPin, Search, Sparkles, RefreshCw } from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { motion } from "framer-motion";
+import { ToolCall, TaskToolArgs, EventToolArgs } from "./types";
+import { DiffView } from "./DiffView";
+
+import { formatRecurrenceText } from "../panel/utils";
+
+export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
+  if (!toolCall) return null;
+
+  // --- Task Tools ---
+  if (toolCall.name === "addTask") {
+    const { text, dueDate, priority, category } = toolCall.args as { 
+      text: string; 
+      dueDate?: string; 
+      priority?: string; 
+      category?: string; 
+    };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[#d4a373]">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Task Created</span>
+          </div>
+          {priority && (
+            <span className={`text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest border ${
+              priority === "high" ? "bg-red-500/10 border-red-500/20 text-red-400" :
+              priority === "medium" ? "bg-orange-500/10 border-orange-500/20 text-orange-400" :
+              "bg-blue-500/10 border-blue-500/20 text-blue-400"
+            }`}>
+              {priority}
+            </span>
+          )}
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm text-[#f2efeb] font-semibold leading-snug">{text}</p>
+          <div className="flex flex-wrap gap-3">
+            {category && (
+              <div className="flex items-center gap-1.5 text-[10px] text-[#a8a29e] font-medium">
+                <Tag className="w-3 h-3 text-[#d4a373]/60" />
+                {category}
+              </div>
+            )}
+            {dueDate && (
+              <div className="flex items-center gap-1.5 text-[10px] text-[#d4a373] font-bold">
+                <Clock className="w-3 h-3" />
+                {format(parseISO(dueDate), "MMM d, HH:mm")}
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "updateTask") {
+    const { titleHint, oldValues, text, priority, category, dueDate } = toolCall.args as unknown as TaskToolArgs;
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-orange-500/5 border border-orange-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-orange-400">
+            <Edit3 className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Task Updated</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[13px] text-[#f2efeb] font-semibold truncate opacity-90">{titleHint || text}</p>
+          <div className="bg-black/20 rounded-xl p-2.5 border border-white/5 space-y-0.5">
+            <DiffView label="Title" oldVal={oldValues?.text} newVal={text} />
+            <DiffView label="Priority" oldVal={oldValues?.priority} newVal={priority} type="priority" />
+            <DiffView label="Category" oldVal={oldValues?.category} newVal={category} />
+            <DiffView label="Due Date" oldVal={oldValues?.dueDate} newVal={dueDate ? parseISO(dueDate).getTime() : undefined} type="date" />
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "completeTask") {
+    const { titleHint } = toolCall.args as { titleHint?: string };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="mt-3 p-2.5 pr-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex items-center gap-3 shadow-md shadow-black/10 w-fit max-w-full"
+      >
+        <div className="p-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
+          <Check className="w-4 h-4 stroke-[3]" />
+        </div>
+        <div className="min-w-0">
+          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-500/60 block">Done</span>
+          <p className="text-[13px] text-[#f2efeb] font-bold truncate">{titleHint || "Task Finished"}</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "deleteTask") {
+    const { titleHint } = toolCall.args as { titleHint?: string };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: -5 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="mt-3 p-2.5 pr-4 rounded-2xl bg-slate-500/5 border border-slate-500/10 flex items-center gap-3 opacity-80 w-fit max-w-full"
+      >
+        <div className="p-1.5 rounded-lg bg-slate-500/10 text-slate-400 shrink-0">
+          <Trash2 className="w-3.5 h-3.5" />
+        </div>
+        <div className="min-w-0">
+          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500/60 block">Removed</span>
+          <p className="text-[12px] text-[#a8a29e] font-medium truncate line-through">{titleHint || "Deleted Task"}</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // --- Event Tools ---
+  if (toolCall.name === "addEvent") {
+    const { title, startTime, endTime, eventType, location, recurrence } = toolCall.args as { 
+      title: string; 
+      startTime: string; 
+      endTime?: string;
+      eventType?: "interval" | "point";
+      location?: string;
+      recurrence?: { frequency: string; interval: number; daysOfWeek?: number[]; until?: string | number };
+    };
+    const isPoint = eventType === "point" || !endTime;
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={`mt-3 p-3.5 rounded-2xl ${isPoint ? 'bg-amber-500/5 border-amber-500/10' : 'bg-[#8b5cf6]/5 border-[#8b5cf6]/10'} border space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]`}
+      >
+        <div className={`flex items-center gap-2 ${isPoint ? 'text-amber-400' : 'text-[#8b5cf6]'}`}>
+          {isPoint ? <Zap className="w-3.5 h-3.5" /> : <CalendarDays className="w-3.5 h-3.5" />}
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">{isPoint ? "Momentary Event Scheduled" : "Event Scheduled"}</span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm text-[#f2efeb] font-semibold leading-snug">{title}</p>
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className={`flex items-center gap-1.5 text-[10px] ${isPoint ? 'text-amber-400' : 'text-[#8b5cf6]'} font-bold`}>
+              <Clock className="w-3 h-3" />
+              {(() => {
+                const s = startTime;
+                const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+                if (match) {
+                  const [, y, m, d, h, min] = match;
+                  return format(new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)), "MMM d, HH:mm");
+                }
+                return format(parseISO(s), "MMM d, HH:mm");
+              })()}
+              {!isPoint && endTime && (
+                <>
+                  <span className="text-[#a8a29e] font-normal">→</span>
+                  <span>{(() => {
+                    const match = endTime.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+                    if (match) {
+                      const [, y, m, d, h, min] = match;
+                      return format(new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min)), "HH:mm");
+                    }
+                    return format(parseISO(endTime), "HH:mm");
+                  })()}</span>
+                </>
+              )}
+            </div>
+            {recurrence && (
+              <div className="flex items-center gap-1 text-[10px] text-[#8b5cf6] font-semibold bg-[#8b5cf6]/15 px-2 py-0.5 rounded-full border border-[#8b5cf6]/20">
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span>{formatRecurrenceText(recurrence)}</span>
+              </div>
+            )}
+            {location && (
+              <div className="flex items-center gap-1.5 text-[10px] text-[#a8a29e] font-medium">
+                <MapPin className="w-3 h-3 text-[#8b5cf6]/60" />
+                {location}
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "updateEvent") {
+    const { titleHint, oldValues, title, startTime, endTime, location } = toolCall.args as unknown as EventToolArgs;
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center gap-2 text-indigo-400">
+          <CalendarDays className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Event Updated</span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[13px] text-[#f2efeb] font-semibold truncate opacity-90">{titleHint || title}</p>
+          <div className="bg-black/20 rounded-xl p-2.5 border border-white/5 space-y-0.5">
+            <DiffView label="Title" oldVal={oldValues?.title} newVal={title} />
+            <DiffView label="Start" oldVal={oldValues?.startTime} newVal={startTime ? parseISO(startTime).getTime() : undefined} type="date" />
+            <DiffView label="End" oldVal={oldValues?.endTime} newVal={endTime ? parseISO(endTime).getTime() : undefined} type="date" />
+            <DiffView label="Location" oldVal={oldValues?.location} newVal={location} />
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "updateEventOccurrence") {
+    const { titleHint, originalStartTime, startTime, title, location } = toolCall.args as {
+      titleHint?: string;
+      originalStartTime: string;
+      startTime?: string;
+      title?: string;
+      location?: string;
+    };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center gap-2 text-amber-400">
+          <CalendarDays className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Occurrence Rescheduled</span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[13px] text-[#f2efeb] font-semibold truncate opacity-90">{titleHint || title || "Event Schedule Modified"}</p>
+          <div className="bg-black/20 rounded-xl p-2.5 border border-white/5 space-y-1">
+            <div className="text-[11px] text-[#a8a29e] flex items-center gap-1.5">
+              <span className="text-amber-400/80 font-semibold">Original:</span>
+              <span>{format(parseISO(originalStartTime), "MMM d, yyyy (HH:mm)")}</span>
+            </div>
+            {startTime && (
+              <div className="text-[11px] text-[#a8a29e] flex items-center gap-1.5 font-bold">
+                <span className="text-emerald-400">Rescheduled To:</span>
+                <span className="text-[#f2efeb]">{format(parseISO(startTime), "MMM d, yyyy (HH:mm)")}</span>
+              </div>
+            )}
+            {location && (
+              <div className="text-[11px] text-[#a8a29e] flex items-center gap-1.5 font-medium">
+                <MapPin className="w-3 h-3 text-amber-400/60" />
+                <span>{location}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "deleteEvent") {
+    const { titleHint } = toolCall.args as { titleHint?: string };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 5 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="mt-3 p-2.5 pr-4 rounded-2xl bg-rose-500/5 border border-rose-500/10 flex items-center gap-3 opacity-80 w-fit max-w-full"
+      >
+        <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 shrink-0">
+          <CalendarDays className="w-3.5 h-3.5" />
+        </div>
+        <div className="min-w-0">
+          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-rose-500/60 block">Cancelled</span>
+          <p className="text-[12px] text-[#a8a29e] font-medium truncate line-through">{titleHint || "Deleted Event"}</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // --- Other Tools ---
+  if (toolCall.name === "searchWeb" || toolCall.name === "multiSearch") {
+    const isMulti = toolCall.name === "multiSearch";
+    const query = !isMulti ? (toolCall.args as { query: string }).query : undefined;
+    const count = isMulti ? (toolCall.args as { count: number }).count : 1;
+    
+    return (
+      <div className="mt-2 flex items-center gap-2.5 py-1.5 px-3 rounded-full bg-[#3b82f6]/[0.03] border border-[#3b82f6]/10 w-fit">
+        <Search className="w-3 h-3 text-[#3b82f6]/60" />
+        <span className="text-[9px] font-bold uppercase tracking-wider text-[#3b82f6]/80 whitespace-nowrap">
+          {isMulti ? `${count} Research Queries` : "Researching"}
+        </span>
+        {query && (
+          <>
+            <div className="w-[1px] h-2 bg-[#3b82f6]/20" />
+            <span className="text-[9px] text-[#a8a29e]/60 truncate max-w-[150px] font-medium">&quot;{query}&quot;</span>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  if (toolCall.name === "updateMemory") {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="mt-3 flex items-center gap-3 p-3 rounded-2xl bg-emerald-500/[0.03] border border-emerald-500/10 shadow-sm"
+      >
+        <div className="p-1.5 rounded-lg bg-emerald-500/10">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+        </div>
+        <span className="text-[11px] text-[#a8a29e] font-medium italic">
+          Dialogue learned something new about you.
+        </span>
+      </motion.div>
+    );
+  }
+
+  return null;
+}

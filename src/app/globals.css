@@ -116,6 +116,7 @@ html, body {
   --rdp-selected-color: #0f0e0c;
   --rdp-today-color: #d4a373;
   width: 100%;
+  position: relative;
 }
 
 .rdp-custom .rdp-month {
@@ -149,7 +150,7 @@ html, body {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;

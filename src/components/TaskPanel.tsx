@@ -2,22 +2,36 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { CheckCircle2, Circle, Clock, ListTodo, Sparkles, Tag, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Calendar as CalendarIcon, Grid, Filter, ArrowUpDown, Search, Trash2, Edit3, Save, X, RefreshCw, Zap } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { Id, Doc } from "../../convex/_generated/dataModel";
-import { DayPicker } from "react-day-picker";
-import { format, isSameDay, parse, parseISO } from "date-fns";
-import "react-day-picker/dist/style.css";
+import { isSameDay } from "date-fns";
+import {
+  parseTaskDate,
+  ConfirmDeleteData,
+  ConfirmEditRecurringData,
+  EventDoc,
+  EventUpdateData,
+  TaskDoc,
+  DeleteConfirmModal,
+  RecurringEditModal,
+  EditTaskModal,
+  EditEventModal,
+  PanelHeader,
+  FilterBar,
+  TaskList,
+  EventList,
+  CalendarView,
+} from "./panel";
 
-export function TaskPanel({ 
+export function TaskPanel({
   activeWorkspaceId,
   onSync,
-  onClose
-}: { 
-  activeWorkspaceId: Id<"workspaces"> | undefined,
-  onSync?: () => void,
-  onClose?: () => void
+  onClose,
+}: {
+  activeWorkspaceId: Id<"workspaces"> | undefined;
+  onSync?: () => void;
+  onClose?: () => void;
 }) {
   const tasks = useQuery(api.tasks.list, { workspaceId: activeWorkspaceId });
   const events = useQuery(api.events.list, { workspaceId: activeWorkspaceId });
@@ -32,7 +46,6 @@ export function TaskPanel({
   const [expandedTaskId, setExpandedTaskId] = useState<Id<"tasks"> | null>(null);
   const [view, setView] = useState<"tasks" | "events" | "calendar">("tasks");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLargeViewport, setIsLargeViewport] = useState(true);
 
   useEffect(() => {
@@ -41,107 +54,26 @@ export function TaskPanel({
     window.addEventListener("resize", checkViewport);
     return () => window.removeEventListener("resize", checkViewport);
   }, []);
-  
+
   // Editing State
-  const [editingTaskId, setEditingTaskId] = useState<Id<"tasks"> | null>(null);
-  const [editTaskText, setEditTaskText] = useState("");
-  const [editTaskPriority, setEditTaskPriority] = useState<"low" | "medium" | "high">("medium");
-  const [editTaskCategory, setEditTaskCategory] = useState("");
-  const [editTaskDueDate, setEditTaskDueDate] = useState("");
-  
-  const [editingEventId, setEditingEventId] = useState<Id<"events"> | null>(null);
-  const [editingEventObj, setEditingEventObj] = useState<Doc<"events"> | null>(null);
-  const [editingEventTimestamp, setEditingEventTimestamp] = useState<number | null>(null);
-  const [confirmEditRecurring, setConfirmEditRecurring] = useState<{ 
-    id: Id<"events">; 
-    event: Doc<"events">; 
-    updates: {
-      title: string;
-      description: string;
-      location: string;
-      startTime?: number;
-      endTime?: number;
-      eventType?: "interval" | "point";
-      recurrence?: { frequency: "daily" | "weekly"; interval: number; daysOfWeek?: number[]; until?: number } | null;
-    }; 
-    timestamp: number;
-  } | null>(null);
-  const [editEventTitle, setEditEventTitle] = useState("");
-  const [editEventDesc, setEditEventDesc] = useState("");
-  const [editEventLocation, setEditEventLocation] = useState("");
-  const [editEventStartTime, setEditEventStartTime] = useState("");
-  const [editEventEndTime, setEditEventEndTime] = useState("");
-  const [editEventType, setEditEventType] = useState<"interval" | "point">("interval");
-  const [editEventFreq, setEditEventFreq] = useState<"none" | "daily" | "weekly">("none");
-  const [editEventInterval, setEditEventInterval] = useState<number>(1);
-  const [editEventDays, setEditEventDays] = useState<number[]>([]);
-  const [editEventUntil, setEditEventUntil] = useState<string>("");
+  const [editingTaskObj, setEditingTaskObj] = useState<TaskDoc | null>(null);
+  const [editingEventData, setEditingEventData] = useState<{ id: Id<"events">; event: EventDoc; timestamp: number } | null>(null);
+  const [confirmEditRecurring, setConfirmEditRecurring] = useState<ConfirmEditRecurringData | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ConfirmDeleteData | null>(null);
 
   // Filtering & Sorting State
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "priority" | "category">("date");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Custom Modal State
-  const [confirmDelete, setConfirmDelete] = useState<{ id: string; type: "task" | "event"; event?: Doc<"events"> } | null>(null);
-
   const workspaces = useQuery(api.workspaces.list, {});
-
-  const formatRecurrenceText = (rec: { frequency: string; interval: number; daysOfWeek?: number[]; until?: number } | undefined) => {
-    if (!rec) return "";
-    let base = rec.frequency === "daily" 
-      ? (rec.interval === 1 ? "Daily" : `Every ${rec.interval} days`)
-      : (rec.interval === 1 ? "Weekly" : `Every ${rec.interval} weeks`);
-    
-    if (rec.frequency === "weekly" && rec.daysOfWeek && rec.daysOfWeek.length > 0) {
-      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const daysStr = [...rec.daysOfWeek].sort().map(d => dayNames[d]).join(", ");
-      base = `${base} on ${daysStr}`;
-    }
-    if (rec.until) {
-      base = `${base}, until ${format(new Date(rec.until), "MMM d, yyyy")}`;
-    }
-    return base;
-  };
-
-  // Helper to parse dates from the database (supports ISO and legacy human formats)
-  const parseTaskDate = (dateStr: string | number | undefined): Date | null => {
-    if (!dateStr) return null;
-    if (typeof dateStr === 'number') return new Date(dateStr);
-    try {
-      if (dateStr.includes("T") || dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
-        return parseISO(dateStr);
-      }
-      if (dateStr.includes(" at ")) {
-        const datePart = dateStr.split(" at ")[0];
-        return parse(datePart, "eeee, MMMM d", new Date());
-      }
-      if (dateStr.includes("/")) {
-        const datePart = dateStr.split(",")[0];
-        return parse(datePart, "M/d/yyyy", new Date());
-      }
-      const cleanDate = dateStr.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
-      if (cleanDate) return parse(cleanDate[0], "M/d/yyyy", new Date());
-      return null;
-    } catch {
-      return null;
-    }
-  };
-
-  const formatDateLabel = (date: Date | string | number | undefined) => {
-    if (!date) return "";
-    const d = typeof date === "string" ? parseTaskDate(date) : new Date(date);
-    if (!d) return typeof date === "string" ? date : "";
-    
-    const yearStr = d.getFullYear() === new Date().getFullYear() ? "" : `, ${d.getFullYear()}`;
-    return format(d, `MMM d${yearStr}, HH:mm`);
-  };
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];
-    return (tasks as Doc<"tasks">[]).filter(t => {
-      const matchSearch = t.text.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         t.category?.toLowerCase().includes(searchQuery.toLowerCase());
+    return (tasks as Doc<"tasks">[]).filter((t) => {
+      const matchSearch =
+        t.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.category?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchSearch;
     });
   }, [tasks, searchQuery]);
@@ -149,8 +81,8 @@ export function TaskPanel({
   const sortedAndFilteredTasks = useMemo(() => {
     return [...filteredTasks].sort((a, b) => {
       if (sortBy === "date") {
-        const dateA = a.dueDate ? (typeof a.dueDate === 'number' ? a.dueDate : parseTaskDate(a.dueDate)?.getTime() || 0) : 0;
-        const dateB = b.dueDate ? (typeof b.dueDate === 'number' ? b.dueDate : parseTaskDate(b.dueDate)?.getTime() || 0) : 0;
+        const dateA = a.dueDate ? (typeof a.dueDate === "number" ? a.dueDate : parseTaskDate(a.dueDate)?.getTime() || 0) : 0;
+        const dateB = b.dueDate ? (typeof b.dueDate === "number" ? b.dueDate : parseTaskDate(b.dueDate)?.getTime() || 0) : 0;
         return dateA - dateB;
       }
       if (sortBy === "priority") {
@@ -166,19 +98,20 @@ export function TaskPanel({
 
   const taskDates = useMemo(() => {
     if (!tasks) return [];
-    return (tasks as Doc<"tasks">[]).map(t => parseTaskDate(t.dueDate)).filter(Boolean) as Date[];
+    return (tasks as Doc<"tasks">[]).map((t) => parseTaskDate(t.dueDate)).filter(Boolean) as Date[];
   }, [tasks]);
 
   const eventDates = useMemo(() => {
     if (!events) return [];
-    return events.map(e => new Date(e.startTime));
+    return events.map((e) => new Date(e.startTime));
   }, [events]);
 
   const displayEvents = useMemo(() => {
     if (!events) return [];
-    const filtered = (events as Doc<"events">[]).filter(e => 
-      e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    const filtered = (events as Doc<"events">[]).filter(
+      (e) =>
+        e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.description?.toLowerCase().includes(searchQuery.toLowerCase())
     ).sort((a, b) => a.startTime - b.startTime);
 
     const seenSeries = new Set<string>();
@@ -197,7 +130,7 @@ export function TaskPanel({
 
   const tasksOnSelectedDate = useMemo(() => {
     if (!tasks || !selectedDate) return [];
-    return (tasks as Doc<"tasks">[]).filter(t => {
+    return (tasks as Doc<"tasks">[]).filter((t) => {
       const taskDate = parseTaskDate(t.dueDate);
       return taskDate ? isSameDay(taskDate, selectedDate) : false;
     });
@@ -205,12 +138,8 @@ export function TaskPanel({
 
   const eventsOnSelectedDate = useMemo(() => {
     if (!events || !selectedDate) return [];
-    return events.filter(e => isSameDay(new Date(e.startTime), selectedDate));
+    return events.filter((e) => isSameDay(new Date(e.startTime), selectedDate));
   }, [events, selectedDate]);
-
-  const syncWorkspace = () => {
-    onSync?.();
-  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -218,10 +147,8 @@ export function TaskPanel({
         if (confirmDelete) setConfirmDelete(null);
         else if (confirmEditRecurring) setConfirmEditRecurring(null);
         else {
-          setEditingTaskId(null);
-          setEditingEventId(null);
-          setEditingEventObj(null);
-          setEditingEventTimestamp(null);
+          setEditingTaskObj(null);
+          setEditingEventData(null);
         }
       }
     };
@@ -229,25 +156,15 @@ export function TaskPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [confirmDelete, confirmEditRecurring]);
 
-  const handleUpdateTask = async (id: Id<"tasks">) => {
-    setIsSubmitting(true);
-    try {
-      const finalDueDate = editTaskDueDate ? new Date(editTaskDueDate).getTime() : undefined;
-
-      await updateTask({ 
-        id, 
-        text: editTaskText,
-        priority: editTaskPriority,
-        category: editTaskCategory,
-        dueDate: finalDueDate
-      });
-      setEditingTaskId(null);
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleUpdateTask = async (
+    id: Id<"tasks">,
+    updates: { text: string; priority: "low" | "medium" | "high"; category: string; dueDate?: number }
+  ) => {
+    await updateTask({ id, ...updates });
+    setEditingTaskObj(null);
   };
 
-  const handleDeleteTask = async (id: Id<"tasks">) => {
+  const handleDeleteTask = (id: Id<"tasks">) => {
     setConfirmDelete({ id, type: "task" });
   };
 
@@ -256,55 +173,17 @@ export function TaskPanel({
     setConfirmDelete(null);
   };
 
-  const handleUpdateEvent = async (id: Id<"events">) => {
-    setIsSubmitting(true);
-    try {
-      let finalStartTime = 0;
-      let finalEndTime = 0;
-
-      if (editEventStartTime) {
-        finalStartTime = new Date(editEventStartTime).getTime();
-      }
-
-      if (editEventType === "interval" && editEventEndTime) {
-        finalEndTime = new Date(editEventEndTime).getTime();
-      }
-
-      const recurrenceRule = editEventFreq !== "none" ? {
-        frequency: editEventFreq as "daily" | "weekly",
-        interval: editEventInterval,
-        daysOfWeek: editEventFreq === "weekly" ? (editEventDays.length > 0 ? editEventDays : [new Date(finalStartTime).getDay()]) : undefined,
-        until: editEventUntil ? new Date(editEventUntil).getTime() : undefined,
-      } : null;
-
-      const updates = { 
-        title: editEventTitle, 
-        description: editEventDesc,
-        location: editEventLocation,
-        startTime: finalStartTime || undefined,
-        endTime: (editEventType === "interval" && finalEndTime) ? finalEndTime : undefined,
-        eventType: editEventType,
-        recurrence: recurrenceRule
-      };
-
-      if (editingEventObj && editingEventObj.recurrence && editingEventTimestamp) {
-        setConfirmEditRecurring({ id, event: editingEventObj, updates, timestamp: editingEventTimestamp });
-        setEditingEventId(null);
-        setIsSubmitting(false);
-        return;
-      }
-
-      await updateEvent({ id, ...updates });
-      setEditingEventId(null);
-      setEditingEventObj(null);
-      setEditingEventTimestamp(null);
-      setEditEventUntil("");
-    } finally {
-      if (!confirmEditRecurring) setIsSubmitting(false);
-    }
+  const handleUpdateEvent = async (id: Id<"events">, updates: EventUpdateData) => {
+    await updateEvent({ id, ...updates });
+    setEditingEventData(null);
   };
 
-  const handleDeleteEvent = async (event: Doc<"events">) => {
+  const handleSaveRecurring = (data: ConfirmEditRecurringData) => {
+    setConfirmEditRecurring(data);
+    setEditingEventData(null);
+  };
+
+  const handleDeleteEvent = (event: EventDoc) => {
     setConfirmDelete({ id: event._id, type: "event", event });
   };
 
@@ -316,1294 +195,132 @@ export function TaskPanel({
   return (
     <div className="flex flex-col h-full bg-[#1a1814] relative">
       <header className="p-6 shrink-0 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#d4a373]/10 flex items-center justify-center">
-              {view === "tasks" ? (
-                <ListTodo className="w-5 h-5 text-[#d4a373]" />
-              ) : view === "events" ? (
-                <Clock className="w-5 h-5 text-[#d4a373]" />
-              ) : (
-                <CalendarIcon className="w-5 h-5 text-[#d4a373]" />
-              )}
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-[#f2efeb]">
-                {view === "tasks" ? "Tasks" : view === "events" ? "Events" : "Calendar"}
-              </h2>
-              <p className="text-[9px] text-[#a8a29e] uppercase tracking-widest font-bold">
-                {view === "tasks" ? "Focus List" : view === "events" ? "Schedule" : "Timeline"}
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <div className="flex bg-[#0f0e0c] p-1 rounded-xl border border-[#2a2723]">
-              <button
-                onClick={() => setView("tasks")}
-                className={`p-1.5 rounded-lg transition-all ${view === "tasks" ? "bg-[#2a2723] text-[#d4a373]" : "text-[#a8a29e] hover:text-[#f2efeb]"}`}
-                title="Task List"
-              >
-                <Grid className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setView("events")}
-                className={`p-1.5 rounded-lg transition-all ${view === "events" ? "bg-[#2a2723] text-[#d4a373]" : "text-[#a8a29e] hover:text-[#f2efeb]"}`}
-                title="Event List"
-              >
-                <Clock className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setView("calendar")}
-                className={`p-1.5 rounded-lg transition-all ${view === "calendar" ? "bg-[#2a2723] text-[#d4a373]" : "text-[#a8a29e] hover:text-[#f2efeb]"}`}
-                title="Calendar View"
-              >
-                <CalendarIcon className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="hidden lg:flex p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
-                title="Hide Planner"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-
+        <PanelHeader view={view} setView={setView} onClose={onClose} onSync={onSync} />
         {view !== "calendar" && (
-          <div className="space-y-4">
-            <button 
-              onClick={syncWorkspace}
-              disabled={!onSync}
-              className="w-full flex items-center justify-between p-4 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 hover:bg-[#d4a373]/10 transition-all group disabled:opacity-20 shadow-sm"
-            >
-              <div className="flex items-center gap-3">
-                <Sparkles className="w-4 h-4 text-[#d4a373] group-hover:scale-110 transition-transform duration-500" />
-                <span className="text-xs font-bold text-[#f2efeb]">Sync workspace</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373] animate-pulse" />
-                <ChevronRight className="w-3.5 h-3.5 text-[#a8a29e]/40 group-hover:text-[#f2efeb]" />
-              </div>
-            </button>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="flex-1 relative group">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a8a29e]/40 group-focus-within:text-[#d4a373] transition-colors" />
-                  <input 
-                    type="text"
-                    name="panel-search-filter"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search..."
-                    className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-xl pl-9 pr-4 py-2 text-xs text-[#f2efeb] focus:outline-none focus:border-[#d4a373]/30 transition-all"
-                  />
-                </div>
-                <button 
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`p-2 rounded-xl border transition-all ${showFilters ? "bg-[#d4a373]/10 border-[#d4a373]/30 text-[#d4a373]" : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"}`}
-                >
-                  <Filter className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <AnimatePresence>
-                {showFilters && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="p-3 bg-[#0f0e0c] border border-[#2a2723] rounded-xl flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <ArrowUpDown className="w-3 h-3 text-[#a8a29e]/40" />
-                        <span className="text-[10px] font-bold text-[#a8a29e]/60 uppercase tracking-widest">Sort by</span>
-                      </div>
-                      <div className="flex gap-1">
-                        {(["date", "priority", "category"] as const).map((s) => (
-                          <button
-                            key={s}
-                            onClick={() => setSortBy(s)}
-                            className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all ${sortBy === s ? "bg-[#2a2723] text-[#d4a373]" : "text-[#a8a29e] hover:text-[#f2efeb]"}`}
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
+          <FilterBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            showFilters={showFilters}
+            setShowFilters={setShowFilters}
+            sortBy={sortBy}
+            setSortBy={setSortBy}
+          />
         )}
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 pb-12 scrollbar-hide">
         <AnimatePresence mode="wait">
           {view === "tasks" ? (
-            <motion.div
-              key="tasks"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={isLargeViewport ? undefined : { duration: 0 }}
-              className="space-y-3"
-            >
-              {sortedAndFilteredTasks?.map((task) => {
-                const taskWorkspace = workspaces?.find(w => w._id === task.workspaceId);
-                return (
-                  <motion.div
-                    key={task._id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={isLargeViewport ? { duration: 0.5 } : { duration: 0 }}
-                    className={`rounded-3xl border group transition-all duration-500 overflow-hidden ${
-                      task.priority === "high" 
-                        ? "bg-[#d4a373]/5 border-[#d4a373]/20 hover:border-[#d4a373]/40 shadow-xl shadow-[#d4a373]/5" 
-                        : "bg-[#1f1d19] border-[#2a2723] hover:border-[#d4a373]/20"
-                    } ${expandedTaskId === task._id ? "ring-1 ring-[#d4a373]/30" : ""}`}
-                  >
-                  <div 
-                    className="p-5 cursor-pointer"
-                    onClick={() => setExpandedTaskId(expandedTaskId === task._id ? null : task._id)}
-                  >
-                    <div className="flex gap-4">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); toggleTask({ id: task._id }); }}
-                        className="mt-1 transition-all duration-300 transform group-hover:scale-110"
-                      >
-                        <Circle className="w-4 h-4 text-[#a8a29e]/40 group-hover:text-[#d4a373]" />
-                      </button>
-                      <div className="flex-1 space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                            <div className="flex flex-col gap-1 flex-1">
-                              {(!activeWorkspaceId && taskWorkspace) && (
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <div 
-                                    className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
-                                    style={{ backgroundColor: taskWorkspace.color }} 
-                                  />
-                                  <span className="text-[8px] font-black uppercase tracking-[0.2em] text-[#a8a29e]/40">
-                                    {taskWorkspace.name}
-                                  </span>
-                                </div>
-                              )}
-                              <p className="text-sm font-medium text-[#f2efeb] leading-[1.5]">
-                                {task.text}
-                              </p>
-                            </div>
-                            <div className="mt-1 shrink-0 flex items-center gap-1">
-                              <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all mr-2">
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    setEditingTaskId(task._id); 
-                                    setEditTaskText(task.text);
-                                    setEditTaskPriority(task.priority || "medium");
-                                    setEditTaskCategory(task.category || "");
-                                    if (task.dueDate) {
-                                      try {
-                                        const date = new Date(task.dueDate);
-                                        setEditTaskDueDate(format(date, "yyyy-MM-dd'T'HH:mm"));
-                                      } catch {
-                                        setEditTaskDueDate("");
-                                      }
-                                    } else {
-                                      setEditTaskDueDate("");
-                                    }
-                                  }}
-                                  className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    handleDeleteTask(task._id);
-                                  }}
-                                  className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                              {expandedTaskId === task._id ? (
-                                <ChevronUp className="w-3.5 h-3.5 text-[#a8a29e]/40" />
-                              ) : (
-                                <ChevronDown className="w-3.5 h-3.5 text-[#a8a29e]/40 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity" />
-                              )}
-                            </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-4">
-                          {task.dueDate && (
-                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#a8a29e]/60">
-                              <Clock className="w-3.5 h-3.5 text-[#d4a373]/40" />
-                              {formatDateLabel(task.dueDate)}
-                            </div>
-                          )}
-                          {task.priority === "high" && (
-                            <span className="text-[9px] font-bold uppercase tracking-[0.15em] px-2 py-0.5 rounded-full bg-[#d4a373]/10 text-[#d4a373] border border-[#d4a373]/20">
-                              High
-                            </span>
-                          )}
-                        </div>
-
-                        {expandedTaskId === task._id && (
-                          <div className="pt-4 mt-4 border-t border-[#2a2723] space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Priority</span>
-                                <div className="flex items-center gap-1.5">
-                                  <AlertCircle className={`w-3 h-3 ${
-                                    task.priority === "high" ? "text-red-400" : 
-                                    task.priority === "medium" ? "text-orange-400" : "text-blue-400"
-                                  }`} />
-                                  <span className="text-[11px] text-[#f2efeb] capitalize font-medium">{task.priority || "Medium"}</span>
-                                </div>
-                              </div>
-                              <div className="space-y-1">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Category</span>
-                                <div className="flex items-center gap-1.5">
-                                  <Tag className="w-3 h-3 text-[#d4a373]/60" />
-                                  <span className="text-[11px] text-[#f2efeb] font-medium">{task.category || "Uncategorized"}</span>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-1">
-                              <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Timeline</span>
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="w-3 h-3 text-[#a8a29e]/40" />
-                                <span className="text-[11px] text-[#f2efeb] font-medium">
-                                  {task.dueDate ? `Due ${formatDateLabel(task.dueDate)}` : "No due date set"}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="pt-2">
-                              <span className="text-[9px] text-[#a8a29e]/30 italic">
-                                Created {new Date(task.createdAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-              
-              {sortedAndFilteredTasks?.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-32 text-center space-y-6">
-                  <div className="w-16 h-16 rounded-3xl bg-[#1f1d19] border border-[#2a2723] flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6 text-[#d4a373]/20" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-bold text-[#a8a29e]/50 uppercase tracking-widest">Quiet Moment</p>
-                    <p className="text-xs text-[#a8a29e]/30">You&apos;re all caught up for now.</p>
-                  </div>
-                </div>
-              )}
-            </motion.div>
+            <TaskList
+              tasks={sortedAndFilteredTasks}
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              isLargeViewport={isLargeViewport}
+              expandedTaskId={expandedTaskId}
+              setExpandedTaskId={setExpandedTaskId}
+              onToggleTask={(id) => toggleTask({ id })}
+              onEditTask={(task) => setEditingTaskObj(task)}
+              onDeleteTask={handleDeleteTask}
+            />
           ) : view === "events" ? (
-            <motion.div
-              key="events"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={isLargeViewport ? undefined : { duration: 0 }}
-              className="space-y-3"
-            >
-              {displayEvents.map((event) => {
-                const eventWorkspace = workspaces?.find(w => w._id === event.workspaceId);
-                return (
-                <motion.div
-                  key={`${event._id}_${event.startTime}`}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={isLargeViewport ? undefined : { duration: 0 }}
-                  className="p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group"
-                >
-                  <div className="flex items-start justify-between gap-4 mb-2">
-                    <div className="flex flex-col gap-1 flex-1">
-                      {(!activeWorkspaceId && eventWorkspace) && (
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <div 
-                            className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
-                            style={{ backgroundColor: eventWorkspace.color }} 
-                          />
-                          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-[#a8a29e]/40">
-                            {eventWorkspace.name}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
-                          style={{ backgroundColor: (!activeWorkspaceId && eventWorkspace) ? eventWorkspace.color : "#d4a373" }}
-                        />
-                        <span className="text-xs text-[#f2efeb] font-bold tracking-tight">{event.title}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
-                        <button 
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setEditingEventId(event._id); 
-                            setEditingEventObj(event);
-                            setEditingEventTimestamp(event.startTime);
-                            setEditEventTitle(event.title);
-                            setEditEventDesc(event.description || "");
-                            setEditEventLocation(event.location || "");
-                            setEditEventStartTime(format(new Date(event.startTime), "yyyy-MM-dd'T'HH:mm"));
-                            setEditEventEndTime(event.endTime ? format(new Date(event.endTime), "yyyy-MM-dd'T'HH:mm") : format(new Date(event.startTime + 3600000), "yyyy-MM-dd'T'HH:mm"));
-                            setEditEventType(event.eventType || (event.endTime ? "interval" : "point"));
-                            if (event.recurrence) {
-                              setEditEventFreq(event.recurrence.frequency);
-                              setEditEventInterval(event.recurrence.interval || 1);
-                              setEditEventDays(event.recurrence.daysOfWeek || []);
-                              setEditEventUntil(event.recurrence.until ? format(new Date(event.recurrence.until), "yyyy-MM-dd") : "");
-                            } else {
-                              setEditEventFreq("none");
-                              setEditEventInterval(1);
-                              setEditEventDays([]);
-                              setEditEventUntil("");
-                            }
-                          }}
-                          className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                        </button>
-                        <button 
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            handleDeleteEvent(event);
-                          }}
-                          className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {(event.eventType === "point" || !event.endTime) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
-                        <span className={`text-[9px] font-bold uppercase tracking-widest whitespace-nowrap ${(event.eventType === "point" || !event.endTime) ? 'text-amber-400' : 'text-[#d4a373]/60'}`}>
-                          {(event.eventType === "point" || !event.endTime) ? 'Release / Drop' : 'Event'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-[#a8a29e]/50 font-medium">
-                    <div className="flex items-center gap-1">
-                      <CalendarIcon className="w-3 h-3" />
-                      <span>{format(new Date(event.startTime), "MMM d, yyyy")}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span className="capitalize">
-                        {format(new Date(event.startTime), "HH:mm")}{event.eventType !== "point" && event.endTime ? ` - ${format(new Date(event.endTime), "HH:mm")}` : ""}
-                      </span>
-                      <span className="text-[8px] opacity-50 font-bold ml-1 uppercase tracking-tighter">
-                        {Intl.DateTimeFormat().resolvedOptions().timeZone.split("/").pop()?.replace("_", " ")}
-                      </span>
-                    </div>
-                    {event.recurrence && (
-                      <div className="flex items-center gap-1 text-[#d4a373]">
-                        <RefreshCw className="w-2.5 h-2.5" />
-                        <span className="capitalize font-bold">{formatRecurrenceText(event.recurrence)}</span>
-                      </div>
-                    )}
-                    {event.location && (
-                      <div className="flex items-center gap-1">
-                        <Tag className="w-3 h-3" />
-                        <span>{event.location}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {event.description && (
-                    <p className="mt-2 text-[10px] text-[#a8a29e]/40 italic leading-relaxed">
-                      {event.description}
-                    </p>
-                  )}
-                </motion.div>
-              );})}
-
-              {events?.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-32 text-center space-y-6">
-                  <div className="w-16 h-16 rounded-3xl bg-[#1f1d19] border border-[#2a2723] flex items-center justify-center">
-                    <CalendarIcon className="w-6 h-6 text-[#a8a29e]/20" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-bold text-[#a8a29e]/50 uppercase tracking-widest">Open Schedule</p>
-                    <p className="text-xs text-[#a8a29e]/30">No events found.</p>
-                  </div>
-                </div>
-              )}
-            </motion.div>
+            <EventList
+              events={displayEvents}
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              isLargeViewport={isLargeViewport}
+              onEditEvent={setEditingEventData}
+              onDeleteEvent={handleDeleteEvent}
+            />
           ) : (
-            <motion.div
-              key="calendar"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={isLargeViewport ? undefined : { duration: 0 }}
-              className="space-y-6"
-            >
-              <div className="p-4 bg-[#1f1d19] rounded-3xl border border-[#2a2723] flex justify-center shadow-xl shadow-black/20">
-                <DayPicker
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  modifiers={{ 
-                    hasTask: taskDates,
-                    hasEvent: eventDates
-                  }}
-                  modifiersClassNames={{
-                    hasTask: "has-task-dot",
-                    hasEvent: "has-event-dot"
-                  }}
-                  className="rdp-custom"
-                  classNames={{
-                    weekdays: "text-[10px] font-bold uppercase tracking-[0.2em] text-[#a8a29e]/40 p-2",
-                    weekday: "p-2",
-                    day: "p-0",
-                    day_button: "rdp-day_button",
-                    selected: "rdp-selected",
-                    today: "rdp-today",
-                    nav: "rdp-nav",
-                    button_previous: "rdp-button_previous",
-                    button_next: "rdp-button_next",
-                    month_caption: "rdp-month_caption",
-                    caption_label: "rdp-caption_label",
-                  }}
-                />
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between px-2">
-                  <div className="space-y-0.5">
-                    <h3 className="text-xs font-bold text-[#f2efeb]">
-                      {selectedDate ? format(selectedDate, "MMMM d") : "Schedule"}
-                    </h3>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
-                      {selectedDate ? format(selectedDate, "yyyy") : "Select a day"}
-                    </p>
-                  </div>
-                  <div className="px-3 py-1 rounded-full bg-[#d4a373]/5 border border-[#d4a373]/10">
-                    <span className="text-[10px] font-bold text-[#d4a373]">
-                      {tasksOnSelectedDate.length + eventsOnSelectedDate.length} {tasksOnSelectedDate.length + eventsOnSelectedDate.length === 1 ? 'Item' : 'Items'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {/* Events Section */}
-                  {eventsOnSelectedDate.map((event: Doc<"events">) => {
-                    const eventWorkspace = workspaces?.find(w => w._id === event.workspaceId);
-                    return (
-                    <div 
-                      key={`${event._id}_${event.startTime}`}
-                      className="p-4 rounded-2xl bg-[#1f1d19] border border-[#d4a373]/20 flex flex-col gap-2 group hover:bg-[#d4a373]/5 transition-all"
-                    >
-                      <div className="flex flex-col gap-1">
-                        {(!activeWorkspaceId && eventWorkspace) && (
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <div 
-                              className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
-                              style={{ backgroundColor: eventWorkspace.color }} 
-                            />
-                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-[#a8a29e]/40">
-                              {eventWorkspace.name}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
-                              style={{ backgroundColor: (!activeWorkspaceId && eventWorkspace) ? eventWorkspace.color : "#d4a373" }}
-                            />
-                            <span className="text-xs text-[#f2efeb] font-bold tracking-tight">{event.title}</span>
-                          </div>
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              setEditingEventId(event._id); 
-                              setEditingEventObj(event);
-                              setEditingEventTimestamp(event.startTime);
-                              setEditEventTitle(event.title);
-                              setEditEventDesc(event.description || "");
-                              setEditEventLocation(event.location || "");
-                              setEditEventStartTime(format(new Date(event.startTime), "yyyy-MM-dd'T'HH:mm"));
-                              setEditEventEndTime(event.endTime ? format(new Date(event.endTime), "yyyy-MM-dd'T'HH:mm") : format(new Date(event.startTime + 3600000), "yyyy-MM-dd'T'HH:mm"));
-                              setEditEventType(event.eventType || (event.endTime ? "interval" : "point"));
-                              if (event.recurrence) {
-                                setEditEventFreq(event.recurrence.frequency);
-                                setEditEventInterval(event.recurrence.interval || 1);
-                                setEditEventDays(event.recurrence.daysOfWeek || []);
-                                setEditEventUntil(event.recurrence.until ? format(new Date(event.recurrence.until), "yyyy-MM-dd") : "");
-                              } else {
-                                setEditEventFreq("none");
-                                setEditEventInterval(1);
-                                setEditEventDays([]);
-                                setEditEventUntil("");
-                              }
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event); }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                          <div className="flex items-center gap-1">
-                            {(event.eventType === "point" || !event.endTime) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
-                            <span className={`text-[9px] font-bold uppercase tracking-widest ${(event.eventType === "point" || !event.endTime) ? 'text-amber-400' : 'text-[#d4a373]/60'}`}>
-                              {(event.eventType === "point" || !event.endTime) ? 'Release / Drop' : 'Event'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-4 text-[10px] text-[#a8a29e]/50 font-medium">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{format(new Date(event.startTime), "HH:mm")}{event.eventType !== "point" && event.endTime ? ` - ${format(new Date(event.endTime), "HH:mm")}` : ""}</span>
-                        </div>
-                        {event.recurrence && (
-                          <div className="flex items-center gap-1 text-[#d4a373]">
-                            <RefreshCw className="w-2.5 h-2.5" />
-                            <span className="capitalize font-bold">{event.recurrence.frequency === "daily" ? (event.recurrence.interval === 1 ? "Daily" : `Every ${event.recurrence.interval} days`) : (event.recurrence.interval === 1 ? "Weekly" : `Every ${event.recurrence.interval} weeks`)}</span>
-                          </div>
-                        )}
-                        {event.location && (
-                          <div className="flex items-center gap-1">
-                            <Tag className="w-3 h-3" />
-                            <span>{event.location}</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {event.description && (
-                        <p className="text-[10px] text-[#a8a29e]/40 italic leading-relaxed">
-                          {event.description}
-                        </p>
-                      )}
-                    </div>
-                  );})}
-
-                  {/* Tasks Section */}
-                  {tasksOnSelectedDate.map((task: Doc<"tasks">) => (
-                    <div 
-                      key={task._id}
-                      className={`p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] flex items-center gap-4 group hover:border-[#d4a373]/20 transition-all ${
-                        task.priority === "high" ? "bg-[#d4a373]/5 border-[#d4a373]/10" : ""
-                      }`}
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        task.priority === "high" ? "bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.4)]" : 
-                        task.priority === "medium" ? "bg-orange-400" : "bg-[#a8a29e]/20"
-                      }`} />
-                      <div className="flex-1 flex items-center justify-between gap-2 overflow-hidden">
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          <span className="text-xs text-[#f2efeb] truncate font-medium tracking-tight">{task.text}</span>
-                          <span className="text-[9px] font-bold text-[#a8a29e]/30 uppercase tracking-widest">Task</span>
-                        </div>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); handleDeleteTask(task._id); }}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all shrink-0"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {tasksOnSelectedDate.length === 0 && eventsOnSelectedDate.length === 0 && (
-                    <div className="py-12 text-center space-y-3 bg-[#1f1d19]/30 rounded-3xl border border-dashed border-[#2a2723]">
-                      <CalendarIcon className="w-6 h-6 text-[#a8a29e]/10 mx-auto" />
-                      <p className="text-[10px] text-[#a8a29e]/40 uppercase tracking-[0.2em] font-bold">Clear Horizon</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
+            <CalendarView
+              selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
+              taskDates={taskDates}
+              eventDates={eventDates}
+              tasksOnSelectedDate={tasksOnSelectedDate}
+              eventsOnSelectedDate={eventsOnSelectedDate}
+              workspaces={workspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              isLargeViewport={isLargeViewport}
+              onEditEvent={setEditingEventData}
+              onDeleteEvent={handleDeleteEvent}
+              onDeleteTask={handleDeleteTask}
+            />
           )}
         </AnimatePresence>
       </div>
-      {/* Confirmation Modal */}
+
+      {/* Modals */}
       <AnimatePresence>
         {confirmDelete && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={isLargeViewport ? { duration: 0.2 } : { duration: 0 }}
-            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-md p-0 sm:p-6"
-            onClick={() => setConfirmDelete(null)}
-          >
-            <motion.div 
-              initial={{ y: "100%", opacity: 0, scale: 0.95 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: "100%", opacity: 0, scale: 0.95 }}
-              transition={isLargeViewport ? { type: "spring", damping: 25, stiffness: 300 } : { duration: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg bg-[#1a1814] border border-[#d4a373]/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between pb-4 border-b border-[#2a2723]">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400">
-                    <Trash2 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Delete {confirmDelete.type === "task" ? "Task" : "Event"}</h3>
-                    <span className="text-[10px] text-[#a8a29e]">Confirm deletion</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(null)}
-                  className="p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-4 text-sm text-[#a8a29e] leading-relaxed">
-                <p>
-                  {confirmDelete.type === "event" && confirmDelete.event?.recurrence
-                    ? "This is a repeating event. You can delete just this occurrence or the entire series."
-                    : `This action cannot be undone. All data associated with this ${confirmDelete.type} will be permanently removed.`}
-                </p>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-[#2a2723] justify-end">
-                {confirmDelete.type === "event" && confirmDelete.event?.recurrence ? (
-                  <>
-                    <button 
-                      onClick={() => setConfirmDelete(null)}
-                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all sm:order-1"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={() => executeDeleteEvent(confirmDelete.id as Id<"events">)}
-                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all sm:order-2"
-                    >
-                      Entire Series
-                    </button>
-                    <button 
-                      onClick={() => {
-                        if (confirmDelete.event) {
-                          cancelEventOccurrence({ id: confirmDelete.id as Id<"events">, timestamp: confirmDelete.event.startTime });
-                          setConfirmDelete(null);
-                        }
-                      }}
-                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 sm:order-3"
-                    >
-                      This Date Only
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button 
-                      onClick={() => setConfirmDelete(null)}
-                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all sm:order-1"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={() => {
-                        if (confirmDelete.type === "task") {
-                          executeDeleteTask(confirmDelete.id as Id<"tasks">);
-                        } else {
-                          executeDeleteEvent(confirmDelete.id as Id<"events">);
-                        }
-                      }}
-                      className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 sm:order-2"
-                    >
-                      Delete {confirmDelete.type === "task" ? "Task" : "Event"}
-                    </button>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
+          <DeleteConfirmModal
+            target={confirmDelete}
+            isLargeViewport={isLargeViewport}
+            onConfirmDelete={async (id, type) => {
+              if (type === "task") {
+                await executeDeleteTask(id as Id<"tasks">);
+              } else {
+                await executeDeleteEvent(id as Id<"events">);
+              }
+            }}
+            onConfirmDeleteOccurrence={async (id, timestamp) => {
+              await cancelEventOccurrence({ id, timestamp });
+              setConfirmDelete(null);
+            }}
+            onCancel={() => setConfirmDelete(null)}
+          />
         )}
+
         {confirmEditRecurring && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={isLargeViewport ? { duration: 0.2 } : { duration: 0 }}
-            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-md p-0 sm:p-6"
-            onClick={() => {
+          <RecurringEditModal
+            data={confirmEditRecurring}
+            isLargeViewport={isLargeViewport}
+            onSaveSeries={async (id, updates) => {
+              await updateEvent({ id, ...updates });
               setConfirmEditRecurring(null);
-              setEditingEventObj(null);
-              setEditingEventTimestamp(null);
             }}
-          >
-            <motion.div 
-              initial={{ y: "100%", opacity: 0, scale: 0.95 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: "100%", opacity: 0, scale: 0.95 }}
-              transition={isLargeViewport ? { type: "spring", damping: 25, stiffness: 300 } : { duration: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg bg-[#1a1814] border border-[#d4a373]/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between pb-4 border-b border-[#2a2723]">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-[#d4a373]/15 flex items-center justify-center text-[#d4a373]">
-                    <Edit3 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Save Recurring Event</h3>
-                    <span className="text-[10px] text-[#a8a29e]">Modifying a repeating event</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmEditRecurring(null);
-                    setEditingEventObj(null);
-                    setEditingEventTimestamp(null);
-                  }}
-                  className="p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-4 text-sm text-[#a8a29e] leading-relaxed">
-                <p>
-                  You are modifying a repeating event. Do you want to save changes for this specific date only, or for the entire repeating series?
-                </p>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-[#2a2723] justify-end">
-                <button 
-                  onClick={() => {
-                    setConfirmEditRecurring(null);
-                    setEditingEventObj(null);
-                    setEditingEventTimestamp(null);
-                  }}
-                  className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all sm:order-1"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={async () => {
-                    setIsSubmitting(true);
-                    try {
-                      await updateEvent({
-                        id: confirmEditRecurring.id,
-                        ...confirmEditRecurring.updates,
-                      });
-                      setConfirmEditRecurring(null);
-                      setEditingEventId(null);
-                      setEditingEventObj(null);
-                      setEditingEventTimestamp(null);
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                  className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-[#2a2723] text-[#f2efeb] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#3a3630] transition-all sm:order-2"
-                >
-                  Entire Series
-                </button>
-                <button 
-                  onClick={async () => {
-                    setIsSubmitting(true);
-                    try {
-                      await updateOccurrence({
-                        seriesId: confirmEditRecurring.id,
-                        originalStartTime: confirmEditRecurring.timestamp,
-                        startTime: confirmEditRecurring.updates.startTime,
-                        endTime: confirmEditRecurring.updates.endTime,
-                        eventType: confirmEditRecurring.updates.eventType,
-                        title: confirmEditRecurring.updates.title,
-                        description: confirmEditRecurring.updates.description,
-                        location: confirmEditRecurring.updates.location,
-                      });
-                      setConfirmEditRecurring(null);
-                      setEditingEventId(null);
-                      setEditingEventObj(null);
-                      setEditingEventTimestamp(null);
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                  className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg sm:order-3"
-                >
-                  This Date Only
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+            onSaveOccurrence={async (seriesId, originalStartTime, updates) => {
+              await updateOccurrence({
+                seriesId,
+                originalStartTime,
+                startTime: updates.startTime,
+                endTime: updates.endTime,
+                eventType: updates.eventType,
+                title: updates.title,
+                description: updates.description,
+                location: updates.location,
+              });
+              setConfirmEditRecurring(null);
+            }}
+            onCancel={() => setConfirmEditRecurring(null)}
+          />
         )}
 
-        {/* Edit Task Modal */}
-        {editingTaskId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={isLargeViewport ? { duration: 0.2 } : { duration: 0 }}
-            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-md p-0 sm:p-6"
-            onClick={() => setEditingTaskId(null)}
-          >
-            <motion.div
-              initial={{ y: "100%", opacity: 0, scale: 0.95 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: "100%", opacity: 0, scale: 0.95 }}
-              transition={isLargeViewport ? { type: "spring", damping: 25, stiffness: 300 } : { duration: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg bg-[#1a1814] border border-[#d4a373]/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between pb-4 border-b border-[#2a2723]">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-[#d4a373]/15 flex items-center justify-center text-[#d4a373]">
-                    <ListTodo className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Edit Task</h3>
-                    <span className="text-[10px] text-[#a8a29e]">Modify details and timeline</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditingTaskId(null)}
-                  className="p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Task Description</label>
-                  <textarea
-                    autoFocus
-                    name="panel-task-desc"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    rows={3}
-                    className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-2xl p-3 text-sm text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none resize-none transition-all"
-                    value={editTaskText}
-                    onChange={(e) => setEditTaskText(e.target.value)}
-                    placeholder="What needs to be done?"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Priority Level</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditTaskPriority("low")}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border flex items-center justify-center gap-2 ${
-                        editTaskPriority === "low"
-                          ? "bg-blue-500/15 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/10"
-                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
-                      }`}
-                    >
-                      <Circle className="w-3 h-3 text-blue-400" /> Low
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditTaskPriority("medium")}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border flex items-center justify-center gap-2 ${
-                        editTaskPriority === "medium"
-                          ? "bg-amber-500/15 border-amber-500/50 text-amber-400 shadow-lg shadow-amber-500/10"
-                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
-                      }`}
-                    >
-                      <AlertCircle className="w-3 h-3 text-amber-400" /> Medium
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditTaskPriority("high")}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border flex items-center justify-center gap-2 ${
-                        editTaskPriority === "high"
-                          ? "bg-red-500/15 border-red-500/50 text-red-400 shadow-lg shadow-red-500/10"
-                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
-                      }`}
-                    >
-                      <AlertCircle className="w-3 h-3 text-red-400" /> High
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Category</label>
-                    <div className="relative flex items-center">
-                      <Tag className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
-                      <input
-                        name="panel-task-category"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        spellCheck={false}
-                        className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all"
-                        value={editTaskCategory}
-                        onChange={(e) => setEditTaskCategory(e.target.value)}
-                        placeholder="Work, Personal..."
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Due Date</label>
-                    <div className="relative flex items-center">
-                      <Clock className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
-                      <input
-                        type="datetime-local"
-                        name="panel-task-due"
-                        autoComplete="off"
-                        className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
-                        value={editTaskDueDate}
-                        onChange={(e) => setEditTaskDueDate(e.target.value)}
-                        onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-[#2a2723]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleDeleteTask(editingTaskId);
-                    setEditingTaskId(null);
-                  }}
-                  className="p-2.5 rounded-xl text-red-500/70 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
-                >
-                  <Trash2 className="w-4 h-4" /> Delete Task
-                </button>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setEditingTaskId(null)}
-                    disabled={isSubmitting}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#a8a29e] hover:text-[#f2efeb] transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateTask(editingTaskId)}
-                    disabled={isSubmitting}
-                    className="px-6 py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/20 flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {isSubmitting ? (
-                      <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    Save Task
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+        {editingTaskObj && (
+          <EditTaskModal
+            task={editingTaskObj}
+            isLargeViewport={isLargeViewport}
+            onSave={handleUpdateTask}
+            onDelete={(id) => {
+              handleDeleteTask(id);
+              setEditingTaskObj(null);
+            }}
+            onClose={() => setEditingTaskObj(null)}
+          />
         )}
 
-        {/* Edit Event Modal */}
-        {editingEventId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={isLargeViewport ? { duration: 0.2 } : { duration: 0 }}
-            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-md p-0 sm:p-6"
-            onClick={() => {
-              setEditingEventId(null);
-              setEditingEventObj(null);
-              setEditingEventTimestamp(null);
+        {editingEventData && (
+          <EditEventModal
+            editingData={editingEventData}
+            isLargeViewport={isLargeViewport}
+            onSave={handleUpdateEvent}
+            onSaveRecurring={handleSaveRecurring}
+            onDelete={(event) => {
+              handleDeleteEvent(event);
+              setEditingEventData(null);
             }}
-          >
-            <motion.div
-              initial={{ y: "100%", opacity: 0, scale: 0.95 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: "100%", opacity: 0, scale: 0.95 }}
-              transition={isLargeViewport ? { type: "spring", damping: 25, stiffness: 300 } : { duration: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg bg-[#1a1814] border border-[#d4a373]/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
-            >
-              <div className="flex items-center justify-between pb-4 border-b border-[#2a2723]">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-[#d4a373]/15 flex items-center justify-center text-[#d4a373]">
-                    <CalendarIcon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Edit Event</h3>
-                    <span className="text-[10px] text-[#a8a29e]">Modify timing, location, and recurrence</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingEventId(null);
-                    setEditingEventObj(null);
-                    setEditingEventTimestamp(null);
-                  }}
-                  className="p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Event Title</label>
-                  <input
-                    autoFocus
-                    name="panel-event-title"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-3 text-sm font-bold text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none transition-all"
-                    value={editEventTitle}
-                    onChange={(e) => setEditEventTitle(e.target.value)}
-                    placeholder="Event title..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Description</label>
-                  <textarea
-                    name="panel-event-desc"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    rows={2}
-                    className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-3 text-xs text-[#a8a29e] placeholder:text-[#a8a29e]/30 outline-none resize-none transition-all"
-                    value={editEventDesc}
-                    onChange={(e) => setEditEventDesc(e.target.value)}
-                    placeholder="Event notes or details..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Location</label>
-                  <div className="relative flex items-center">
-                    <Tag className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
-                    <input
-                      name="panel-event-loc"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all"
-                      value={editEventLocation}
-                      onChange={(e) => setEditEventLocation(e.target.value)}
-                      placeholder="Add location or link..."
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Event Type</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditEventType("interval")}
-                      className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${
-                        editEventType === "interval"
-                          ? "bg-[#d4a373]/15 border-[#d4a373] text-[#d4a373] shadow-lg shadow-[#d4a373]/10"
-                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
-                      }`}
-                    >
-                      <Clock className="w-4 h-4" /> Time Interval
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditEventType("point")}
-                      className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${
-                        editEventType === "point"
-                          ? "bg-amber-500/15 border-amber-500 text-amber-400 shadow-lg shadow-amber-500/10"
-                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
-                      }`}
-                    >
-                      <Zap className="w-4 h-4" /> Release / Drop
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">
-                      {editEventType === "point" ? "Moment" : "Start Time"}
-                    </label>
-                    <input
-                      type="datetime-local"
-                      name="panel-event-start"
-                      autoComplete="off"
-                      className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
-                      value={editEventStartTime}
-                      onChange={(e) => setEditEventStartTime(e.target.value)}
-                      onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                    />
-                  </div>
-                  {editEventType === "interval" && (
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">End Time</label>
-                      <input
-                        type="datetime-local"
-                        name="panel-event-end"
-                        autoComplete="off"
-                        className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
-                        value={editEventEndTime}
-                        onChange={(e) => setEditEventEndTime(e.target.value)}
-                        onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2 pt-2 border-t border-[#2a2723]">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Recurrence</label>
-                  <div className="flex items-center gap-3">
-                    <select
-                      className="bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2 text-xs text-[#f2efeb] outline-none cursor-pointer flex-1"
-                      value={editEventFreq}
-                      onChange={(e) => setEditEventFreq(e.target.value as "none" | "daily" | "weekly")}
-                    >
-                      <option value="none">Does not repeat</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                    </select>
-                    {editEventFreq !== "none" && (
-                      <div className="flex items-center gap-2 bg-[#0f0e0c] border border-[#2a2723] rounded-xl px-3 py-2">
-                        <span className="text-xs text-[#a8a29e]">Every</span>
-                        <input
-                          type="number"
-                          name="panel-event-interval"
-                          autoComplete="off"
-                          min={1}
-                          max={30}
-                          className="w-12 bg-transparent text-xs text-[#f2efeb] font-bold outline-none text-center"
-                          value={editEventInterval}
-                          onChange={(e) => setEditEventInterval(Math.max(1, parseInt(e.target.value) || 1))}
-                        />
-                        <span className="text-xs text-[#a8a29e]">
-                          {editEventFreq === "daily" ? "days" : "weeks"}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  {editEventFreq === "weekly" && (
-                    <div className="flex justify-between gap-1.5 pt-2">
-                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            if (editEventDays.includes(idx)) {
-                              setEditEventDays(editEventDays.filter((d) => d !== idx));
-                            } else {
-                              setEditEventDays([...editEventDays, idx]);
-                            }
-                          }}
-                          className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center ${
-                            editEventDays.includes(idx)
-                              ? "bg-[#d4a373] text-[#0f0e0c] shadow-md shadow-[#d4a373]/20"
-                              : "bg-[#0f0e0c] text-[#a8a29e] border border-[#2a2723] hover:border-[#d4a373]/30"
-                          }`}
-                        >
-                          {dayName}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {editEventFreq !== "none" && (
-                    <div className="space-y-1.5 pt-3 border-t border-[#2a2723]">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">End Repeat (Optional)</label>
-                      <div className="relative flex items-center">
-                        <CalendarIcon className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
-                        <input
-                          type="date"
-                          name="panel-event-until"
-                          autoComplete="off"
-                          className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2 text-xs text-[#f2efeb] outline-none transition-all cursor-pointer appearance-none"
-                          value={editEventUntil}
-                          onChange={(e) => setEditEventUntil(e.target.value)}
-                        />
-                      </div>
-                      <span className="text-[10px] text-[#a8a29e]/50 block pt-0.5">Leave empty for infinite recurrence.</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-[#2a2723]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (editingEventObj) handleDeleteEvent(editingEventObj);
-                    setEditingEventId(null);
-                    setEditingEventObj(null);
-                    setEditingEventTimestamp(null);
-                  }}
-                  className="p-2.5 rounded-xl text-red-500/70 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
-                >
-                  <Trash2 className="w-4 h-4" /> Delete Event
-                </button>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingEventId(null);
-                      setEditingEventObj(null);
-                      setEditingEventTimestamp(null);
-                    }}
-                    disabled={isSubmitting}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#a8a29e] hover:text-[#f2efeb] transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateEvent(editingEventId)}
-                    disabled={isSubmitting}
-                    className="px-6 py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/20 flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {isSubmitting ? (
-                      <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    Save Event
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
+            onClose={() => setEditingEventData(null)}
+          />
         )}
       </AnimatePresence>
     </div>
