@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import Link from "next/link";
 import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2, ArrowDown, LogOut, RefreshCw, ChevronsUpDown } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -496,7 +496,7 @@ export function Chat({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<{ [name: string]: string }>({});
   const [isUploading, setIsUploading] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const isSyncing = !!(activeSessionId && messages === undefined);
   const [isTyping, setIsTyping] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -524,27 +524,6 @@ export function Chat({
     }
   };
 
-  // Minimum Sync Time to prevent flickering when switching sessions
-  useEffect(() => {
-    if (activeSessionId && messages === undefined) {
-      // Trigger sync state in the next tick
-      const syncTrigger = setTimeout(() => setIsSyncing(true), 0);
-      
-      // Guaranteed release after 800ms
-      setTimeout(() => {
-        setIsSyncing(false);
-      }, 800); 
-      
-      return () => {
-        clearTimeout(syncTrigger);
-        // Note: We intentionally don't clear the main 800ms timer here 
-        // to ensure the sync screen always finishes its animation cycle 
-        // even if data loads instantly.
-      };
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId]); // Only trigger on session change to avoid stuck states
-
   useEffect(() => {
     const newPreviews: { [name: string]: string } = {};
     const cleanupUrls: string[] = [];
@@ -570,21 +549,39 @@ export function Chat({
   });
   
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const mainScrollRef = useRef<HTMLElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevScrollSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
-  const prevSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
+  const lastAnchoredSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
 
-  const scrollToBottom = useCallback((forceInstant?: boolean | React.MouseEvent) => {
-    const isInstant = forceInstant === true;
-    let behavior: ScrollBehavior = "smooth";
-    if (isInstant || activeSessionId !== prevScrollSessionIdRef.current) {
-      behavior = "instant";
-      if (activeSessionId) {
-        prevScrollSessionIdRef.current = activeSessionId;
+  const anchorToMessage = useCallback((targetId?: string) => {
+    if (targetId) {
+      const el = document.getElementById(`msg-${targetId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "instant", block: "center" });
+        return;
       }
     }
-    messagesEndRef.current?.scrollIntoView({ behavior });
-  }, [activeSessionId]);
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTop = mainScrollRef.current.scrollHeight;
+    }
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "instant" });
+    }
+  }, []);
+
+  const scrollToBottom = useCallback((forceInstant?: boolean | React.MouseEvent) => {
+    const isInstant = forceInstant === true || activeSessionId !== prevScrollSessionIdRef.current;
+    if (activeSessionId) {
+      prevScrollSessionIdRef.current = activeSessionId;
+    }
+    if (isInstant) {
+      const targetMsg = messages && messages.length > 0 ? ([...messages].reverse().find(m => m.author === "User") || messages[messages.length - 1]) : undefined;
+      anchorToMessage(targetMsg?._id);
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [activeSessionId, messages, anchorToMessage]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -613,21 +610,27 @@ export function Chat({
     }
   }, [sessions, activeSessionId, setActiveSessionId]);
 
-  useEffect(() => {
-    if (activeSessionId && !isSyncing && messages !== undefined) {
-      if (activeSessionId !== prevSessionIdRef.current) {
-        prevSessionIdRef.current = activeSessionId;
+  // Instant session anchoring: useLayoutEffect fires synchronously after DOM commit,
+  // BEFORE browser paint, so the first visible frame is already at the correct position.
+  useLayoutEffect(() => {
+    if (activeSessionId && messages !== undefined && messages.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isCorrectSessionData = (messages[0] && (messages[0] as any).sessionId === activeSessionId);
+      if (isCorrectSessionData && activeSessionId !== lastAnchoredSessionIdRef.current) {
+        lastAnchoredSessionIdRef.current = activeSessionId;
         setShowScrollBottom(false);
-        const jump = () => {
-          messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-        };
-        jump();
-        requestAnimationFrame(jump);
-        setTimeout(jump, 50);
-        setTimeout(jump, 150);
+        
+        const lastMsg = messages[messages.length - 1];
+        const targetId = lastMsg?._id;
+
+        const executeAnchor = () => anchorToMessage(targetId);
+        executeAnchor();
+        requestAnimationFrame(executeAnchor);
+        setTimeout(executeAnchor, 50);
+        setTimeout(executeAnchor, 200);
       }
     }
-  }, [activeSessionId, isSyncing, messages]);
+  }, [activeSessionId, messages, anchorToMessage]);
 
   useEffect(() => {
     if (!showScrollBottom) {
@@ -1524,18 +1527,20 @@ export function Chat({
         </div>
 
         <main 
+          ref={mainScrollRef}
           onScroll={handleScroll}
           className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 space-y-6 lg:space-y-12 custom-scrollbar lg:scrollbar-default scrollbar-hide"
         >
 
           <div className="max-w-4xl mx-auto flex flex-col">
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
             {(isSyncing || (messages === undefined && activeSessionId)) ? (
               <motion.div 
                 key="synchronizing"
-                initial={{ opacity: 0 }}
+                initial={{ opacity: 1 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
+                transition={{ duration: 0 }}
                 className="flex-1 flex flex-col items-center justify-center min-h-[75svh] space-y-6"
               >
                 <Sparkles className="w-10 h-10 text-[#d4a373] animate-spin-slow" />
@@ -1587,17 +1592,16 @@ export function Chat({
                   </div>
                 </motion.div>
               ) : (
-                <motion.div 
-                  key="chat-messages"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
+                <div 
+                  key={`chat-messages-${activeSessionId || "default"}`}
                   className="space-y-6 lg:space-y-12"
                 >
                   <AnimatePresence initial={false}>
                     {[...messages].map((msg) => (
-                  <div key={msg._id}>
                     <motion.div
+                      layout="position"
+                      key={msg._id}
+                      id={`msg-${msg._id}`}
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.4, ease: "easeOut" }}
@@ -1783,7 +1787,6 @@ export function Chat({
                         </span>
                       </div>
                     </motion.div>
-                  </div>
                   ))}
                   
                   {/* Typing Indicator */}
@@ -1825,7 +1828,7 @@ export function Chat({
                   className="w-full shrink-0"
                 />
                 <div ref={messagesEndRef} className="h-px w-full" />
-              </motion.div>
+              </div>
             )}
           </AnimatePresence>
         </div>
@@ -1978,6 +1981,7 @@ export function Chat({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={isLargeViewport ? { duration: 0.2 } : { duration: 0 }}
               onClick={() => setIsCreatingWorkspace(false)}
               className="absolute inset-0 bg-black/80 backdrop-blur-md"
             />
@@ -1985,6 +1989,7 @@ export function Chat({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={isLargeViewport ? { type: "spring", damping: 30, stiffness: 300 } : { duration: 0 }}
               className="relative w-full max-w-[400px] bg-[#1a1814] border border-[#d4a373]/30 rounded-[32px] p-8 lg:p-10 shadow-[0_30px_90px_rgba(0,0,0,0.8)] space-y-8 overflow-hidden"
             >
               <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#d4a373]/10 blur-[80px] rounded-full" />
@@ -2042,6 +2047,7 @@ export function Chat({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={isLargeViewport ? { duration: 0.2 } : { duration: 0 }}
             className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-sm p-6"
             onClick={() => setConfirmDeleteSession(null)}
           >
@@ -2049,6 +2055,7 @@ export function Chat({
               initial={{ scale: 0.95, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={isLargeViewport ? { type: "spring", damping: 30, stiffness: 300 } : { duration: 0 }}
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-[320px] bg-[#1a1814] border border-[#d4a373]/20 rounded-2xl p-6 shadow-2xl"
             >
