@@ -15,6 +15,7 @@ interface MessageBubbleProps {
     text: string;
     timestamp: number;
     toolCall?: unknown;
+    toolCalls?: unknown[];
     attachments?: Array<{
       storageId: string;
       fileName?: string;
@@ -213,6 +214,11 @@ export const MessageBubble = React.memo(function MessageBubble({ msg }: MessageB
           {msg.author === "AI" && !!msg.toolCall && (
             <ToolCard toolCall={msg.toolCall as ToolCall} />
           )}
+          {msg.author === "AI" && !!msg.toolCalls && (msg.toolCalls as ToolCall[]).map((tc, idx) => (
+            <div key={idx} className="mt-3">
+              <ToolCard toolCall={tc} />
+            </div>
+          ))}
         </div>
         <span className="text-[9px] text-[#a8a29e]/60 font-bold tracking-widest uppercase px-1">
           {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

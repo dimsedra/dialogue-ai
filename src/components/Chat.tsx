@@ -123,9 +123,7 @@ export function Chat({
         userText,
       });
 
-      if (result.toolCall) {
-        const { name, args } = result.toolCall;
-        
+      if (result.toolCalls && result.toolCalls.length > 0) {
         const parseLocal = (s: string) => {
           const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
           if (match) {
@@ -135,116 +133,129 @@ export function Chat({
           return new Date(s).getTime();
         };
 
-        // Enrich metadata for the UI before sending
-        const enrichedArgs = { ...args } as EnrichedToolArgs;
+        const executedCalls: Array<{ name: string; args: Record<string, unknown>; result?: unknown }> = [];
 
-        if (name === "addTask" || name === "updateTask") {
-          if (name === "addTask") {
-            await addTask({ 
-              ...args, 
-              dueDate: args.dueDate ? parseLocal(args.dueDate as string) : undefined,
-              workspaceId: promptCtx.workspaceId 
-            });
-          } else {
-            const oldTask = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
-            const taskUpdates: Record<string, string | number | boolean | undefined> = {};
-            if (args.text) taskUpdates.text = args.text;
-            if (args.completed !== undefined) taskUpdates.completed = args.completed;
-            if (args.priority) taskUpdates.priority = args.priority;
-            if (args.category) taskUpdates.category = args.category;
-            if (args.notes) taskUpdates.notes = args.notes;
-            if (args.dueDate) taskUpdates.dueDate = parseLocal(args.dueDate as string);
+        for (const tc of result.toolCalls) {
+          const { name, args } = tc;
+          const enrichedArgs = { ...args } as EnrichedToolArgs;
 
-            await updateTask({
-              id: args.taskId as Id<"tasks">,
-              ...taskUpdates
-            });
+          if (name === "addTask" || name === "updateTask") {
+            if (name === "addTask") {
+              await addTask({ 
+                text: (args.text as string) || "New Task",
+                priority: args.priority as "low" | "medium" | "high" | undefined,
+                category: args.category as string | undefined,
+                notes: args.notes as string | undefined,
+                dueDate: args.dueDate ? parseLocal(args.dueDate as string) : undefined,
+                workspaceId: promptCtx.workspaceId ?? undefined,
+              });
+            } else {
+              const oldTask = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
+              const taskUpdates: Record<string, string | number | boolean | undefined> = {};
+              if (args.text) taskUpdates.text = args.text as string;
+              if (args.completed !== undefined) taskUpdates.completed = args.completed as boolean;
+              if (args.priority) taskUpdates.priority = args.priority as "low" | "medium" | "high";
+              if (args.category) taskUpdates.category = args.category as string;
+              if (args.notes) taskUpdates.notes = args.notes as string;
+              if (args.dueDate) taskUpdates.dueDate = parseLocal(args.dueDate as string);
 
-            enrichedArgs.titleHint = oldTask?.text;
-            enrichedArgs.oldValues = oldTask ? {
-              text: oldTask.text,
-              priority: oldTask.priority,
-              category: oldTask.category,
-              dueDate: oldTask.dueDate,
-              completed: oldTask.completed
-            } : undefined;
+              await updateTask({
+                id: args.taskId as Id<"tasks">,
+                ...taskUpdates
+              });
+
+              enrichedArgs.titleHint = oldTask?.text;
+              enrichedArgs.oldValues = oldTask ? {
+                text: oldTask.text,
+                priority: oldTask.priority,
+                category: oldTask.category,
+                dueDate: oldTask.dueDate,
+                completed: oldTask.completed
+              } : undefined;
+            }
           }
-        }
-        else if (name === "addEvent" || name === "updateEvent") {
-          if (name === "addEvent") {
-            const startTime = parseLocal(args.startTime as string);
-            const endTime = args.endTime ? parseLocal(args.endTime as string) : undefined;
-            const eventType = args.eventType || (args.endTime ? "interval" : "point");
-            
-            await addEvent({ 
-              ...args, 
-              startTime, 
-              endTime, 
-              eventType,
-              workspaceId: promptCtx.workspaceId 
-            });
-          } else {
-            const oldEvent = await convex.query(api.events.get, { id: args.eventId as Id<"events"> });
-            const updates: Record<string, string | number> = {};
-            if (args.title) updates.title = args.title;
-            if (args.location) updates.location = args.location;
-            if (args.notes) updates.notes = args.notes;
-            if (args.startTime) updates.startTime = parseLocal(args.startTime as string);
-            if (args.endTime) updates.endTime = parseLocal(args.endTime as string);
-            if (args.eventType) updates.eventType = args.eventType as string;
+          else if (name === "addEvent" || name === "updateEvent") {
+            if (name === "addEvent") {
+              const startTime = parseLocal(args.startTime as string);
+              const endTime = args.endTime ? parseLocal(args.endTime as string) : undefined;
+              const eventType = (args.eventType as "interval" | "point") || (args.endTime ? "interval" : "point");
+              
+              await addEvent({ 
+                title: (args.title as string) || "Untitled Event",
+                location: args.location as string | undefined,
+                description: args.description as string | undefined,
+                notes: args.notes as string | undefined,
+                startTime, 
+                endTime, 
+                eventType,
+                workspaceId: promptCtx.workspaceId ?? undefined,
+              });
+            } else {
+              const oldEvent = await convex.query(api.events.get, { id: args.eventId as Id<"events"> });
+              const updates: Record<string, string | number> = {};
+              if (args.title) updates.title = args.title as string;
+              if (args.location) updates.location = args.location as string;
+              if (args.notes) updates.notes = args.notes as string;
+              if (args.startTime) updates.startTime = parseLocal(args.startTime as string);
+              if (args.endTime) updates.endTime = parseLocal(args.endTime as string);
+              if (args.eventType) updates.eventType = args.eventType as string;
 
-            await updateEvent({
-              id: args.eventId as Id<"events">,
-              ...updates
-            });
+              await updateEvent({
+                id: args.eventId as Id<"events">,
+                ...updates
+              });
 
-            enrichedArgs.titleHint = oldEvent?.title;
-            enrichedArgs.oldValues = oldEvent ? {
-              title: oldEvent.title,
-              startTime: oldEvent.startTime,
-              endTime: oldEvent.endTime,
-              location: oldEvent.location,
-            } : undefined;
+              enrichedArgs.titleHint = oldEvent?.title;
+              enrichedArgs.oldValues = oldEvent ? {
+                title: oldEvent.title,
+                startTime: oldEvent.startTime,
+                endTime: oldEvent.endTime,
+                location: oldEvent.location,
+              } : undefined;
+            }
           }
-        }
-        else if (name === "deleteEvent") {
-          const event = await convex.query(api.events.get, { id: args.eventId as Id<"events"> });
-          await deleteEvent({ id: args.eventId as Id<"events"> });
-          enrichedArgs.titleHint = event?.title;
-        }
-        else if (name === "updateEventOccurrence") {
-          const oldEvent = await convex.query(api.events.get, { id: args.seriesId as Id<"events"> });
-          await updateOccurrence({
-            seriesId: args.seriesId as Id<"events">,
-            originalStartTime: parseLocal(args.originalStartTime as string),
-            startTime: args.startTime ? parseLocal(args.startTime as string) : undefined,
-            endTime: args.endTime ? parseLocal(args.endTime as string) : undefined,
-            eventType: args.eventType ? (args.eventType as "interval" | "point") : undefined,
-            title: args.title,
-            location: args.location,
-          });
-          enrichedArgs.titleHint = args.title ?? oldEvent?.title;
-        }
-        else if (name === "completeTask") {
-          const task = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
-          await completeTask({ id: args.taskId as Id<"tasks"> });
-          enrichedArgs.titleHint = task?.text;
-        }
-        else if (name === "deleteTask") {
-          const task = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
-          await deleteTask({ id: args.taskId as Id<"tasks"> });
-          enrichedArgs.titleHint = task?.text;
-        }
-        else if (name === "updateMemory") {
-          await updateMemory({ bio: args.bio as string });
-          enrichedArgs.oldBio = profile?.bio;
+          else if (name === "deleteEvent") {
+            const event = await convex.query(api.events.get, { id: args.eventId as Id<"events"> });
+            await deleteEvent({ id: args.eventId as Id<"events"> });
+            enrichedArgs.titleHint = event?.title;
+          }
+          else if (name === "updateEventOccurrence") {
+            const oldEvent = await convex.query(api.events.get, { id: args.seriesId as Id<"events"> });
+            await updateOccurrence({
+              seriesId: args.seriesId as Id<"events">,
+              originalStartTime: parseLocal(args.originalStartTime as string),
+              startTime: args.startTime ? parseLocal(args.startTime as string) : undefined,
+              endTime: args.endTime ? parseLocal(args.endTime as string) : undefined,
+              eventType: args.eventType ? (args.eventType as "interval" | "point") : undefined,
+              title: args.title as string | undefined,
+              location: args.location as string | undefined,
+            });
+            enrichedArgs.titleHint = (args.title as string | undefined) ?? oldEvent?.title;
+          }
+          else if (name === "completeTask") {
+            const task = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
+            await completeTask({ id: args.taskId as Id<"tasks"> });
+            enrichedArgs.titleHint = task?.text;
+          }
+          else if (name === "deleteTask") {
+            const task = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
+            await deleteTask({ id: args.taskId as Id<"tasks"> });
+            enrichedArgs.titleHint = task?.text;
+          }
+          else if (name === "updateMemory") {
+            await updateMemory({ bio: args.bio as string });
+            enrichedArgs.oldBio = profile?.bio;
+          }
+
+          executedCalls.push({ name, args: enrichedArgs, result: { status: "success" } });
         }
 
         await sendMessage({
           sessionId,
           text: result.aiText || "Done!",
           author: "AI",
-          toolCall: { name, args: enrichedArgs, result: { status: "success" } },
+          toolCall: executedCalls[0],
+          toolCalls: executedCalls,
         });
       } else {
         await sendMessage({

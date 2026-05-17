@@ -226,19 +226,21 @@ export async function processLocalLLMRequest({
     const message: LMMessage = data.choices[0].message;
     let aiText = message.content || "";
     let toolCall = null;
+    let toolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
 
     if (message.tool_calls && message.tool_calls.length > 0) {
-      const toolCalls: LMToolCall[] = message.tool_calls;
-      const searchCalls = toolCalls.filter((c: LMToolCall) => c.function.name === "searchWeb");
-      const otherCall = toolCalls.find((c: LMToolCall) => c.function.name !== "searchWeb");
+      const rawToolCalls: LMToolCall[] = message.tool_calls;
+      
+      toolCalls = rawToolCalls.map(c => ({
+        name: c.function.name,
+        args: JSON.parse(c.function.arguments)
+      }));
 
-      if (otherCall || searchCalls.length > 0) {
-        const primaryCall = otherCall || searchCalls[0];
-        toolCall = {
-          name: primaryCall.function.name,
-          args: JSON.parse(primaryCall.function.arguments)
-        };
+      if (toolCalls.length > 0) {
+        toolCall = toolCalls[0];
       }
+
+      const searchCalls = rawToolCalls.filter((c: LMToolCall) => c.function.name === "searchWeb");
 
       if (searchCalls.length > 0) {
         const tavilyKey = process.env.NEXT_PUBLIC_TAVILY_API_KEY;
@@ -247,15 +249,23 @@ export async function processLocalLLMRequest({
           let content = "Search failed.";
           if (tavilyKey) {
             try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000);
               const tvlyRes = await fetch("https://api.tavily.com/search", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ api_key: tavilyKey, query: callArgs.query, include_answer: true }),
+                signal: controller.signal,
               });
+              clearTimeout(timeoutId);
               const tvlyData = await tvlyRes.json();
               content = tvlyData.answer || (tvlyData.results ? tvlyData.results.map((r: { content: string }) => r.content).join("\n") : "No results found.");
-            } catch {
-              content = `Error searching for "${callArgs.query}"`;
+            } catch (err: unknown) {
+              if (err instanceof Error && err.name === "AbortError") {
+                content = `Search timed out for "${callArgs.query}"`;
+              } else {
+                content = `Error searching for "${callArgs.query}"`;
+              }
             }
           }
           return {
@@ -294,7 +304,7 @@ export async function processLocalLLMRequest({
       }
     }
 
-    return { aiText, toolCall };
+    return { aiText, toolCall, toolCalls };
   } catch (error) {
     console.error("Local LLM Request failed:", error);
     throw error;

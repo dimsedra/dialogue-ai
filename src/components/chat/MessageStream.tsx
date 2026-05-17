@@ -13,6 +13,7 @@ interface MessageStreamProps {
     text: string;
     timestamp: number;
     toolCall?: unknown;
+    toolCalls?: unknown[];
     attachments?: Array<{
       storageId: string;
       fileName?: string;

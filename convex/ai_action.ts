@@ -386,7 +386,11 @@ export const chat = internalAction({
         .join("\n");
 
       let aiText = "";
-      let activeToolCall = null;
+      const activeToolCalls: Array<{
+        name: string;
+        args: Record<string, unknown>;
+        result?: Record<string, unknown>;
+      }> = [];
 
       const genAI = new GoogleGenerativeAI(apiKey!);
       const model = genAI.getGenerativeModel({
@@ -567,7 +571,7 @@ export const chat = internalAction({
                 name: "addTask",
                 summary: `Created new task '${taskArgs.text}'`
               });
-              activeToolCall = { name: "addTask", args: call.args };
+              activeToolCalls.push({ name: "addTask", args: call.args as Record<string, unknown>, result: { status: "success" } });
             } else {
               const oldTask = await ctx.runQuery(api.tasks.get, { id: taskArgs.taskId as Id<"tasks">, userId: args.userId });
 
@@ -590,10 +594,10 @@ export const chat = internalAction({
                 summary: `Updated task '${oldTask?.text}'`
               });
 
-              activeToolCall = {
+              activeToolCalls.push({
                 name: "updateTask",
                 args: {
-                  ...call.args,
+                  ...call.args as Record<string, unknown>,
                   titleHint: oldTask?.text,
                   oldValues: oldTask ? {
                     priority: oldTask.priority,
@@ -602,8 +606,9 @@ export const chat = internalAction({
                     text: oldTask.text,
                     completed: oldTask.completed
                   } : undefined
-                }
-              };
+                },
+                result: { status: "success" }
+              });
             }
           } else if (call.name === "deleteTask") {
             const { taskId } = call.args as { taskId: string };
@@ -613,7 +618,7 @@ export const chat = internalAction({
               name: "deleteTask",
               summary: `Deleted task '${task?.text}'`
             });
-            activeToolCall = { name: "deleteTask", args: { ...call.args, titleHint: task?.text } };
+            activeToolCalls.push({ name: "deleteTask", args: { ...call.args as Record<string, unknown>, titleHint: task?.text }, result: { status: "success" } });
           } else if (call.name === "completeTask") {
             const { taskId } = call.args as { taskId: string };
             const task = await ctx.runQuery(api.tasks.get, { id: taskId as Id<"tasks">, userId: args.userId });
@@ -622,7 +627,7 @@ export const chat = internalAction({
               name: "completeTask",
               summary: `Completed task '${task?.text}'`
             });
-            activeToolCall = { name: "completeTask", args: { ...call.args, titleHint: task?.text } };
+            activeToolCalls.push({ name: "completeTask", args: { ...call.args as Record<string, unknown>, titleHint: task?.text }, result: { status: "success" } });
             // --- Event Tool Handlers ---
           } else if (call.name === "addEvent" || call.name === "updateEvent") {
             const eventArgs = call.args as {
@@ -664,7 +669,7 @@ export const chat = internalAction({
                 name: "addEvent",
                 summary: `Scheduled new event '${eventArgs.title}' starting at ${eventArgs.startTime}`
               });
-              activeToolCall = { name: "addEvent", args: call.args };
+              activeToolCalls.push({ name: "addEvent", args: call.args as Record<string, unknown>, result: { status: "success" } });
             } else {
               const oldEvent = await ctx.runQuery(api.events.get, { id: eventArgs.eventId as Id<"events">, userId: args.userId });
 
@@ -695,10 +700,10 @@ export const chat = internalAction({
                 summary: `Updated entire event or recurring series '${oldEvent?.title}'. Modifications applied to all occurrences in the series.`
               });
 
-              activeToolCall = {
+              activeToolCalls.push({
                 name: "updateEvent",
                 args: {
-                  ...call.args,
+                  ...call.args as Record<string, unknown>,
                   titleHint: oldEvent?.title,
                   oldValues: oldEvent ? {
                     title: oldEvent.title,
@@ -706,8 +711,9 @@ export const chat = internalAction({
                     endTime: oldEvent.endTime,
                     location: oldEvent.location,
                   } : undefined
-                }
-              };
+                },
+                result: { status: "success" }
+              });
             }
           } else if (call.name === "deleteEvent") {
             const { eventId } = call.args as { eventId: string };
@@ -717,7 +723,7 @@ export const chat = internalAction({
               name: "deleteEvent",
               summary: `Deleted event or entire recurring series '${event?.title}'.`
             });
-            activeToolCall = { name: "deleteEvent", args: { ...call.args, titleHint: event?.title } };
+            activeToolCalls.push({ name: "deleteEvent", args: { ...call.args as Record<string, unknown>, titleHint: event?.title }, result: { status: "success" } });
           } else if (call.name === "updateEventOccurrence") {
             const occArgs = call.args as { seriesId: string; originalStartTime: string; startTime?: string; endTime?: string; eventType?: "interval" | "point"; title?: string; location?: string };
             const oldEvent = await ctx.runQuery(api.events.get, { id: occArgs.seriesId as Id<"events">, userId: args.userId });
@@ -735,13 +741,14 @@ export const chat = internalAction({
               name: "updateEventOccurrence",
               summary: `Successfully modified only the single occurrence on ${occArgs.originalStartTime} for recurring event series '${oldEvent?.title}'. New details for this single day: startTime=${occArgs.startTime || occArgs.originalStartTime}, title=${occArgs.title || oldEvent?.title}. NOTE: Added exception to parent series so it skips this date, and created a standalone event specifically for this date. The rest of the recurring schedule remains completely unchanged.`
             });
-            activeToolCall = {
+            activeToolCalls.push({
               name: "updateEventOccurrence",
               args: {
-                ...call.args,
+                ...call.args as Record<string, unknown>,
                 titleHint: occArgs.title ?? oldEvent?.title,
-              }
-            };
+              },
+              result: { status: "success" }
+            });
           } else if (call.name === "updateMemory") {
             const updates = call.args as { bio: string };
             const oldProfile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
@@ -750,13 +757,14 @@ export const chat = internalAction({
               name: "updateMemory",
               summary: `Updated user profile/memory bio.`
             });
-            activeToolCall = {
+            activeToolCalls.push({
               name: "updateMemory",
               args: {
-                ...call.args,
+                ...call.args as Record<string, unknown>,
                 oldBio: oldProfile?.bio
-              }
-            };
+              },
+              result: { status: "success" }
+            });
           }
         }
 
@@ -768,6 +776,8 @@ export const chat = internalAction({
           const searchResults = await Promise.all(searchCalls.map(async (call) => {
             const { query } = call.args as { query: string };
             let content = "Search failed.";
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
 
             if (searchProvider === "serper" && serperKey) {
               try {
@@ -775,12 +785,15 @@ export const chat = internalAction({
                   method: "POST",
                   headers: { "X-API-KEY": serperKey, "Content-Type": "application/json" },
                   body: JSON.stringify({ q: query }),
+                  signal: controller.signal,
                 });
+                clearTimeout(timeoutId);
                 const serperData = await serperRes.json();
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content = serperData.organic ? serperData.organic.map((r: any) => r.snippet).join("\n") : "No results found.";
-              } catch {
-                content = `Error searching Serper for "${query}"`;
+              } catch (err: unknown) {
+                clearTimeout(timeoutId);
+                content = err instanceof Error && err.name === "AbortError" ? `Search timed out for "${query}"` : `Error searching Serper for "${query}"`;
               }
             } else if (tavilyKey) {
               try {
@@ -788,22 +801,25 @@ export const chat = internalAction({
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ api_key: tavilyKey, query, include_answer: true }),
+                  signal: controller.signal,
                 });
+                clearTimeout(timeoutId);
                 const tvlyData = await tvlyRes.json();
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 content = tvlyData.answer || (tvlyData.results ? tvlyData.results.map((r: any) => r.content).join("\n") : "No results found.");
-              } catch {
-                content = `Error searching Tavily for "${query}"`;
+              } catch (err: unknown) {
+                clearTimeout(timeoutId);
+                content = err instanceof Error && err.name === "AbortError" ? `Search timed out for "${query}"` : `Error searching Tavily for "${query}"`;
               }
             }
             return { name: "searchWeb", response: { result: content } };
           }));
 
           if (searchCalls.length === 1) {
-            activeToolCall = { name: "searchWeb", args: searchCalls[0].args };
+            activeToolCalls.push({ name: "searchWeb", args: searchCalls[0].args as Record<string, unknown>, result: { status: "success" } });
           } else {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            activeToolCall = { name: "multiSearch", args: { count: searchCalls.length, queries: searchCalls.map(c => (c.args as any).query) } };
+            activeToolCalls.push({ name: "multiSearch", args: { count: searchCalls.length, queries: searchCalls.map(c => (c.args as any).query) }, result: { status: "success" } });
           }
 
           const modelParts = (response.candidates?.[0]?.content?.parts || []).filter(p => p.functionCall);
@@ -868,11 +884,16 @@ export const chat = internalAction({
         sessionId: args.sessionId,
         text: aiText || "I've updated your workspace with those changes.",
         author: "AI",
-        toolCall: activeToolCall ? {
-          name: activeToolCall.name,
-          args: activeToolCall.args,
-          result: { status: "success" }
-        } : undefined
+        toolCall: activeToolCalls.length > 0 ? {
+          name: activeToolCalls[0].name,
+          args: activeToolCalls[0].args,
+          result: activeToolCalls[0].result ?? { status: "success" }
+        } : undefined,
+        toolCalls: activeToolCalls.length > 0 ? activeToolCalls.map(c => ({
+          name: c.name,
+          args: c.args,
+          result: c.result ?? { status: "success" }
+        })) : undefined
       });
 
       if (recentMessages.length % 20 === 0) {
@@ -956,8 +977,10 @@ export const reflectOnPersonality = internalAction({
       );
 
       if (!isDuplicate) {
-        const dummyEmbedding = Array(768).fill(0).map(() => Math.random());
-        await ctx.runMutation(api.ai.saveMemory, { text: insight, embedding: dummyEmbedding, userId: args.userId });
+        const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+        const embedRes = await embedModel.embedContent(insight);
+        const realEmbedding = embedRes.embedding.values;
+        await ctx.runMutation(api.ai.saveMemory, { text: insight, embedding: realEmbedding, userId: args.userId });
         console.log("Captured new intelligence:", insight);
       }
     }
@@ -1002,7 +1025,9 @@ export const parseDate = action({
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
     const now = new Date();
-    // Server Blind: Do not adjust 'now' for the parser, let it use server UTC which matches user's local "face time" logic
+    if (args.timezoneOffset !== undefined) {
+      now.setMinutes(now.getMinutes() - args.timezoneOffset);
+    }
     const nowISO = now.toISOString();
 
     const prompt = `Convert this natural language date to an ISO-8601 string. 

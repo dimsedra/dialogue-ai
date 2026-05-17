@@ -134,6 +134,11 @@ const sendArgs = {
     args: v.any(),
     result: v.optional(v.any()),
   })),
+  toolCalls: v.optional(v.array(v.object({
+    name: v.string(),
+    args: v.any(),
+    result: v.optional(v.any()),
+  }))),
   storageId: v.optional(v.id("_storage")),
   fileType: v.optional(v.string()),
   fileName: v.optional(v.string()),
@@ -186,12 +191,13 @@ async function sendImplementation(ctx: MutationCtx, args: {
   author: string;
   timezoneOffset?: number;
   toolCall?: { name: string; args: Record<string, unknown>; result?: unknown };
+  toolCalls?: { name: string; args: Record<string, unknown>; result?: unknown }[];
   storageId?: Id<"_storage">;
   fileType?: string;
   fileName?: string;
   attachments?: { storageId: Id<"_storage">; fileName: string; fileType: string }[];
 }) {
-  const { sessionId, text, author, timezoneOffset, toolCall, storageId, fileType, fileName, attachments } = args;
+  const { sessionId, text, author, timezoneOffset, toolCall, toolCalls, storageId, fileType, fileName, attachments } = args;
   
   const messageId = await ctx.db.insert("messages", {
     sessionId,
@@ -200,6 +206,7 @@ async function sendImplementation(ctx: MutationCtx, args: {
     timestamp: Date.now(),
     timezoneOffset,
     toolCall,
+    toolCalls,
     storageId,
     fileType,
     fileName,

@@ -34,6 +34,11 @@ export default defineSchema({
       args: v.any(),
       result: v.optional(v.any()),
     })),
+    toolCalls: v.optional(v.array(v.object({
+      name: v.string(),
+      args: v.any(),
+      result: v.optional(v.any()),
+    }))),
     storageId: v.optional(v.id("_storage")),
     fileType: v.optional(v.string()),
     fileName: v.optional(v.string()),
