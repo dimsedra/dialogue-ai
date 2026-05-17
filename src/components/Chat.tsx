@@ -1599,7 +1599,6 @@ export function Chat({
                   <AnimatePresence initial={false}>
                     {[...messages].map((msg) => (
                     <motion.div
-                      layout="position"
                       key={msg._id}
                       id={`msg-${msg._id}`}
                       initial={{ opacity: 0, y: 12 }}
