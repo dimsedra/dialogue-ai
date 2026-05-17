@@ -82,11 +82,12 @@ export const createSession = mutation({
 });
 
 export const deleteSession = mutation({
-  args: { id: v.id("chatSessions") },
+  args: { id: v.id("chatSessions"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
+    const userId = args.userId ?? (await auth.getUserId(ctx));
     const session = await ctx.db.get(args.id);
-    if (!session || session.userId !== userId) throw new Error("Unauthorized");
+    if (!session) return; // If already deleted, idempotent success
+    if (session.userId !== userId) throw new Error("Unauthorized");
 
     const messages = await ctx.db
       .query("messages")
@@ -100,11 +101,12 @@ export const deleteSession = mutation({
 });
 
 export const renameSession = mutation({
-  args: { id: v.id("chatSessions"), title: v.string() },
+  args: { id: v.id("chatSessions"), title: v.string(), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx);
+    const userId = args.userId ?? (await auth.getUserId(ctx));
     const session = await ctx.db.get(args.id);
-    if (!session || session.userId !== userId) throw new Error("Unauthorized");
+    if (!session) return; // If doesn't exist, idempotent return
+    if (session.userId !== userId) throw new Error("Unauthorized");
 
     await ctx.db.patch(args.id, { title: args.title });
   },
