@@ -82,7 +82,8 @@ export default defineSchema({
     title: v.string(),
     description: v.optional(v.string()),
     startTime: v.number(),
-    endTime: v.number(),
+    endTime: v.optional(v.number()),
+    eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
@@ -94,6 +95,8 @@ export default defineSchema({
       exceptions: v.optional(v.array(v.number())),
     })),
     createdAt: v.number(),
+    seriesId: v.optional(v.id("events")),
   }).index("by_user", ["userId"])
-    .index("by_workspace", ["workspaceId"]),
+    .index("by_workspace", ["workspaceId"])
+    .index("by_series", ["seriesId"]),
 });

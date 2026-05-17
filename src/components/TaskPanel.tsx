@@ -2,8 +2,8 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { CheckCircle2, Circle, Clock, ListTodo, Sparkles, Tag, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Calendar as CalendarIcon, Grid, Filter, ArrowUpDown, Search, Trash2, Edit3, Save, X, RefreshCw } from "lucide-react";
-import { useState, useMemo } from "react";
+import { CheckCircle2, Circle, Clock, ListTodo, Sparkles, Tag, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Calendar as CalendarIcon, Grid, Filter, ArrowUpDown, Search, Trash2, Edit3, Save, X, RefreshCw, Zap } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id, Doc } from "../../convex/_generated/dataModel";
 import { DayPicker } from "react-day-picker";
@@ -26,6 +26,7 @@ export function TaskPanel({
   const updateTask = useMutation(api.tasks.updateTask);
   const removeEvent = useMutation(api.events.remove);
   const updateEvent = useMutation(api.events.update);
+  const updateOccurrence = useMutation(api.events.updateOccurrence);
   const cancelEventOccurrence = useMutation(api.events.cancelOccurrence);
 
   const [expandedTaskId, setExpandedTaskId] = useState<Id<"tasks"> | null>(null);
@@ -41,14 +42,32 @@ export function TaskPanel({
   const [editTaskDueDate, setEditTaskDueDate] = useState("");
   
   const [editingEventId, setEditingEventId] = useState<Id<"events"> | null>(null);
+  const [editingEventObj, setEditingEventObj] = useState<Doc<"events"> | null>(null);
+  const [editingEventTimestamp, setEditingEventTimestamp] = useState<number | null>(null);
+  const [confirmEditRecurring, setConfirmEditRecurring] = useState<{ 
+    id: Id<"events">; 
+    event: Doc<"events">; 
+    updates: {
+      title: string;
+      description: string;
+      location: string;
+      startTime?: number;
+      endTime?: number;
+      eventType?: "interval" | "point";
+      recurrence?: { frequency: "daily" | "weekly"; interval: number; daysOfWeek?: number[]; until?: number } | null;
+    }; 
+    timestamp: number;
+  } | null>(null);
   const [editEventTitle, setEditEventTitle] = useState("");
   const [editEventDesc, setEditEventDesc] = useState("");
   const [editEventLocation, setEditEventLocation] = useState("");
   const [editEventStartTime, setEditEventStartTime] = useState("");
   const [editEventEndTime, setEditEventEndTime] = useState("");
+  const [editEventType, setEditEventType] = useState<"interval" | "point">("interval");
   const [editEventFreq, setEditEventFreq] = useState<"none" | "daily" | "weekly">("none");
   const [editEventInterval, setEditEventInterval] = useState<number>(1);
   const [editEventDays, setEditEventDays] = useState<number[]>([]);
+  const [editEventUntil, setEditEventUntil] = useState<string>("");
 
   // Filtering & Sorting State
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,16 +79,19 @@ export function TaskPanel({
 
   const workspaces = useQuery(api.workspaces.list, {});
 
-  const formatRecurrenceText = (rec: { frequency: string; interval: number; daysOfWeek?: number[] } | undefined) => {
+  const formatRecurrenceText = (rec: { frequency: string; interval: number; daysOfWeek?: number[]; until?: number } | undefined) => {
     if (!rec) return "";
-    const base = rec.frequency === "daily" 
+    let base = rec.frequency === "daily" 
       ? (rec.interval === 1 ? "Daily" : `Every ${rec.interval} days`)
       : (rec.interval === 1 ? "Weekly" : `Every ${rec.interval} weeks`);
     
     if (rec.frequency === "weekly" && rec.daysOfWeek && rec.daysOfWeek.length > 0) {
       const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       const daysStr = [...rec.daysOfWeek].sort().map(d => dayNames[d]).join(", ");
-      return `${base} on ${daysStr}`;
+      base = `${base} on ${daysStr}`;
+    }
+    if (rec.until) {
+      base = `${base}, until ${format(new Date(rec.until), "MMM d, yyyy")}`;
     }
     return base;
   };
@@ -182,6 +204,23 @@ export function TaskPanel({
     onSync?.();
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (confirmDelete) setConfirmDelete(null);
+        else if (confirmEditRecurring) setConfirmEditRecurring(null);
+        else {
+          setEditingTaskId(null);
+          setEditingEventId(null);
+          setEditingEventObj(null);
+          setEditingEventTimestamp(null);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [confirmDelete, confirmEditRecurring]);
+
   const handleUpdateTask = async (id: Id<"tasks">) => {
     setIsSubmitting(true);
     try {
@@ -219,7 +258,7 @@ export function TaskPanel({
         finalStartTime = new Date(editEventStartTime).getTime();
       }
 
-      if (editEventEndTime) {
+      if (editEventType === "interval" && editEventEndTime) {
         finalEndTime = new Date(editEventEndTime).getTime();
       }
 
@@ -227,20 +266,32 @@ export function TaskPanel({
         frequency: editEventFreq as "daily" | "weekly",
         interval: editEventInterval,
         daysOfWeek: editEventFreq === "weekly" ? (editEventDays.length > 0 ? editEventDays : [new Date(finalStartTime).getDay()]) : undefined,
+        until: editEventUntil ? new Date(editEventUntil).getTime() : undefined,
       } : null;
 
-      await updateEvent({ 
-        id, 
+      const updates = { 
         title: editEventTitle, 
         description: editEventDesc,
         location: editEventLocation,
         startTime: finalStartTime || undefined,
-        endTime: finalEndTime || undefined,
+        endTime: (editEventType === "interval" && finalEndTime) ? finalEndTime : undefined,
+        eventType: editEventType,
         recurrence: recurrenceRule
-      });
+      };
+
+      if (editingEventObj && editingEventObj.recurrence && editingEventTimestamp) {
+        setConfirmEditRecurring({ id, event: editingEventObj, updates, timestamp: editingEventTimestamp });
+        setIsSubmitting(false);
+        return;
+      }
+
+      await updateEvent({ id, ...updates });
       setEditingEventId(null);
+      setEditingEventObj(null);
+      setEditingEventTimestamp(null);
+      setEditEventUntil("");
     } finally {
-      setIsSubmitting(false);
+      if (!confirmEditRecurring) setIsSubmitting(false);
     }
   };
 
@@ -433,114 +484,44 @@ export function TaskPanel({
                                   </span>
                                 </div>
                               )}
-                              {editingTaskId === task._id ? (
-                                <div className="flex flex-col gap-3 pr-2 w-full" onClick={(e) => e.stopPropagation()}>
-                                  <input 
-                                    autoFocus
-                                    className="w-full bg-[#0f0e0c] border border-[#d4a373]/30 rounded-lg px-2 py-1.5 text-sm text-[#f2efeb] outline-none"
-                                    value={editTaskText}
-                                    onChange={(e) => setEditTaskText(e.target.value)}
-                                    placeholder="Task text..."
-                                  />
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="flex flex-col gap-1">
-                                      <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Priority</span>
-                                      <select 
-                                        className="bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-2 py-1 text-[10px] text-[#f2efeb] outline-none"
-                                        value={editTaskPriority}
-                                        onChange={(e) => setEditTaskPriority(e.target.value as "low" | "medium" | "high")}
-                                      >
-                                        <option value="low">Low</option>
-                                        <option value="medium">Medium</option>
-                                        <option value="high">High</option>
-                                      </select>
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                      <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Category</span>
-                                      <input 
-                                        className="bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-2 py-1 text-[10px] text-[#f2efeb] outline-none placeholder:text-[#a8a29e]/20"
-                                        value={editTaskCategory}
-                                        onChange={(e) => setEditTaskCategory(e.target.value)}
-                                        placeholder="Work, Life..."
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-col gap-1">
-                                    <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Due Date</span>
-                                    <input 
-                                      type="datetime-local"
-                                      className="bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-2 py-1 text-[10px] text-[#f2efeb] outline-none w-full appearance-none cursor-pointer"
-                                      value={editTaskDueDate}
-                                      onChange={(e) => setEditTaskDueDate(e.target.value)}
-                                      onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                                    />
-                                  </div>
-                                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-[#2a2723]">
-                                    <button 
-                                      onClick={() => {
-                                        setEditingTaskId(null);
-                                      }} 
-                                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest text-[#a8a29e] hover:text-[#f2efeb] transition-all"
-                                    >
-                                      <X className="w-3 h-3" />
-                                      Cancel
-                                    </button>
-                                    <button 
-                                      onClick={() => handleUpdateTask(task._id)} 
-                                      disabled={isSubmitting}
-                                      className="flex items-center gap-1 px-3 py-1 bg-[#d4a373] text-[#0f0e0c] rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all disabled:opacity-50"
-                                    >
-                                      {isSubmitting ? (
-                                        <div className="w-3 h-3 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
-                                      ) : (
-                                        <Save className="w-3 h-3" />
-                                      )}
-                                      Save Task
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className="text-sm font-medium text-[#f2efeb] leading-[1.5]">
-                                  {task.text}
-                                </p>
-                              )}
+                              <p className="text-sm font-medium text-[#f2efeb] leading-[1.5]">
+                                {task.text}
+                              </p>
                             </div>
                             <div className="mt-1 shrink-0 flex items-center gap-1">
-                              {!editingTaskId && (
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all mr-2">
-                                  <button 
-                                    onClick={(e) => { 
-                                      e.stopPropagation(); 
-                                      setEditingTaskId(task._id); 
-                                      setEditTaskText(task.text);
-                                      setEditTaskPriority(task.priority || "medium");
-                                      setEditTaskCategory(task.category || "");
-                                      if (task.dueDate) {
-                                        try {
-                                          const date = new Date(task.dueDate);
-                                          setEditTaskDueDate(format(date, "yyyy-MM-dd'T'HH:mm"));
-                                        } catch {
-                                          setEditTaskDueDate("");
-                                        }
-                                      } else {
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all mr-2">
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setEditingTaskId(task._id); 
+                                    setEditTaskText(task.text);
+                                    setEditTaskPriority(task.priority || "medium");
+                                    setEditTaskCategory(task.category || "");
+                                    if (task.dueDate) {
+                                      try {
+                                        const date = new Date(task.dueDate);
+                                        setEditTaskDueDate(format(date, "yyyy-MM-dd'T'HH:mm"));
+                                      } catch {
                                         setEditTaskDueDate("");
                                       }
-                                    }}
-                                    className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button 
-                                    onClick={(e) => { 
-                                      e.stopPropagation(); 
-                                      handleDeleteTask(task._id);
-                                    }}
-                                    className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              )}
+                                    } else {
+                                      setEditTaskDueDate("");
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    handleDeleteTask(task._id);
+                                  }}
+                                  className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                               {expandedTaskId === task._id ? (
                                 <ChevronUp className="w-3.5 h-3.5 text-[#a8a29e]/40" />
                               ) : (
@@ -637,7 +618,9 @@ export function TaskPanel({
               exit={{ opacity: 0, y: -10 }}
               className="space-y-3"
             >
-              {displayEvents.map((event) => (
+              {displayEvents.map((event) => {
+                const eventWorkspace = workspaces?.find(w => w._id === event.workspaceId);
+                return (
                 <motion.div
                   key={`${event._id}_${event.startTime}`}
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -645,173 +628,72 @@ export function TaskPanel({
                   className="p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group"
                 >
                   <div className="flex items-start justify-between gap-4 mb-2">
-                    <div className="flex items-center gap-2 flex-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373] shadow-[0_0_8px_rgba(212,163,115,0.4)]" />
-                      {editingEventId === event._id ? (
-                        <div className="flex-1 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
-                          <div className="space-y-1">
-                            <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Title</span>
-                            <input 
-                              autoFocus
-                              className="w-full bg-[#0f0e0c] border border-[#d4a373]/30 rounded-lg px-2 py-1 text-xs text-[#f2efeb] outline-none"
-                              value={editEventTitle}
-                              onChange={(e) => setEditEventTitle(e.target.value)}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Description</span>
-                            <textarea 
-                              className="w-full bg-[#0f0e0c] border border-[#d4a373]/30 rounded-lg px-2 py-1 text-[10px] text-[#a8a29e] outline-none resize-none"
-                              value={editEventDesc}
-                              onChange={(e) => setEditEventDesc(e.target.value)}
-                              rows={2}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Location</span>
-                            <input 
-                              className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-2 py-1 text-[10px] text-[#f2efeb] outline-none"
-                              value={editEventLocation}
-                              onChange={(e) => setEditEventLocation(e.target.value)}
-                              placeholder="Add location..."
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                              <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Start Time</span>
-                              <input 
-                                type="datetime-local"
-                                className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-2 py-1 text-[10px] text-[#f2efeb] outline-none appearance-none cursor-pointer"
-                                value={editEventStartTime}
-                                onChange={(e) => setEditEventStartTime(e.target.value)}
-                                onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">End Time</span>
-                              <input 
-                                type="datetime-local"
-                                className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-2 py-1 text-[10px] text-[#f2efeb] outline-none appearance-none cursor-pointer"
-                                value={editEventEndTime}
-                                onChange={(e) => setEditEventEndTime(e.target.value)}
-                                onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                              />
-                            </div>
-                          </div>
-                          <div className="space-y-1 pt-1 border-t border-[#2a2723]">
-                            <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Recurrence</span>
-                            <div className="flex items-center gap-2">
-                              <select 
-                                className="bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-2 py-1 text-[10px] text-[#f2efeb] outline-none cursor-pointer"
-                                value={editEventFreq}
-                                onChange={(e) => setEditEventFreq(e.target.value as "none" | "daily" | "weekly")}
-                              >
-                                <option value="none">Does not repeat</option>
-                                <option value="daily">Daily</option>
-                                <option value="weekly">Weekly</option>
-                              </select>
-                              {editEventFreq !== "none" && (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[9px] text-[#a8a29e]">Every</span>
-                                  <input 
-                                    type="number"
-                                    min={1}
-                                    max={30}
-                                    className="w-12 bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-1.5 py-1 text-[10px] text-[#f2efeb] outline-none text-center"
-                                    value={editEventInterval}
-                                    onChange={(e) => setEditEventInterval(Math.max(1, parseInt(e.target.value) || 1))}
-                                  />
-                                  <span className="text-[9px] text-[#a8a29e]">{editEventFreq === "daily" ? "days" : "weeks"}</span>
-                                </div>
-                              )}
-                            </div>
-                            {editEventFreq === "weekly" && (
-                              <div className="flex flex-wrap gap-1 pt-1">
-                                {["S", "M", "T", "W", "T", "F", "S"].map((dayName, idx) => (
-                                  <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => {
-                                      if (editEventDays.includes(idx)) {
-                                        setEditEventDays(editEventDays.filter(d => d !== idx));
-                                      } else {
-                                        setEditEventDays([...editEventDays, idx]);
-                                      }
-                                    }}
-                                    className={`w-5 h-5 rounded-md text-[9px] font-bold transition-all flex items-center justify-center ${
-                                      editEventDays.includes(idx) ? "bg-[#d4a373] text-[#0f0e0c]" : "bg-[#0f0e0c] text-[#a8a29e] border border-[#2a2723]"
-                                    }`}
-                                  >
-                                    {dayName}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex justify-end gap-2 pt-2 border-t border-[#2a2723]">
-                             <button 
-                               onClick={() => setEditingEventId(null)} 
-                               disabled={isSubmitting}
-                               className="px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest text-[#a8a29e] hover:text-[#f2efeb] transition-all disabled:opacity-50"
-                             >
-                               Cancel
-                             </button>
-                             <button 
-                               onClick={() => handleUpdateEvent(event._id)} 
-                               disabled={isSubmitting}
-                               className="px-3 py-1 bg-[#d4a373] text-[#0f0e0c] rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all disabled:opacity-50"
-                             >
-                               {isSubmitting ? (
-                                 <div className="w-3 h-3 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
-                               ) : (
-                                 <Save className="w-3 h-3" />
-                               )}
-                               Save Event
-                             </button>
-                          </div>
+                    <div className="flex flex-col gap-1 flex-1">
+                      {(!activeWorkspaceId && eventWorkspace) && (
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <div 
+                            className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
+                            style={{ backgroundColor: eventWorkspace.color }} 
+                          />
+                          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-[#a8a29e]/40">
+                            {eventWorkspace.name}
+                          </span>
                         </div>
-                      ) : (
-                        <span className="text-xs text-[#f2efeb] font-bold tracking-tight uppercase">{event.title}</span>
                       )}
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
+                          style={{ backgroundColor: (!activeWorkspaceId && eventWorkspace) ? eventWorkspace.color : "#d4a373" }}
+                        />
+                        <span className="text-xs text-[#f2efeb] font-bold tracking-tight">{event.title}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      {!editingEventId && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                          <button 
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              setEditingEventId(event._id); 
-                              setEditEventTitle(event.title);
-                              setEditEventDesc(event.description || "");
-                              setEditEventLocation(event.location || "");
-                              setEditEventStartTime(format(new Date(event.startTime), "yyyy-MM-dd'T'HH:mm"));
-                              setEditEventEndTime(format(new Date(event.endTime), "yyyy-MM-dd'T'HH:mm"));
-                              if (event.recurrence) {
-                                setEditEventFreq(event.recurrence.frequency);
-                                setEditEventInterval(event.recurrence.interval || 1);
-                                setEditEventDays(event.recurrence.daysOfWeek || []);
-                              } else {
-                                setEditEventFreq("none");
-                                setEditEventInterval(1);
-                                setEditEventDays([]);
-                              }
-                            }}
-                            className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </button>
-                          <button 
-                            onClick={(e) => { 
-                              e.stopPropagation(); 
-                              handleDeleteEvent(event);
-                            }}
-                            className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
-                      <span className="text-[9px] font-bold text-[#d4a373]/60 uppercase tracking-widest whitespace-nowrap">Event</span>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setEditingEventId(event._id); 
+                            setEditingEventObj(event);
+                            setEditingEventTimestamp(event.startTime);
+                            setEditEventTitle(event.title);
+                            setEditEventDesc(event.description || "");
+                            setEditEventLocation(event.location || "");
+                            setEditEventStartTime(format(new Date(event.startTime), "yyyy-MM-dd'T'HH:mm"));
+                            setEditEventEndTime(event.endTime ? format(new Date(event.endTime), "yyyy-MM-dd'T'HH:mm") : format(new Date(event.startTime + 3600000), "yyyy-MM-dd'T'HH:mm"));
+                            setEditEventType(event.eventType || (event.endTime ? "interval" : "point"));
+                            if (event.recurrence) {
+                              setEditEventFreq(event.recurrence.frequency);
+                              setEditEventInterval(event.recurrence.interval || 1);
+                              setEditEventDays(event.recurrence.daysOfWeek || []);
+                              setEditEventUntil(event.recurrence.until ? format(new Date(event.recurrence.until), "yyyy-MM-dd") : "");
+                            } else {
+                              setEditEventFreq("none");
+                              setEditEventInterval(1);
+                              setEditEventDays([]);
+                              setEditEventUntil("");
+                            }
+                          }}
+                          className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            handleDeleteEvent(event);
+                          }}
+                          className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {(event.eventType === "point" || !event.endTime) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
+                        <span className={`text-[9px] font-bold uppercase tracking-widest whitespace-nowrap ${(event.eventType === "point" || !event.endTime) ? 'text-amber-400' : 'text-[#d4a373]/60'}`}>
+                          {(event.eventType === "point" || !event.endTime) ? 'Release / Drop' : 'Event'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -823,7 +705,7 @@ export function TaskPanel({
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       <span className="capitalize">
-                        {format(new Date(event.startTime), "HH:mm")} - {format(new Date(event.endTime), "HH:mm")}
+                        {format(new Date(event.startTime), "HH:mm")}{event.eventType !== "point" && event.endTime ? ` - ${format(new Date(event.endTime), "HH:mm")}` : ""}
                       </span>
                       <span className="text-[8px] opacity-50 font-bold ml-1 uppercase tracking-tighter">
                         {Intl.DateTimeFormat().resolvedOptions().timeZone.split("/").pop()?.replace("_", " ")}
@@ -849,7 +731,7 @@ export function TaskPanel({
                     </p>
                   )}
                 </motion.div>
-              ))}
+              );})}
 
               {events?.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-32 text-center space-y-6">
@@ -920,31 +802,82 @@ export function TaskPanel({
 
                 <div className="space-y-2">
                   {/* Events Section */}
-                  {eventsOnSelectedDate.map((event: Doc<"events">) => (
+                  {eventsOnSelectedDate.map((event: Doc<"events">) => {
+                    const eventWorkspace = workspaces?.find(w => w._id === event.workspaceId);
+                    return (
                     <div 
                       key={`${event._id}_${event.startTime}`}
                       className="p-4 rounded-2xl bg-[#1f1d19] border border-[#d4a373]/20 flex flex-col gap-2 group hover:bg-[#d4a373]/5 transition-all"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-1">
+                        {(!activeWorkspaceId && eventWorkspace) && (
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <div 
+                              className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
+                              style={{ backgroundColor: eventWorkspace.color }} 
+                            />
+                            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-[#a8a29e]/40">
+                              {eventWorkspace.name}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" 
+                              style={{ backgroundColor: (!activeWorkspaceId && eventWorkspace) ? eventWorkspace.color : "#d4a373" }}
+                            />
+                            <span className="text-xs text-[#f2efeb] font-bold tracking-tight">{event.title}</span>
+                          </div>
                         <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373] shadow-[0_0_8px_rgba(212,163,115,0.4)]" />
-                          <span className="text-xs text-[#f2efeb] font-bold tracking-tight uppercase">{event.title}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setEditingEventId(event._id); 
+                              setEditingEventObj(event);
+                              setEditingEventTimestamp(event.startTime);
+                              setEditEventTitle(event.title);
+                              setEditEventDesc(event.description || "");
+                              setEditEventLocation(event.location || "");
+                              setEditEventStartTime(format(new Date(event.startTime), "yyyy-MM-dd'T'HH:mm"));
+                              setEditEventEndTime(event.endTime ? format(new Date(event.endTime), "yyyy-MM-dd'T'HH:mm") : format(new Date(event.startTime + 3600000), "yyyy-MM-dd'T'HH:mm"));
+                              setEditEventType(event.eventType || (event.endTime ? "interval" : "point"));
+                              if (event.recurrence) {
+                                setEditEventFreq(event.recurrence.frequency);
+                                setEditEventInterval(event.recurrence.interval || 1);
+                                setEditEventDays(event.recurrence.daysOfWeek || []);
+                                setEditEventUntil(event.recurrence.until ? format(new Date(event.recurrence.until), "yyyy-MM-dd") : "");
+                              } else {
+                                setEditEventFreq("none");
+                                setEditEventInterval(1);
+                                setEditEventDays([]);
+                                setEditEventUntil("");
+                              }
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event); }}
                             className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
-                          <span className="text-[9px] font-bold text-[#d4a373]/60 uppercase tracking-widest">Event</span>
+                          <div className="flex items-center gap-1">
+                            {(event.eventType === "point" || !event.endTime) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
+                            <span className={`text-[9px] font-bold uppercase tracking-widest ${(event.eventType === "point" || !event.endTime) ? 'text-amber-400' : 'text-[#d4a373]/60'}`}>
+                              {(event.eventType === "point" || !event.endTime) ? 'Release / Drop' : 'Event'}
+                            </span>
+                          </div>
                         </div>
+                      </div>
                       </div>
                       
                       <div className="flex items-center gap-4 text-[10px] text-[#a8a29e]/50 font-medium">
                         <div className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          <span>{format(new Date(event.startTime), "HH:mm")} - {format(new Date(event.endTime), "HH:mm")}</span>
+                          <span>{format(new Date(event.startTime), "HH:mm")}{event.eventType !== "point" && event.endTime ? ` - ${format(new Date(event.endTime), "HH:mm")}` : ""}</span>
                         </div>
                         {event.recurrence && (
                           <div className="flex items-center gap-1 text-[#d4a373]">
@@ -966,7 +899,7 @@ export function TaskPanel({
                         </p>
                       )}
                     </div>
-                  ))}
+                  );})}
 
                   {/* Tasks Section */}
                   {tasksOnSelectedDate.map((task: Doc<"tasks">) => (
@@ -1076,6 +1009,494 @@ export function TaskPanel({
                 >
                   Cancel
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {confirmEditRecurring && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[100] flex items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-sm p-6"
+            onClick={() => setConfirmEditRecurring(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[280px] bg-[#1a1814] border border-[#d4a373]/20 rounded-2xl p-6 shadow-2xl space-y-4"
+            >
+              <div className="w-12 h-12 rounded-full bg-[#d4a373]/10 flex items-center justify-center mb-2">
+                <Edit3 className="w-6 h-6 text-[#d4a373]" />
+              </div>
+              <h3 className="text-lg font-bold text-[#f2efeb] leading-tight">
+                Save Recurring Event?
+              </h3>
+              <p className="text-sm text-[#a8a29e] leading-relaxed">
+                You are modifying a repeating event. Do you want to save changes for this specific date only, or for the entire repeating series?
+              </p>
+              <div className="flex flex-col gap-2 pt-2">
+                <button 
+                  onClick={async () => {
+                    setIsSubmitting(true);
+                    try {
+                      await updateOccurrence({
+                        seriesId: confirmEditRecurring.id,
+                        originalStartTime: confirmEditRecurring.timestamp,
+                        startTime: confirmEditRecurring.updates.startTime,
+                        endTime: confirmEditRecurring.updates.endTime,
+                        eventType: confirmEditRecurring.updates.eventType,
+                        title: confirmEditRecurring.updates.title,
+                        description: confirmEditRecurring.updates.description,
+                        location: confirmEditRecurring.updates.location,
+                      });
+                      setConfirmEditRecurring(null);
+                      setEditingEventId(null);
+                      setEditingEventObj(null);
+                      setEditingEventTimestamp(null);
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  className="w-full py-3 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg"
+                >
+                  This Occurrence Only
+                </button>
+                <button 
+                  onClick={async () => {
+                    setIsSubmitting(true);
+                    try {
+                      await updateEvent({
+                        id: confirmEditRecurring.id,
+                        ...confirmEditRecurring.updates,
+                      });
+                      setConfirmEditRecurring(null);
+                      setEditingEventId(null);
+                      setEditingEventObj(null);
+                      setEditingEventTimestamp(null);
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  className="w-full py-3 bg-[#2a2723] text-[#f2efeb] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#3a3630] transition-all"
+                >
+                  Entire Repeating Series
+                </button>
+                <button 
+                  onClick={() => setConfirmEditRecurring(null)}
+                  className="w-full py-3 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Edit Task Modal */}
+        {editingTaskId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-md p-0 sm:p-6"
+            onClick={() => setEditingTaskId(null)}
+          >
+            <motion.div
+              initial={{ y: "100%", opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: "100%", opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-[#1a1814] border border-[#d4a373]/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-[#2a2723]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-[#d4a373]/15 flex items-center justify-center text-[#d4a373]">
+                    <ListTodo className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Edit Task</h3>
+                    <span className="text-[10px] text-[#a8a29e]">Modify details and timeline</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingTaskId(null)}
+                  className="p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Task Description</label>
+                  <textarea
+                    autoFocus
+                    rows={3}
+                    className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-2xl p-3 text-sm text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none resize-none transition-all"
+                    value={editTaskText}
+                    onChange={(e) => setEditTaskText(e.target.value)}
+                    placeholder="What needs to be done?"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Priority Level</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditTaskPriority("low")}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border flex items-center justify-center gap-2 ${
+                        editTaskPriority === "low"
+                          ? "bg-blue-500/15 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/10"
+                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
+                      }`}
+                    >
+                      <Circle className="w-3 h-3 text-blue-400" /> Low
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditTaskPriority("medium")}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border flex items-center justify-center gap-2 ${
+                        editTaskPriority === "medium"
+                          ? "bg-amber-500/15 border-amber-500/50 text-amber-400 shadow-lg shadow-amber-500/10"
+                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
+                      }`}
+                    >
+                      <AlertCircle className="w-3 h-3 text-amber-400" /> Medium
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditTaskPriority("high")}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold capitalize transition-all border flex items-center justify-center gap-2 ${
+                        editTaskPriority === "high"
+                          ? "bg-red-500/15 border-red-500/50 text-red-400 shadow-lg shadow-red-500/10"
+                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
+                      }`}
+                    >
+                      <AlertCircle className="w-3 h-3 text-red-400" /> High
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Category</label>
+                    <div className="relative flex items-center">
+                      <Tag className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
+                      <input
+                        className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all"
+                        value={editTaskCategory}
+                        onChange={(e) => setEditTaskCategory(e.target.value)}
+                        placeholder="Work, Personal..."
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Due Date</label>
+                    <div className="relative flex items-center">
+                      <Clock className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
+                      <input
+                        type="datetime-local"
+                        className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
+                        value={editTaskDueDate}
+                        onChange={(e) => setEditTaskDueDate(e.target.value)}
+                        onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-[#2a2723]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDeleteTask(editingTaskId);
+                    setEditingTaskId(null);
+                  }}
+                  className="p-2.5 rounded-xl text-red-500/70 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete Task
+                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTaskId(null)}
+                    disabled={isSubmitting}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#a8a29e] hover:text-[#f2efeb] transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateTask(editingTaskId)}
+                    disabled={isSubmitting}
+                    className="px-6 py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/20 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isSubmitting ? (
+                      <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    Save Task
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Edit Event Modal */}
+        {editingEventId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-md p-0 sm:p-6"
+            onClick={() => {
+              setEditingEventId(null);
+              setEditingEventObj(null);
+              setEditingEventTimestamp(null);
+            }}
+          >
+            <motion.div
+              initial={{ y: "100%", opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: "100%", opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-[#1a1814] border border-[#d4a373]/20 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-[#2a2723]">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-[#d4a373]/15 flex items-center justify-center text-[#d4a373]">
+                    <CalendarIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Edit Event</h3>
+                    <span className="text-[10px] text-[#a8a29e]">Modify timing, location, and recurrence</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingEventId(null);
+                    setEditingEventObj(null);
+                    setEditingEventTimestamp(null);
+                  }}
+                  className="p-2 rounded-xl text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Event Title</label>
+                  <input
+                    autoFocus
+                    className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-3 text-sm font-bold text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none transition-all"
+                    value={editEventTitle}
+                    onChange={(e) => setEditEventTitle(e.target.value)}
+                    placeholder="Event title..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Description</label>
+                  <textarea
+                    rows={2}
+                    className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-3 text-xs text-[#a8a29e] placeholder:text-[#a8a29e]/30 outline-none resize-none transition-all"
+                    value={editEventDesc}
+                    onChange={(e) => setEditEventDesc(e.target.value)}
+                    placeholder="Event notes or details..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Location</label>
+                  <div className="relative flex items-center">
+                    <Tag className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
+                    <input
+                      className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all"
+                      value={editEventLocation}
+                      onChange={(e) => setEditEventLocation(e.target.value)}
+                      placeholder="Add location or link..."
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Event Type</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditEventType("interval")}
+                      className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${
+                        editEventType === "interval"
+                          ? "bg-[#d4a373]/15 border-[#d4a373] text-[#d4a373] shadow-lg shadow-[#d4a373]/10"
+                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
+                      }`}
+                    >
+                      <Clock className="w-4 h-4" /> Time Interval
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditEventType("point")}
+                      className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${
+                        editEventType === "point"
+                          ? "bg-amber-500/15 border-amber-500 text-amber-400 shadow-lg shadow-amber-500/10"
+                          : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
+                      }`}
+                    >
+                      <Zap className="w-4 h-4" /> Release / Drop
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">
+                      {editEventType === "point" ? "Moment" : "Start Time"}
+                    </label>
+                    <input
+                      type="datetime-local"
+                      className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
+                      value={editEventStartTime}
+                      onChange={(e) => setEditEventStartTime(e.target.value)}
+                      onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                    />
+                  </div>
+                  {editEventType === "interval" && (
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">End Time</label>
+                      <input
+                        type="datetime-local"
+                        className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
+                        value={editEventEndTime}
+                        onChange={(e) => setEditEventEndTime(e.target.value)}
+                        onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-[#2a2723]">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Recurrence</label>
+                  <div className="flex items-center gap-3">
+                    <select
+                      className="bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2 text-xs text-[#f2efeb] outline-none cursor-pointer flex-1"
+                      value={editEventFreq}
+                      onChange={(e) => setEditEventFreq(e.target.value as "none" | "daily" | "weekly")}
+                    >
+                      <option value="none">Does not repeat</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                    {editEventFreq !== "none" && (
+                      <div className="flex items-center gap-2 bg-[#0f0e0c] border border-[#2a2723] rounded-xl px-3 py-2">
+                        <span className="text-xs text-[#a8a29e]">Every</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          className="w-12 bg-transparent text-xs text-[#f2efeb] font-bold outline-none text-center"
+                          value={editEventInterval}
+                          onChange={(e) => setEditEventInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                        />
+                        <span className="text-xs text-[#a8a29e]">
+                          {editEventFreq === "daily" ? "days" : "weeks"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {editEventFreq === "weekly" && (
+                    <div className="flex justify-between gap-1.5 pt-2">
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            if (editEventDays.includes(idx)) {
+                              setEditEventDays(editEventDays.filter((d) => d !== idx));
+                            } else {
+                              setEditEventDays([...editEventDays, idx]);
+                            }
+                          }}
+                          className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center ${
+                            editEventDays.includes(idx)
+                              ? "bg-[#d4a373] text-[#0f0e0c] shadow-md shadow-[#d4a373]/20"
+                              : "bg-[#0f0e0c] text-[#a8a29e] border border-[#2a2723] hover:border-[#d4a373]/30"
+                          }`}
+                        >
+                          {dayName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {editEventFreq !== "none" && (
+                    <div className="space-y-1.5 pt-3 border-t border-[#2a2723]">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">End Repeat (Optional)</label>
+                      <div className="relative flex items-center">
+                        <CalendarIcon className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
+                        <input
+                          type="date"
+                          className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2 text-xs text-[#f2efeb] outline-none transition-all cursor-pointer appearance-none"
+                          value={editEventUntil}
+                          onChange={(e) => setEditEventUntil(e.target.value)}
+                        />
+                      </div>
+                      <span className="text-[10px] text-[#a8a29e]/50 block pt-0.5">Leave empty for infinite recurrence.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-[#2a2723]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editingEventObj) handleDeleteEvent(editingEventObj);
+                    setEditingEventId(null);
+                    setEditingEventObj(null);
+                    setEditingEventTimestamp(null);
+                  }}
+                  className="p-2.5 rounded-xl text-red-500/70 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete Event
+                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingEventId(null);
+                      setEditingEventObj(null);
+                      setEditingEventTimestamp(null);
+                    }}
+                    disabled={isSubmitting}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#a8a29e] hover:text-[#f2efeb] transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateEvent(editingEventId)}
+                    disabled={isSubmitting}
+                    className="px-6 py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/20 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isSubmitting ? (
+                      <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    Save Event
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>

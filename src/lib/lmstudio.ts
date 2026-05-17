@@ -27,7 +27,7 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "addTask",
-        description: "Adds a new task to the user's list with optional priority, category, and notes.",
+        description: "CRITICAL MANDATE: DO NOT call this tool on the first turn when a user requests to add a task. You MUST ask the user to clarify and confirm the exact details (priority, category, due date) first in conversational text. Only call this tool AFTER the user explicitly says the plan is perfect.",
         parameters: {
           type: "object",
           properties: {
@@ -93,18 +93,19 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "addEvent",
-        description: "Schedules a new event with start and end times. Events are time-blocks on a calendar.",
+        description: "CRITICAL MANDATE: DO NOT call this tool on the first turn when a user requests to schedule an event. You MUST ask the user to clarify and confirm all details (start time, event type, recurrence) first in conversational text. Only call this tool AFTER the user explicitly confirms the plan.",
         parameters: {
           type: "object",
           properties: {
             title: { type: "string", description: "The event title" },
             description: { type: "string", description: "Optional description" },
             startTime: { type: "string", description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T11:50:00')" },
-            endTime: { type: "string", description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
+            endTime: { type: "string", description: "Optional ISO-8601 end time (24-hour format). Required for interval events; omit for point events." },
+            eventType: { type: "string", description: "'interval' for duration events or 'point' for momentary events (deadlines, drops, releases)." },
             location: { type: "string", description: "Optional location" },
             notes: { type: "string", description: "Optional extra notes or context" },
           },
-          required: ["title", "startTime", "endTime"],
+          required: ["title", "startTime", "eventType"],
         },
       },
     },
@@ -135,10 +136,31 @@ export async function processLocalLLMRequest({
             description: { type: "string", description: "The new description" },
             startTime: { type: "string", description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T11:50:00')" },
             endTime: { type: "string", description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
+            eventType: { type: "string", description: "'interval' or 'point'" },
             location: { type: "string", description: "Optional new location" },
             notes: { type: "string", description: "Optional new notes" },
           },
           required: ["eventId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "updateEventOccurrence",
+        description: "Modifies or reschedules a single detached occurrence of a recurring event series.",
+        parameters: {
+          type: "object",
+          properties: {
+            seriesId: { type: "string", description: "The ID of the parent recurring event series" },
+            originalStartTime: { type: "string", description: "ISO-8601 timestamp of the specific occurrence being modified (e.g. '2026-05-19T07:00:00')" },
+            startTime: { type: "string", description: "Optional new ISO-8601 start time for this single occurrence" },
+            endTime: { type: "string", description: "Optional new ISO-8601 end time for this single occurrence" },
+            eventType: { type: "string", description: "Optional new event type ('interval' or 'point')" },
+            title: { type: "string", description: "Optional new title" },
+            location: { type: "string", description: "Optional new location" },
+          },
+          required: ["seriesId", "originalStartTime"],
         },
       },
     },

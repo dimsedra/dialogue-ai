@@ -30,8 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# future implementation plans
-/future-impl/
+# documentation and future implementation plans
+/docs/
 
 # env files (can opt-in for committing if needed)
 .env*

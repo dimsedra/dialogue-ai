@@ -19,7 +19,7 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
       continue;
     }
 
-    const duration = event.endTime - event.startTime;
+    const duration = event.endTime !== undefined ? event.endTime - event.startTime : 0;
     const limit = Math.min(windowEnd, event.recurrence.until ?? windowEnd);
     const exceptions = event.recurrence.exceptions ?? [];
 
@@ -31,7 +31,7 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
           expanded.push({
             ...event,
             startTime: timestamp,
-            endTime: timestamp + duration,
+            endTime: event.endTime !== undefined ? timestamp + duration : undefined,
           });
         }
         d.setDate(d.getDate() + event.recurrence.interval);
@@ -61,7 +61,7 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
                   expanded.push({
                     ...event,
                     startTime: timestamp,
-                    endTime: timestamp + duration,
+                    endTime: event.endTime !== undefined ? timestamp + duration : undefined,
                   });
                 }
               }
@@ -120,7 +120,8 @@ export const add = mutation({
     title: v.string(),
     description: v.optional(v.string()),
     startTime: v.number(),
-    endTime: v.number(),
+    endTime: v.optional(v.number()),
+    eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
     recurrence: recurrenceValidator,
@@ -135,6 +136,7 @@ export const add = mutation({
       title: args.title,
       startTime: args.startTime,
       endTime: args.endTime,
+      eventType: args.eventType ?? (args.endTime !== undefined ? "interval" : "point"),
       description: args.description,
       location: args.location,
       notes: args.notes,
@@ -153,6 +155,14 @@ export const remove = mutation({
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== userId) throw new Error("Unauthorized");
     
+    const detachedInstances = await ctx.db
+      .query("events")
+      .withIndex("by_series", (q) => q.eq("seriesId", args.id))
+      .collect();
+    for (const inst of detachedInstances) {
+      await ctx.db.delete(inst._id);
+    }
+
     await ctx.db.delete(args.id);
   },
 });
@@ -164,6 +174,7 @@ export const update = mutation({
     description: v.optional(v.string()),
     startTime: v.optional(v.number()),
     endTime: v.optional(v.number()),
+    eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
     recurrence: recurrenceValidator,
@@ -195,6 +206,11 @@ export const cancelOccurrence = mutation({
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== userId) throw new Error("Unauthorized");
 
+    if (event.seriesId) {
+      await ctx.db.delete(args.id);
+      return;
+    }
+
     if (event.recurrence) {
       const exceptions = event.recurrence.exceptions ?? [];
       if (!exceptions.includes(args.timestamp)) {
@@ -207,5 +223,55 @@ export const cancelOccurrence = mutation({
         });
       }
     }
+  },
+});
+
+export const updateOccurrence = mutation({
+  args: {
+    seriesId: v.id("events"),
+    originalStartTime: v.number(),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    location: v.optional(v.string()),
+    startTime: v.optional(v.number()),
+    endTime: v.optional(v.number()),
+    eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    const parent = await ctx.db.get(args.seriesId);
+    if (!parent || parent.userId !== userId) throw new Error("Unauthorized");
+
+    if (parent.recurrence) {
+      const exceptions = parent.recurrence.exceptions ?? [];
+      if (!exceptions.includes(args.originalStartTime)) {
+        exceptions.push(args.originalStartTime);
+        await ctx.db.patch(args.seriesId, {
+          recurrence: {
+            ...parent.recurrence,
+            exceptions,
+          },
+        });
+      }
+    }
+
+    const duration = parent.endTime !== undefined ? parent.endTime - parent.startTime : 0;
+    const finalStartTime = args.startTime ?? args.originalStartTime;
+    const finalEndTime = parent.endTime !== undefined ? (args.endTime ?? (finalStartTime + duration)) : undefined;
+
+    return await ctx.db.insert("events", {
+      title: args.title ?? parent.title,
+      description: args.description ?? parent.description,
+      location: args.location ?? parent.location,
+      notes: parent.notes,
+      startTime: finalStartTime,
+      endTime: finalEndTime,
+      eventType: args.eventType ?? parent.eventType,
+      seriesId: args.seriesId,
+      workspaceId: parent.workspaceId,
+      userId: parent.userId,
+      createdAt: Date.now(),
+    });
   },
 });

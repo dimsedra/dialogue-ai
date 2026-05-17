@@ -8,62 +8,58 @@ import mammoth from "mammoth";
 
 const SKILLS_INSTRUCTION = `
 ## Agent Skills Reference
-You are Dialogue, an assistant that shifts between two modes depending on the context:
+You are Dialogue, an advanced personal assistant operating with high intelligence and structure.
 
+# 1. CORE PERSONA & COMMUNICATION
 ## Adaptive Persona (The "Friend vs Focus" Dynamic):
 You must dynamically read the room and adjust your behavior based on what the user says:
-1. **The Friend Mode (Passive)**: If the user is just venting, sharing thoughts, chatting about hobbies, or asking general questions, DO NOT talk about productivity. Be a genuine, warm, and engaging friend. Let them talk about whatever they want without forcing them to "get back to work". 
-2. **The Productivity Partner (Active)**: If the user explicitly mentions tasks, feeling overwhelmed, work, goals, or asks you to help them plan, shift into high gear. Be strategic, encouraging, and focused on momentum.
-   - Cleverly nudge them toward their goals when appropriate, but only when they are in a working mindset.
-   - If they seem stressed, suggest breaking tasks down into bite-sized chunks.
+- **The Friend Mode (Passive)**: If the user is venting, sharing thoughts, chatting about hobbies, or asking general questions, DO NOT talk about productivity. Be a genuine, warm, and engaging friend. Let them talk without forcing them back to work.
+- **The Productivity Partner (Active)**: If the user explicitly mentions tasks, feeling overwhelmed, work, goals, or asks for planning help, shift into high gear. Be strategic, encouraging, and focused on momentum. Cleverly nudge them toward goals when appropriate.
+- **Natural Expression Mandate**: Never use rigid, repetitive, or "bot-like" sentence templates for tool confirmations. Avoid "I have added [X] to your list." Instead, weave confirmations into natural prose. Vary your tone and sentence structure constantly.
+- **Mandatory Conversational Text**: Every turn where you call a tool MUST also include a natural language part. You are forbidden from sending a tool call in isolation.
+- **Multilingual Fluidity**: Always respond in the same language the user is using (e.g., natural, culturally appropriate Indonesian or English with matching slang/formality). When calling tools, user-visible strings (titles, descriptions, notes) MUST be in the user's language, while technical fields remain in ISO/standard formats.
 
-       ## STRICT RULES:
-1. **VERIFICATION & PERFECTION POLICY**: Never call 'addTask', 'updateTask', 'addEvent', or 'deleteTask' without explicit user confirmation of the exact details. You must ensure the information you've gathered is **perfect as the user intended**.
-2. **CLARIFY & CONFIRM BEFORE ADDING**: When a user wants to add a task/event, you must gather and confirm the following before execution:
-   - **Priority** (low, medium, high).
-   - **Category** (e.g., Work, Personal, Side Project).
-   - **Due Date / Time** (Use the Time Integrity Protocol).
-   - **Recurrence Rule**: If the user mentions a repeating schedule or routine (e.g., daily or weekly), explicitly clarify the frequency, interval, specific days, and end date if any.
-   - **Notes** or specific details.
-   - **Action**: Summarize the plan (e.g., "I'll schedule your weekly team sync every Monday at 10:00. Sound right?") and only call the tool AFTER they confirm.
-3. **ZERO ASSUMPTION POLICY**: If a detail is missing or ambiguous, ASK. Do not guess or use defaults unless the user says "just add it" or "you decide".
-4. **PRECISE TIME PARSING (TIME INTEGRITY PROTOCOL)**: When the user mentions a relative time, you MUST convert this to an absolute ISO-8601 string based on the "Current Time" provided below (e.g., "2026-05-15T07:00:00"). 
-   - You MUST ALWAYS use 24-hour military time in your ISO-8601 strings (e.g., 6:00 PM is 18:00:00).
-   - The 'Current Time' you are given is already pre-adjusted to the user's local timezone. You do not need to calculate offsets.
-5. If a user mentions a potential task (e.g., "I need to do X"), ask: "Would you like me to add that to your tasks?"
-6. If a user says they finished something or want to remove it, ask: "Should I remove '[Task Name]' from your list?"
-7. Only call the tool AFTER the user explicitly says the plan is perfect.
-8. **GRACEFUL CANCELLATION**: If a user declines a plan, says "never mind", "cancel that", or expresses they no longer want to proceed with a task/event after you've proposed it, acknowledge the cancellation warmly and confirm that you have NOT taken any action. Do not call the tool.
-9. **WORKSPACE AWARENESS**: You are always operating within a specific Workspace (e.g., Work, Personal, Side Project). Respect the "WORKSPACE GOAL/CONTEXT" provided below. Your advice, tone, and task suggestions should align with the specific purpose of the current workspace.
-10. **NATURAL EXPRESSION MANDATE**: Never use rigid, repetitive, or "bot-like" sentence templates for tool confirmations. Avoid "I have added [X] to your list." Instead, weave confirmations into natural prose (e.g., "All set! I've carved out that hour for your workout so you can focus on hitting your goals."). Do not start every response with "Got it," "Understood," or "Okay." Vary your tone and sentence structure constantly.
-11. **MANDATORY CONVERSATIONAL TEXT**: Every turn where you call a tool MUST also include a natural language part. You are forbidden from sending a tool call in isolation. Tell the user what you are doing in your warm, adaptive tone.
-12. **MULTILINGUAL FLUIDITY**: You must always respond in the same language the user is using. If the user speaks Indonesian, respond in natural, warm, and culturally appropriate Indonesian. Adapt your slang and level of formality to match the user's vibe. Crucially, when calling tools (like addTask or addEvent), all user-visible strings (titles, descriptions, notes) MUST be in the same language the user used. Technical fields like ISO dates or priority levels must remain in their specified formats.
-13. **WORKSPACE PRECEDENCE**: The "WORKSPACE CONTEXT" provided below is your **ABSOLUTE AUTHORITY**. It defines your persona, goals, and rules for the current session. You must prioritize these instructions over your default "Adaptive Persona". If the context demands a specific tone (e.g., cynical, formal, or strict), adopt it fully and do not blend it with your default personality.
+# 2. WORKSPACE GOVERNANCE & HIERARCHY
+- **Workspace Precedence**: The "WORKSPACE CONTEXT" provided below is your ABSOLUTE AUTHORITY. It defines your persona, goals, and rules for the current session. Prioritize these instructions over your default Adaptive Persona. Adopt any required tone (formal, strict, etc.) fully.
+- **Workspace Awareness**: You always operate within a specific Workspace (Work, Personal, Side Project). Align all task suggestions and advice with the active workspace's specific goal.
 
-## Multimodal Capabilities:
-You are a multimodal agent. You can see and analyze multiple images and documents (PDFs, Word docs, etc.) uploaded by the user.
-1. **Acknowledge Attachments**: If a user uploads files, acknowledge them naturally in your response (e.g., "I've received those 3 images" or "I've read the project proposal you attached").
-2. **Reason Across Files**: You can reason across multiple files simultaneously. Use this to compare documents, find patterns in images, or synthesize information from multiple sources.
-3. **Contextual Analysis**: Use the content of files to inform your task suggestions and planning. For example, if a user uploads a meeting invite, you might suggest adding the meeting to their calendar.
+# 3. VERIFICATION & EXECUTION PROTOCOL
+- **Verification & Perfection Policy**: NEVER call mutation tools ('addTask', 'updateTask', 'addEvent', 'deleteTask') on the first turn. You must ensure the information gathered is perfect before execution.
+- **Clarify & Confirm Before Adding**: Gather and confirm Priority, Category, Due Date/Time, Recurrence, and Notes first. Summarize the plan (e.g., "I'll schedule your weekly sync every Monday at 10:00. Sound right?") and only call the tool AFTER explicit confirmation.
+- **Zero Assumption Policy**: If any detail is missing or ambiguous, ASK. Do not guess or use defaults unless the user says "you decide".
+- **Task & Removal Inquiries**: If a user mentions a potential task ("I need to do X"), ask if they'd like it added. If they finish or want to remove something, ask before deleting.
+- **Graceful Cancellation**: If a user declines a plan, says "never mind", or cancels, acknowledge warmly and confirm no action was taken. Do not call the tool.
 
-## SKILLS:
+# 4. DATA INTEGRITY & PRECISE TIME PARSING
+- **Time Integrity Protocol**: When the user mentions a relative time, convert it to an absolute ISO-8601 string based on the "Current Time" provided below (e.g., "2026-05-15T18:00:00").
+- **Military Time**: ALWAYS use 24-hour military time in your ISO-8601 strings (6:00 PM is 18:00:00).
+- **Timezone Awareness**: The provided 'Current Time' is already adjusted to the user's local timezone. Do not calculate offsets.
+
+# 5. MULTIMODAL CAPABILITIES
+You are a multimodal agent capable of analyzing multiple images and documents (PDFs, Word docs, etc.).
+- **Acknowledge Attachments**: If uploaded, acknowledge files naturally (e.g., "I've reviewed those 3 images").
+- **Reason Across Files**: Compare documents, identify image patterns, and synthesize multi-source information simultaneously.
+- **Contextual Planning**: Use file content to inform task suggestions (e.g., suggest adding calendar events from a meeting invite).
+
+# 6. TOOL & SKILL REPERTOIRE
 ### addTask
-- Purpose: Use this skill ONLY AFTER verification AND clarification to save a task with full metadata. New tasks are automatically associated with the current workspace.
+- Purpose: Use ONLY AFTER verification and clarification to save a task with full metadata.
 ### completeTask
-- Purpose: Use this skill ONLY AFTER verification to mark a task as finished.
+- Purpose: Use ONLY AFTER verification to mark a task as finished.
 ### deleteTask
-- Purpose: Use this skill ONLY AFTER verification to PERMANENTLY remove a task.
+- Purpose: Use ONLY AFTER verification to permanently remove a task.
 ### addEvent
-- Purpose: Use this skill ONLY AFTER verification to schedule a specific event with a start and end time. Events are time-blocks on a calendar.
-- Requirement: You MUST provide 'startTime' and 'endTime' as absolute ISO-8601 strings in 24-hour format.
-- Recurrence: When a user requests to schedule a routine, recurring meeting, or repeating habit (e.g., "workout every Tuesday and Thursday at 7am" or "daily standup at 10am"), populate the 'recurrence' argument. ALWAYS verify and confirm the recurrence schedule with the user before calling this tool. Use frequency 'daily' for every day, or 'weekly' with daysOfWeek formatted as integers where 0 is Sunday, 1 is Monday, ..., 6 is Saturday. Set base 'startTime' to the very first occurrence.
+- Purpose: Use ONLY AFTER verification to schedule an event.
+- Event Type & Duration: For duration events (meetings, workouts), set eventType to 'interval' with startTime and endTime. For momentary events (deadlines, drops, releases), set eventType to 'point' and omit endTime.
+- Recurrence: Populate 'recurrence' for repeating routines (daily/weekly). Always verify and confirm the schedule first. Set base startTime to the first occurrence.
 ### deleteEvent
-- Purpose: Use this skill ONLY AFTER verification to remove a scheduled event.
+- Purpose: Use ONLY AFTER verification to remove a scheduled event.
+### updateEventOccurrence
+- Purpose: Use ONLY AFTER verification to modify or reschedule a single day/occurrence of a recurring series (e.g., 'move Tuesday gym to 8am'). Provide seriesId and originalStartTime. Explain clearly during confirmation that ONLY this specific date was modified.
 ### searchWeb
-- Purpose: YOU MUST use this skill WHENEVER the user asks for real-time information.
-- Multi-Search: You can and SHOULD perform multiple searches in a single turn if a complex query requires broad research (e.g., "Compare X and Y" should trigger two searches).
+- Purpose: MUST use whenever the user asks for real-time information or facts you do not know. Perform multiple searches in one turn if broad research is needed.
 ### updateMemory
-- Purpose: Use this skill when you learn something new about the user's personality or preferences.
+- Purpose: Use when you learn new, stable patterns about the user's personality or preferences.
 `;
 
 export const chat = internalAction({
@@ -194,7 +190,7 @@ export const chat = internalAction({
         functionDeclarations: [
           {
             name: "addTask",
-            description: "Adds a new task to the user's list. Use for things to do.",
+            description: "CRITICAL MANDATE: DO NOT call this tool on the first turn when a user requests to add a task. You MUST ask the user to clarify and confirm the exact details (priority, category, due date) first in conversational text. Only call this tool AFTER the user explicitly says the plan is perfect.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -235,14 +231,15 @@ export const chat = internalAction({
           },
           {
             name: "addEvent",
-            description: "Adds a new event to the calendar. Use for meetings or time blocks, including repeating routines or habits.",
+            description: "CRITICAL MANDATE: DO NOT call this tool on the first turn when a user requests to schedule an event. You MUST ask the user to clarify and confirm all details (start time, event type, recurrence) first in conversational text. Only call this tool AFTER the user explicitly confirms the plan.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
                 title: { type: SchemaType.STRING, description: "Event title" },
                 description: { type: SchemaType.STRING, description: "Optional description" },
                 startTime: { type: SchemaType.STRING, description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T14:00:00'). DO NOT append 'Z'." },
-                endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format)." },
+                endTime: { type: SchemaType.STRING, description: "Optional ISO-8601 end time (24-hour format). Required for interval events; omit for point events." },
+                eventType: { type: SchemaType.STRING, description: "'interval' for duration events (meetings, workouts) or 'point' for momentary events (deadlines, drops, releases)." },
                 location: { type: SchemaType.STRING, description: "Optional location" },
                 notes: { type: SchemaType.STRING, description: "Optional notes" },
                 recurrence: {
@@ -261,7 +258,7 @@ export const chat = internalAction({
                   required: ["frequency", "interval"]
                 }
               },
-              required: ["title", "startTime", "endTime"],
+              required: ["title", "startTime", "eventType"],
             },
           },
           {
@@ -274,6 +271,7 @@ export const chat = internalAction({
                 title: { type: SchemaType.STRING, description: "The new event title" },
                 startTime: { type: SchemaType.STRING, description: "ISO-8601 start time (24-hour format, e.g. '2026-05-15T11:50:00')" },
                 endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
+                eventType: { type: SchemaType.STRING, description: "'interval' or 'point'" },
                 location: { type: SchemaType.STRING, description: "Optional new location" },
                 notes: { type: SchemaType.STRING, description: "Optional new notes" },
                 recurrence: {
@@ -289,6 +287,23 @@ export const chat = internalAction({
                 }
               },
               required: ["eventId"],
+            },
+          },
+          {
+            name: "updateEventOccurrence",
+            description: "Modifies or reschedules a single detached occurrence of a recurring event series (e.g. moving just this Tuesday's workout to 8am).",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                seriesId: { type: SchemaType.STRING, description: "The ID of the parent recurring event series" },
+                originalStartTime: { type: SchemaType.STRING, description: "ISO-8601 timestamp of the specific occurrence being modified (e.g. '2026-05-19T07:00:00')" },
+                startTime: { type: SchemaType.STRING, description: "Optional new ISO-8601 start time for this single occurrence" },
+                endTime: { type: SchemaType.STRING, description: "Optional new ISO-8601 end time for this single occurrence" },
+                eventType: { type: SchemaType.STRING, description: "Optional new event type ('interval' or 'point')" },
+                title: { type: SchemaType.STRING, description: "Optional new title for this occurrence" },
+                location: { type: SchemaType.STRING, description: "Optional new location for this occurrence" },
+              },
+              required: ["seriesId", "originalStartTime"],
             },
           },
           {
@@ -497,6 +512,8 @@ export const chat = internalAction({
           return new Date(s).getTime();
         };
 
+        const executedActionSummaries: { name: string; summary: string }[] = [];
+
         for (const call of otherCalls) {
           // --- Task Tool Handlers ---
           if (call.name === "addTask" || call.name === "updateTask") {
@@ -520,6 +537,10 @@ export const chat = internalAction({
                 workspaceId,
                 userId: args.userId
               });
+              executedActionSummaries.push({
+                name: "addTask",
+                summary: `Created new task '${taskArgs.text}'`
+              });
               activeToolCall = { name: "addTask", args: call.args };
             } else {
               const oldTask = await ctx.runQuery(api.tasks.get, { id: taskArgs.taskId as Id<"tasks">, userId: args.userId });
@@ -536,6 +557,11 @@ export const chat = internalAction({
                 id: taskArgs.taskId! as Id<"tasks">,
                 userId: args.userId,
                 ...taskUpdates
+              });
+
+              executedActionSummaries.push({
+                name: "updateTask",
+                summary: `Updated task '${oldTask?.text}'`
               });
 
               activeToolCall = {
@@ -557,11 +583,19 @@ export const chat = internalAction({
             const { taskId } = call.args as { taskId: string };
             const task = await ctx.runQuery(api.tasks.get, { id: taskId as Id<"tasks">, userId: args.userId });
             await ctx.runMutation(api.tasks.deleteTask, { id: taskId as Id<"tasks">, userId: args.userId });
+            executedActionSummaries.push({
+              name: "deleteTask",
+              summary: `Deleted task '${task?.text}'`
+            });
             activeToolCall = { name: "deleteTask", args: { ...call.args, titleHint: task?.text } };
           } else if (call.name === "completeTask") {
             const { taskId } = call.args as { taskId: string };
             const task = await ctx.runQuery(api.tasks.get, { id: taskId as Id<"tasks">, userId: args.userId });
             await ctx.runMutation(api.tasks.completeTask, { id: taskId as Id<"tasks">, userId: args.userId });
+            executedActionSummaries.push({
+              name: "completeTask",
+              summary: `Completed task '${task?.text}'`
+            });
             activeToolCall = { name: "completeTask", args: { ...call.args, titleHint: task?.text } };
             // --- Event Tool Handlers ---
           } else if (call.name === "addEvent" || call.name === "updateEvent") {
@@ -572,6 +606,7 @@ export const chat = internalAction({
               notes?: string;
               startTime?: string;
               endTime?: string;
+              eventType?: "interval" | "point";
               recurrence?: {
                 frequency: "daily" | "weekly";
                 interval: number;
@@ -593,10 +628,15 @@ export const chat = internalAction({
                 location: eventArgs.location,
                 notes: eventArgs.notes,
                 startTime: parseLocal(eventArgs.startTime!),
-                endTime: parseLocal(eventArgs.endTime!),
+                endTime: eventArgs.endTime ? parseLocal(eventArgs.endTime) : undefined,
+                eventType: eventArgs.eventType || (eventArgs.endTime ? "interval" : "point"),
                 recurrence,
                 workspaceId,
                 userId: args.userId
+              });
+              executedActionSummaries.push({
+                name: "addEvent",
+                summary: `Scheduled new event '${eventArgs.title}' starting at ${eventArgs.startTime}`
               });
               activeToolCall = { name: "addEvent", args: call.args };
             } else {
@@ -608,6 +648,7 @@ export const chat = internalAction({
               if (eventArgs.notes) updates.notes = eventArgs.notes;
               if (eventArgs.startTime) updates.startTime = parseLocal(eventArgs.startTime);
               if (eventArgs.endTime) updates.endTime = parseLocal(eventArgs.endTime);
+              if (eventArgs.eventType) updates.eventType = eventArgs.eventType;
               if (eventArgs.recurrence) {
                 updates.recurrence = {
                   frequency: eventArgs.recurrence.frequency,
@@ -621,6 +662,11 @@ export const chat = internalAction({
                 id: eventArgs.eventId! as Id<"events">,
                 userId: args.userId,
                 ...updates
+              });
+
+              executedActionSummaries.push({
+                name: "updateEvent",
+                summary: `Updated entire event or recurring series '${oldEvent?.title}'. Modifications applied to all occurrences in the series.`
               });
 
               activeToolCall = {
@@ -641,11 +687,43 @@ export const chat = internalAction({
             const { eventId } = call.args as { eventId: string };
             const event = await ctx.runQuery(api.events.get, { id: eventId as Id<"events">, userId: args.userId });
             await ctx.runMutation(api.events.remove, { id: eventId as Id<"events">, userId: args.userId });
+            executedActionSummaries.push({
+              name: "deleteEvent",
+              summary: `Deleted event or entire recurring series '${event?.title}'.`
+            });
             activeToolCall = { name: "deleteEvent", args: { ...call.args, titleHint: event?.title } };
+          } else if (call.name === "updateEventOccurrence") {
+            const occArgs = call.args as { seriesId: string; originalStartTime: string; startTime?: string; endTime?: string; eventType?: "interval" | "point"; title?: string; location?: string };
+            const oldEvent = await ctx.runQuery(api.events.get, { id: occArgs.seriesId as Id<"events">, userId: args.userId });
+            await ctx.runMutation(api.events.updateOccurrence, {
+              seriesId: occArgs.seriesId as Id<"events">,
+              userId: args.userId,
+              originalStartTime: parseLocal(occArgs.originalStartTime),
+              startTime: occArgs.startTime ? parseLocal(occArgs.startTime) : undefined,
+              endTime: occArgs.endTime ? parseLocal(occArgs.endTime) : undefined,
+              eventType: occArgs.eventType,
+              title: occArgs.title,
+              location: occArgs.location,
+            });
+            executedActionSummaries.push({
+              name: "updateEventOccurrence",
+              summary: `Successfully modified only the single occurrence on ${occArgs.originalStartTime} for recurring event series '${oldEvent?.title}'. New details for this single day: startTime=${occArgs.startTime || occArgs.originalStartTime}, title=${occArgs.title || oldEvent?.title}. NOTE: Added exception to parent series so it skips this date, and created a standalone event specifically for this date. The rest of the recurring schedule remains completely unchanged.`
+            });
+            activeToolCall = {
+              name: "updateEventOccurrence",
+              args: {
+                ...call.args,
+                titleHint: occArgs.title ?? oldEvent?.title,
+              }
+            };
           } else if (call.name === "updateMemory") {
             const updates = call.args as { bio: string };
             const oldProfile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
             await ctx.runMutation(api.ai.updateProfile, { ...updates, userId: args.userId });
+            executedActionSummaries.push({
+              name: "updateMemory",
+              summary: `Updated user profile/memory bio.`
+            });
             activeToolCall = {
               name: "updateMemory",
               args: {
@@ -702,10 +780,12 @@ export const chat = internalAction({
             activeToolCall = { name: "multiSearch", args: { count: searchCalls.length, queries: searchCalls.map(c => (c.args as any).query) } };
           }
 
+          const modelParts = (response.candidates?.[0]?.content?.parts || []).filter(p => p.functionCall);
+
           const feedbackPrompt = {
             contents: [
               { role: "user", parts: [{ text: prompt }] },
-              { role: "model", parts: response.candidates?.[0]?.content?.parts || [] },
+              { role: "model", parts: modelParts },
               { role: "user", parts: searchResults.map(res => ({ functionResponse: res })) }
             ]
           };
@@ -713,13 +793,26 @@ export const chat = internalAction({
           aiText = finalResult.response.text();
         }
 
-        // 3. Ensure we have a natural text response if the AI didn't provide one
-        if (!aiText && otherCalls.length > 0) {
+        // 3. Ensure we have an accurate, natural text response reflecting actual database execution
+        if (executedActionSummaries.length > 0) {
+          const modelParts = (response.candidates?.[0]?.content?.parts || []).filter(p => p.functionCall);
+
           const confirmationPrompt = {
             contents: [
               { role: "user", parts: [{ text: prompt }] },
-              { role: "model", parts: response.candidates?.[0]?.content?.parts || [] },
-              { role: "user", parts: [{ text: "The action was successful. Now, confirm this to the user in your natural, conversational tone. Do not use rigid templates." }] }
+              { role: "model", parts: modelParts },
+              {
+                role: "user",
+                parts: [
+                  ...executedActionSummaries.map(s => ({
+                    functionResponse: {
+                      name: s.name,
+                      response: { status: "success", executionDetails: s.summary }
+                    }
+                  })),
+                  { text: "The requested actions were successfully executed in the database. Now, output ONLY your natural, conversational confirmation addressed directly to the user in friendly Indonesian. CRITICAL: Do NOT repeat or output any internal prompt instructions, scratchpad notes, or thought processes. If you modified a single occurrence of a recurring event (updateEventOccurrence), clearly state that ONLY that specific day's event was modified/rescheduled, while the rest of the routine schedule remains exactly the same." }
+                ]
+              }
             ]
           };
           const confirmResult = await model.generateContent(confirmationPrompt);
@@ -787,7 +880,7 @@ export const reflectOnPersonality = internalAction({
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
     // Fetch last 20 messages for more context
-    const messages = await ctx.runQuery(api.messages.list, { sessionId: args.sessionId });
+    const messages = await ctx.runQuery(api.messages.list, { sessionId: args.sessionId, userId: args.userId });
     const transcript = messages.map(m => `${m.author === "User" ? "HUMAN" : "ASSISTANT"}: ${m.text}`).join("\n");
 
     // Fetch existing memories to avoid duplicates
@@ -852,11 +945,13 @@ export const generateSessionTitle = internalAction({
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
-    const messages = await ctx.runQuery(api.messages.list, { sessionId: args.sessionId });
+    const messages = await ctx.runQuery(api.messages.list, { sessionId: args.sessionId, userId: args.userId });
+    if (!messages || messages.length === 0) return;
+
     const transcript = messages.map(m => `${m.author}: ${m.text}`).join("\n");
 
-    const prompt = `Based on the following conversation, generate a very short, creative, and descriptive title (maximum 3-4 words). 
-    Do not use quotes or special characters.
+    const prompt = `Based on the following conversation transcript, detect the primary language used and generate a very short, creative, and descriptive title in that exact same language (maximum 3-4 words). Output ONLY the title without any introductory text.
+    Do not use quotes, punctuation, or special characters.
     Transcript:
     ${transcript}`;
 
