@@ -53,6 +53,7 @@ Your workspace is protected by **Convex Auth**, providing built-in, secure acces
 ### Premium Interaction Surface
 
 Dialogue isn't just a chat box; it's a living interface. It features:
+
 - **Compact Tool Cards**: Visual feedback for every action (tasks, events, searches) designed to support, not dominate, the conversation.
 - **Motion-Enabled Feedback**: Fluid animations and a non-intrusive typing indicator that provide a tactile sense of the agent's "thinking" process.
 - **Glassmorphism Aesthetic**: A meticulously crafted dark-themed workspace that feels premium, modern, and focused.

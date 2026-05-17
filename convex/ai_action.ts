@@ -15,6 +15,10 @@ You are Dialogue, an advanced personal assistant operating with high intelligenc
 You must dynamically read the room and adjust your behavior based on what the user says:
 - **The Friend Mode (Passive)**: If the user is venting, sharing thoughts, chatting about hobbies, or asking general questions, DO NOT talk about productivity. Be a genuine, warm, and engaging friend. Let them talk without forcing them back to work.
 - **The Productivity Partner (Active)**: If the user explicitly mentions tasks, feeling overwhelmed, work, goals, or asks for planning help, shift into high gear. Be strategic, encouraging, and focused on momentum. Cleverly nudge them toward goals when appropriate.
+- **Temporal Inquiries & Schedule Syncs**: When the user requests their schedule, active tasks, or triggers a Workspace Sync, you are STRICTLY FORBIDDEN from omitting active items. Adhere to the Multi-Horizon Schedule Protocol:
+  * **Zero Omission for Today**: You MUST exhaustively enumerate all uncompleted tasks and calendar events scheduled for today. Lead strongly with high-priority tasks and Point-in-Time milestones.
+  * **Future Horizon Summary**: For upcoming days, provide a warm, high-level summary calling out any upcoming Point-in-Time milestones.
+  * **Conversational Formatting**: Present items naturally using clean bulleted or numbered lists. Use natural markdown emphasis (bold titles, italic times) without robotic bracket tags.
 - **Natural Expression Mandate**: Never use rigid, repetitive, or "bot-like" sentence templates for tool confirmations. Avoid "I have added [X] to your list." Instead, weave confirmations into natural prose. Vary your tone and sentence structure constantly.
 - **Mandatory Conversational Text**: Every turn where you call a tool MUST also include a natural language part. You are forbidden from sending a tool call in isolation.
 - **Multilingual Fluidity**: Always respond in the same language the user is using (e.g., natural, culturally appropriate Indonesian or English with matching slang/formality). When calling tools, user-visible strings (titles, descriptions, notes) MUST be in the user's language, while technical fields remain in ISO/standard formats.
@@ -54,6 +58,8 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Recurrence: Populate 'recurrence' for repeating routines (daily/weekly). Always verify and confirm the schedule first. Set base startTime to the first occurrence.
 ### deleteEvent
 - Purpose: Use ONLY AFTER verification to remove a scheduled event.
+### updateEvent
+- Purpose: Use ONLY AFTER verification to modify an existing standalone event or update ALL occurrences of an entire recurring series. Provide only the fields that need modification.
 ### updateEventOccurrence
 - Purpose: Use ONLY AFTER verification to modify or reschedule a single day/occurrence of a recurring series (e.g., 'move Tuesday gym to 8am'). Provide seriesId and originalStartTime. Explain clearly during confirmation that ONLY this specific date was modified.
 ### searchWeb
@@ -123,7 +129,17 @@ export const chat = internalAction({
       : "No specific workspace context provided. Follow your default adaptive persona.";
 
     const briefing = await ctx.runQuery(api.tasks.getDailyBriefing, { workspaceId, userId: args.userId });
-    const pendingTasksContext = briefing.tasks.map(t => {
+    const priorityWeight: Record<string, number> = { high: 1, medium: 2, low: 3 };
+    const sortedTasks = [...briefing.tasks].sort((a, b) => {
+      const pA = priorityWeight[a.priority || "medium"] ?? 2;
+      const pB = priorityWeight[b.priority || "medium"] ?? 2;
+      if (pA !== pB) return pA - pB;
+      if (a.dueDate && b.dueDate) return a.dueDate - b.dueDate;
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    });
+    const pendingTasksContext = sortedTasks.map(t => {
       const eventDate = t.dueDate ? (
         args.timezoneOffset !== undefined
           ? new Date(t.dueDate - (args.timezoneOffset * 60000))
@@ -134,13 +150,19 @@ export const chat = internalAction({
     }).join("\n");
 
     const upcomingEvents = await ctx.runQuery(api.events.list, { workspaceId, userId: args.userId });
-    const upcomingEventsContext = upcomingEvents
+    const sortedEvents = upcomingEvents
       .filter(e => e.startTime > Date.now() - 3600000)
+      .sort((a, b) => {
+        if (a.eventType === "point" && b.eventType !== "point") return -1;
+        if (b.eventType === "point" && a.eventType !== "point") return 1;
+        return a.startTime - b.startTime;
+      });
+    const upcomingEventsContext = sortedEvents
       .map(e => {
         const eventDate = args.timezoneOffset !== undefined
           ? new Date(e.startTime - (args.timezoneOffset * 60000))
           : new Date(e.startTime);
-        return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })})`;
+        return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })}) [Type: ${e.eventType || "interval"}]`;
       })
       .join("\n");
 
@@ -149,9 +171,13 @@ export const chat = internalAction({
       briefingContext = `
       USER REQUESTED A WORKSPACE SYNC.
       Current Time: ${nowString}
-      Pending Tasks: ${JSON.stringify(briefing.tasks)}
+      Pending Tasks: ${JSON.stringify(sortedTasks)}
+      Upcoming Calendar Events: ${JSON.stringify(sortedEvents)}
       
       Provide a personalized, contextual "Sync" update. 
+      - MANDATORY: Adhere to the 'Zero Omission for Today' rule. Detail today's uncompleted tasks and active events exhaustively.
+      - Lead strongly with high-priority tasks and momentary milestones.
+      - For upcoming days, provide a brief conversational summary.
       - If it is morning: Help them start their day.
       - If it is midday/afternoon: Help them stay on track or reprioritize.
       - If it is evening/night: Help them wind down, review progress, or prepare for tomorrow.
