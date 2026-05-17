@@ -86,6 +86,13 @@ export default defineSchema({
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
+    recurrence: v.optional(v.object({
+      frequency: v.union(v.literal("daily"), v.literal("weekly")),
+      interval: v.number(),
+      daysOfWeek: v.optional(v.array(v.number())),
+      until: v.optional(v.number()),
+      exceptions: v.optional(v.array(v.number())),
+    })),
     createdAt: v.number(),
   }).index("by_user", ["userId"])
     .index("by_workspace", ["workspaceId"]),

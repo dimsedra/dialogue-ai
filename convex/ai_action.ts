@@ -23,8 +23,9 @@ You must dynamically read the room and adjust your behavior based on what the us
    - **Priority** (low, medium, high).
    - **Category** (e.g., Work, Personal, Side Project).
    - **Due Date / Time** (Use the Time Integrity Protocol).
+   - **Recurrence Rule**: If the user mentions a repeating schedule or routine (e.g., daily or weekly), explicitly clarify the frequency, interval, specific days, and end date if any.
    - **Notes** or specific details.
-   - **Action**: Summarize the plan (e.g., "I'll add 'Project Review' for 14:00 with High priority in 'Work'. Sound right?") and only call the tool AFTER they confirm.
+   - **Action**: Summarize the plan (e.g., "I'll schedule your weekly team sync every Monday at 10:00. Sound right?") and only call the tool AFTER they confirm.
 3. **ZERO ASSUMPTION POLICY**: If a detail is missing or ambiguous, ASK. Do not guess or use defaults unless the user says "just add it" or "you decide".
 4. **PRECISE TIME PARSING (TIME INTEGRITY PROTOCOL)**: When the user mentions a relative time, you MUST convert this to an absolute ISO-8601 string based on the "Current Time" provided below (e.g., "2026-05-15T07:00:00"). 
    - You MUST ALWAYS use 24-hour military time in your ISO-8601 strings (e.g., 6:00 PM is 18:00:00).
@@ -55,6 +56,7 @@ You are a multimodal agent. You can see and analyze multiple images and document
 ### addEvent
 - Purpose: Use this skill ONLY AFTER verification to schedule a specific event with a start and end time. Events are time-blocks on a calendar.
 - Requirement: You MUST provide 'startTime' and 'endTime' as absolute ISO-8601 strings in 24-hour format.
+- Recurrence: When a user requests to schedule a routine, recurring meeting, or repeating habit (e.g., "workout every Tuesday and Thursday at 7am" or "daily standup at 10am"), populate the 'recurrence' argument. ALWAYS verify and confirm the recurrence schedule with the user before calling this tool. Use frequency 'daily' for every day, or 'weekly' with daysOfWeek formatted as integers where 0 is Sunday, 1 is Monday, ..., 6 is Saturday. Set base 'startTime' to the very first occurrence.
 ### deleteEvent
 - Purpose: Use this skill ONLY AFTER verification to remove a scheduled event.
 ### searchWeb
@@ -233,7 +235,7 @@ export const chat = internalAction({
           },
           {
             name: "addEvent",
-            description: "Adds a new event to the calendar. Use for meetings or time blocks.",
+            description: "Adds a new event to the calendar. Use for meetings or time blocks, including repeating routines or habits.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -243,6 +245,21 @@ export const chat = internalAction({
                 endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format)." },
                 location: { type: SchemaType.STRING, description: "Optional location" },
                 notes: { type: SchemaType.STRING, description: "Optional notes" },
+                recurrence: {
+                  type: SchemaType.OBJECT,
+                  description: "Optional recurrence rule if the event repeats.",
+                  properties: {
+                    frequency: { type: SchemaType.STRING, description: "'daily' or 'weekly'" },
+                    interval: { type: SchemaType.NUMBER, description: "Interval count, e.g. 1 for every day/week, 2 for bi-weekly" },
+                    daysOfWeek: {
+                      type: SchemaType.ARRAY,
+                      items: { type: SchemaType.NUMBER },
+                      description: "For weekly recurrence: array of day numbers (0=Sun, 1=Mon, ..., 6=Sat)"
+                    },
+                    until: { type: SchemaType.STRING, description: "Optional ISO-8601 end date for the recurrence series." }
+                  },
+                  required: ["frequency", "interval"]
+                }
               },
               required: ["title", "startTime", "endTime"],
             },
@@ -259,6 +276,17 @@ export const chat = internalAction({
                 endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
                 location: { type: SchemaType.STRING, description: "Optional new location" },
                 notes: { type: SchemaType.STRING, description: "Optional new notes" },
+                recurrence: {
+                  type: SchemaType.OBJECT,
+                  description: "Optional updated recurrence rule.",
+                  properties: {
+                    frequency: { type: SchemaType.STRING, description: "'daily' or 'weekly'" },
+                    interval: { type: SchemaType.NUMBER },
+                    daysOfWeek: { type: SchemaType.ARRAY, items: { type: SchemaType.NUMBER } },
+                    until: { type: SchemaType.STRING }
+                  },
+                  required: ["frequency", "interval"]
+                }
               },
               required: ["eventId"],
             },
@@ -544,15 +572,29 @@ export const chat = internalAction({
               notes?: string;
               startTime?: string;
               endTime?: string;
+              recurrence?: {
+                frequency: "daily" | "weekly";
+                interval: number;
+                daysOfWeek?: number[];
+                until?: string;
+              };
             };
 
             if (call.name === "addEvent") {
+              const recurrence = eventArgs.recurrence ? {
+                frequency: eventArgs.recurrence.frequency,
+                interval: eventArgs.recurrence.interval,
+                daysOfWeek: eventArgs.recurrence.daysOfWeek,
+                until: eventArgs.recurrence.until ? parseLocal(eventArgs.recurrence.until) : undefined,
+              } : undefined;
+
               await ctx.runMutation(api.events.add, {
                 title: eventArgs.title!,
                 location: eventArgs.location,
                 notes: eventArgs.notes,
                 startTime: parseLocal(eventArgs.startTime!),
                 endTime: parseLocal(eventArgs.endTime!),
+                recurrence,
                 workspaceId,
                 userId: args.userId
               });
@@ -560,12 +602,20 @@ export const chat = internalAction({
             } else {
               const oldEvent = await ctx.runQuery(api.events.get, { id: eventArgs.eventId as Id<"events">, userId: args.userId });
 
-              const updates: Record<string, string | number> = {};
+              const updates: Record<string, unknown> = {};
               if (eventArgs.title) updates.title = eventArgs.title;
               if (eventArgs.location) updates.location = eventArgs.location;
               if (eventArgs.notes) updates.notes = eventArgs.notes;
               if (eventArgs.startTime) updates.startTime = parseLocal(eventArgs.startTime);
               if (eventArgs.endTime) updates.endTime = parseLocal(eventArgs.endTime);
+              if (eventArgs.recurrence) {
+                updates.recurrence = {
+                  frequency: eventArgs.recurrence.frequency,
+                  interval: eventArgs.recurrence.interval,
+                  daysOfWeek: eventArgs.recurrence.daysOfWeek,
+                  until: eventArgs.recurrence.until ? parseLocal(eventArgs.recurrence.until) : undefined,
+                };
+              }
 
               await ctx.runMutation(api.events.update, {
                 id: eventArgs.eventId! as Id<"events">,

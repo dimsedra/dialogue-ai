@@ -1,6 +1,80 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { auth } from "./auth";
+import { Doc } from "./_generated/dataModel";
+
+const recurrenceValidator = v.optional(v.union(v.object({
+  frequency: v.union(v.literal("daily"), v.literal("weekly")),
+  interval: v.number(),
+  daysOfWeek: v.optional(v.array(v.number())),
+  until: v.optional(v.number()),
+  exceptions: v.optional(v.array(v.number())),
+}), v.null()));
+
+function expandRecurringEvents(events: Doc<"events">[], windowStart: number, windowEnd: number) {
+  const expanded: Doc<"events">[] = [];
+  for (const event of events) {
+    if (!event.recurrence) {
+      expanded.push(event);
+      continue;
+    }
+
+    const duration = event.endTime - event.startTime;
+    const limit = Math.min(windowEnd, event.recurrence.until ?? windowEnd);
+    const exceptions = event.recurrence.exceptions ?? [];
+
+    if (event.recurrence.frequency === "daily") {
+      const d = new Date(event.startTime);
+      while (d.getTime() <= limit) {
+        const timestamp = d.getTime();
+        if (timestamp >= windowStart && !exceptions.includes(timestamp)) {
+          expanded.push({
+            ...event,
+            startTime: timestamp,
+            endTime: timestamp + duration,
+          });
+        }
+        d.setDate(d.getDate() + event.recurrence.interval);
+      }
+    } else if (event.recurrence.frequency === "weekly") {
+      const d = new Date(event.startTime);
+      const daysOfWeek = event.recurrence.daysOfWeek && event.recurrence.daysOfWeek.length > 0
+        ? event.recurrence.daysOfWeek
+        : [d.getDay()];
+
+      const currWeekStart = new Date(event.startTime);
+      currWeekStart.setDate(currWeekStart.getDate() - currWeekStart.getDay());
+      let weeksCounter = 0;
+
+      while (currWeekStart.getTime() <= limit) {
+        if (weeksCounter % event.recurrence.interval === 0) {
+          for (let dayIndex = 0; dayIndex <= 6; dayIndex++) {
+            if (daysOfWeek.includes(dayIndex)) {
+              const targetDate = new Date(currWeekStart);
+              targetDate.setDate(targetDate.getDate() + dayIndex);
+              const origTime = new Date(event.startTime);
+              targetDate.setHours(origTime.getHours(), origTime.getMinutes(), origTime.getSeconds(), origTime.getMilliseconds());
+              
+              const timestamp = targetDate.getTime();
+              if (timestamp >= event.startTime && timestamp <= limit && timestamp >= windowStart) {
+                if (!exceptions.includes(timestamp)) {
+                  expanded.push({
+                    ...event,
+                    startTime: timestamp,
+                    endTime: timestamp + duration,
+                  });
+                }
+              }
+            }
+          }
+        }
+        currWeekStart.setDate(currWeekStart.getDate() + 7);
+        weeksCounter++;
+      }
+    }
+  }
+  return expanded;
+}
 
 export const list = query({
   args: { workspaceId: v.optional(v.id("workspaces")), userId: v.optional(v.id("users")) },
@@ -8,20 +82,26 @@ export const list = query({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) return [];
 
+    let rawEvents: Doc<"events">[] = [];
     if (args.workspaceId) {
       const workspace = await ctx.db.get(args.workspaceId);
       if (!workspace || workspace.userId !== userId) return [];
 
-      return await ctx.db
+      rawEvents = await ctx.db
         .query("events")
         .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
         .filter((q) => q.eq(q.field("userId"), userId))
         .collect();
+    } else {
+      rawEvents = await ctx.db
+        .query("events")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
     }
-    return await ctx.db
-      .query("events")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+
+    const windowStart = Date.now() - 30 * 24 * 3600 * 1000; // 30 days ago
+    const windowEnd = Date.now() + 365 * 24 * 3600 * 1000; // 1 year ahead
+    return expandRecurringEvents(rawEvents, windowStart, windowEnd);
   },
 });
 
@@ -43,6 +123,7 @@ export const add = mutation({
     endTime: v.number(),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
+    recurrence: recurrenceValidator,
     workspaceId: v.optional(v.id("workspaces")),
     userId: v.optional(v.id("users")),
   },
@@ -57,6 +138,7 @@ export const add = mutation({
       description: args.description,
       location: args.location,
       notes: args.notes,
+      recurrence: args.recurrence ?? undefined,
       workspaceId: args.workspaceId,
       userId,
       createdAt: Date.now(),
@@ -84,6 +166,7 @@ export const update = mutation({
     endTime: v.optional(v.number()),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
+    recurrence: recurrenceValidator,
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -91,12 +174,38 @@ export const update = mutation({
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== userId) throw new Error("Unauthorized");
 
-    const updates: Record<string, string | number | undefined> = {};
+    const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
       if (value !== undefined && key !== "id" && key !== "userId") {
-        updates[key] = value;
+        if (value === null) {
+          updates[key] = undefined;
+        } else {
+          updates[key] = value;
+        }
       }
     }
     await ctx.db.patch(args.id, updates);
+  },
+});
+
+export const cancelOccurrence = mutation({
+  args: { id: v.id("events"), timestamp: v.number(), userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    const event = await ctx.db.get(args.id);
+    if (!event || event.userId !== userId) throw new Error("Unauthorized");
+
+    if (event.recurrence) {
+      const exceptions = event.recurrence.exceptions ?? [];
+      if (!exceptions.includes(args.timestamp)) {
+        exceptions.push(args.timestamp);
+        await ctx.db.patch(args.id, {
+          recurrence: {
+            ...event.recurrence,
+            exceptions,
+          },
+        });
+      }
+    }
   },
 });

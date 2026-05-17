@@ -4,7 +4,7 @@ import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2, ArrowDown, LogOut } from "lucide-react";
+import { Send, User, Bot, Sparkles, Trash2, Tag, Plus, X, Edit3, Check, ChevronLeft, ChevronRight, Clock, Settings, Zap, Cpu, Menu, Copy, File as FileIcon, PlusCircle, ExternalLink, CalendarDays, MapPin, Search, CheckCircle2, ArrowDown, LogOut, RefreshCw } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../convex/_generated/dataModel";
@@ -217,11 +217,26 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
   }
 
   // --- Event Tools ---
+  const formatRecurrenceText = (rec: { frequency: string; interval: number; daysOfWeek?: number[] } | undefined) => {
+    if (!rec) return "";
+    const base = rec.frequency === "daily" 
+      ? (rec.interval === 1 ? "Daily" : `Every ${rec.interval} days`)
+      : (rec.interval === 1 ? "Weekly" : `Every ${rec.interval} weeks`);
+    
+    if (rec.frequency === "weekly" && rec.daysOfWeek && rec.daysOfWeek.length > 0) {
+      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const daysStr = [...rec.daysOfWeek].sort().map(d => dayNames[d]).join(", ");
+      return `${base} on ${daysStr}`;
+    }
+    return base;
+  };
+
   if (toolCall.name === "addEvent") {
-    const { title, startTime, location } = toolCall.args as { 
+    const { title, startTime, location, recurrence } = toolCall.args as { 
       title: string; 
       startTime: string; 
       location?: string;
+      recurrence?: { frequency: string; interval: number; daysOfWeek?: number[] };
     };
     return (
       <motion.div 
@@ -235,7 +250,7 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
         </div>
         <div className="space-y-2">
           <p className="text-sm text-[#f2efeb] font-semibold leading-snug">{title}</p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
             <div className="flex items-center gap-1.5 text-[10px] text-[#8b5cf6] font-bold">
               <Clock className="w-3 h-3" />
               {(() => {
@@ -248,6 +263,12 @@ function ToolCard({ toolCall }: { toolCall: ToolCall }) {
                 return format(parseISO(s), "MMM d, HH:mm");
               })()}
             </div>
+            {recurrence && (
+              <div className="flex items-center gap-1 text-[10px] text-[#8b5cf6] font-semibold bg-[#8b5cf6]/15 px-2 py-0.5 rounded-full border border-[#8b5cf6]/20">
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span>{formatRecurrenceText(recurrence)}</span>
+              </div>
+            )}
             {location && (
               <div className="flex items-center gap-1.5 text-[10px] text-[#a8a29e] font-medium">
                 <MapPin className="w-3 h-3 text-[#8b5cf6]/60" />

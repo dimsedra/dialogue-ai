@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { CheckCircle2, Circle, Clock, ListTodo, Sparkles, Tag, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Calendar as CalendarIcon, Grid, Filter, ArrowUpDown, Search, Trash2, Edit3, Save, X } from "lucide-react";
+import { CheckCircle2, Circle, Clock, ListTodo, Sparkles, Tag, ChevronDown, ChevronUp, ChevronRight, AlertCircle, Calendar as CalendarIcon, Grid, Filter, ArrowUpDown, Search, Trash2, Edit3, Save, X, RefreshCw } from "lucide-react";
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id, Doc } from "../../convex/_generated/dataModel";
@@ -26,6 +26,7 @@ export function TaskPanel({
   const updateTask = useMutation(api.tasks.updateTask);
   const removeEvent = useMutation(api.events.remove);
   const updateEvent = useMutation(api.events.update);
+  const cancelEventOccurrence = useMutation(api.events.cancelOccurrence);
 
   const [expandedTaskId, setExpandedTaskId] = useState<Id<"tasks"> | null>(null);
   const [view, setView] = useState<"tasks" | "events" | "calendar">("tasks");
@@ -45,6 +46,9 @@ export function TaskPanel({
   const [editEventLocation, setEditEventLocation] = useState("");
   const [editEventStartTime, setEditEventStartTime] = useState("");
   const [editEventEndTime, setEditEventEndTime] = useState("");
+  const [editEventFreq, setEditEventFreq] = useState<"none" | "daily" | "weekly">("none");
+  const [editEventInterval, setEditEventInterval] = useState<number>(1);
+  const [editEventDays, setEditEventDays] = useState<number[]>([]);
 
   // Filtering & Sorting State
   const [searchQuery, setSearchQuery] = useState("");
@@ -52,9 +56,23 @@ export function TaskPanel({
   const [showFilters, setShowFilters] = useState(false);
 
   // Custom Modal State
-  const [confirmDelete, setConfirmDelete] = useState<{ id: string; type: "task" | "event" } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; type: "task" | "event"; event?: Doc<"events"> } | null>(null);
 
   const workspaces = useQuery(api.workspaces.list, {});
+
+  const formatRecurrenceText = (rec: { frequency: string; interval: number; daysOfWeek?: number[] } | undefined) => {
+    if (!rec) return "";
+    const base = rec.frequency === "daily" 
+      ? (rec.interval === 1 ? "Daily" : `Every ${rec.interval} days`)
+      : (rec.interval === 1 ? "Weekly" : `Every ${rec.interval} weeks`);
+    
+    if (rec.frequency === "weekly" && rec.daysOfWeek && rec.daysOfWeek.length > 0) {
+      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const daysStr = [...rec.daysOfWeek].sort().map(d => dayNames[d]).join(", ");
+      return `${base} on ${daysStr}`;
+    }
+    return base;
+  };
 
   // Helper to parse dates from the database (supports ISO and legacy human formats)
   const parseTaskDate = (dateStr: string | number | undefined): Date | null => {
@@ -126,6 +144,27 @@ export function TaskPanel({
     return events.map(e => new Date(e.startTime));
   }, [events]);
 
+  const displayEvents = useMemo(() => {
+    if (!events) return [];
+    const filtered = (events as Doc<"events">[]).filter(e => 
+      e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      e.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    ).sort((a, b) => a.startTime - b.startTime);
+
+    const seenSeries = new Set<string>();
+    const deduplicated: Doc<"events">[] = [];
+
+    for (const event of filtered) {
+      if (event.recurrence) {
+        if (seenSeries.has(event._id)) continue;
+        seenSeries.add(event._id);
+      }
+      deduplicated.push(event);
+    }
+
+    return deduplicated;
+  }, [events, searchQuery]);
+
   const tasksOnSelectedDate = useMemo(() => {
     if (!tasks || !selectedDate) return [];
     return (tasks as Doc<"tasks">[]).filter(t => {
@@ -184,13 +223,20 @@ export function TaskPanel({
         finalEndTime = new Date(editEventEndTime).getTime();
       }
 
+      const recurrenceRule = editEventFreq !== "none" ? {
+        frequency: editEventFreq as "daily" | "weekly",
+        interval: editEventInterval,
+        daysOfWeek: editEventFreq === "weekly" ? (editEventDays.length > 0 ? editEventDays : [new Date(finalStartTime).getDay()]) : undefined,
+      } : null;
+
       await updateEvent({ 
         id, 
         title: editEventTitle, 
         description: editEventDesc,
         location: editEventLocation,
         startTime: finalStartTime || undefined,
-        endTime: finalEndTime || undefined
+        endTime: finalEndTime || undefined,
+        recurrence: recurrenceRule
       });
       setEditingEventId(null);
     } finally {
@@ -198,8 +244,8 @@ export function TaskPanel({
     }
   };
 
-  const handleDeleteEvent = async (id: Id<"events">) => {
-    setConfirmDelete({ id, type: "event" });
+  const handleDeleteEvent = async (event: Doc<"events">) => {
+    setConfirmDelete({ id: event._id, type: "event", event });
   };
 
   const executeDeleteEvent = async (id: Id<"events">) => {
@@ -591,12 +637,9 @@ export function TaskPanel({
               exit={{ opacity: 0, y: -10 }}
               className="space-y-3"
             >
-              {events?.filter(e => 
-                e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                e.description?.toLowerCase().includes(searchQuery.toLowerCase())
-              ).sort((a, b) => a.startTime - b.startTime).map((event) => (
+              {displayEvents.map((event) => (
                 <motion.div
-                  key={event._id}
+                  key={`${event._id}_${event.startTime}`}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   className="p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group"
@@ -655,6 +698,56 @@ export function TaskPanel({
                               />
                             </div>
                           </div>
+                          <div className="space-y-1 pt-1 border-t border-[#2a2723]">
+                            <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">Recurrence</span>
+                            <div className="flex items-center gap-2">
+                              <select 
+                                className="bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-2 py-1 text-[10px] text-[#f2efeb] outline-none cursor-pointer"
+                                value={editEventFreq}
+                                onChange={(e) => setEditEventFreq(e.target.value as "none" | "daily" | "weekly")}
+                              >
+                                <option value="none">Does not repeat</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                              </select>
+                              {editEventFreq !== "none" && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] text-[#a8a29e]">Every</span>
+                                  <input 
+                                    type="number"
+                                    min={1}
+                                    max={30}
+                                    className="w-12 bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-1.5 py-1 text-[10px] text-[#f2efeb] outline-none text-center"
+                                    value={editEventInterval}
+                                    onChange={(e) => setEditEventInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                                  />
+                                  <span className="text-[9px] text-[#a8a29e]">{editEventFreq === "daily" ? "days" : "weeks"}</span>
+                                </div>
+                              )}
+                            </div>
+                            {editEventFreq === "weekly" && (
+                              <div className="flex flex-wrap gap-1 pt-1">
+                                {["S", "M", "T", "W", "T", "F", "S"].map((dayName, idx) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                      if (editEventDays.includes(idx)) {
+                                        setEditEventDays(editEventDays.filter(d => d !== idx));
+                                      } else {
+                                        setEditEventDays([...editEventDays, idx]);
+                                      }
+                                    }}
+                                    className={`w-5 h-5 rounded-md text-[9px] font-bold transition-all flex items-center justify-center ${
+                                      editEventDays.includes(idx) ? "bg-[#d4a373] text-[#0f0e0c]" : "bg-[#0f0e0c] text-[#a8a29e] border border-[#2a2723]"
+                                    }`}
+                                  >
+                                    {dayName}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           <div className="flex justify-end gap-2 pt-2 border-t border-[#2a2723]">
                              <button 
                                onClick={() => setEditingEventId(null)} 
@@ -693,6 +786,15 @@ export function TaskPanel({
                               setEditEventLocation(event.location || "");
                               setEditEventStartTime(format(new Date(event.startTime), "yyyy-MM-dd'T'HH:mm"));
                               setEditEventEndTime(format(new Date(event.endTime), "yyyy-MM-dd'T'HH:mm"));
+                              if (event.recurrence) {
+                                setEditEventFreq(event.recurrence.frequency);
+                                setEditEventInterval(event.recurrence.interval || 1);
+                                setEditEventDays(event.recurrence.daysOfWeek || []);
+                              } else {
+                                setEditEventFreq("none");
+                                setEditEventInterval(1);
+                                setEditEventDays([]);
+                              }
                             }}
                             className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
                           >
@@ -701,7 +803,7 @@ export function TaskPanel({
                           <button 
                             onClick={(e) => { 
                               e.stopPropagation(); 
-                              handleDeleteEvent(event._id);
+                              handleDeleteEvent(event);
                             }}
                             className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
                           >
@@ -727,6 +829,12 @@ export function TaskPanel({
                         {Intl.DateTimeFormat().resolvedOptions().timeZone.split("/").pop()?.replace("_", " ")}
                       </span>
                     </div>
+                    {event.recurrence && (
+                      <div className="flex items-center gap-1 text-[#d4a373]">
+                        <RefreshCw className="w-2.5 h-2.5" />
+                        <span className="capitalize font-bold">{formatRecurrenceText(event.recurrence)}</span>
+                      </div>
+                    )}
                     {event.location && (
                       <div className="flex items-center gap-1">
                         <Tag className="w-3 h-3" />
@@ -812,10 +920,9 @@ export function TaskPanel({
 
                 <div className="space-y-2">
                   {/* Events Section */}
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  {eventsOnSelectedDate.map((event: any) => (
+                  {eventsOnSelectedDate.map((event: Doc<"events">) => (
                     <div 
-                      key={event._id}
+                      key={`${event._id}_${event.startTime}`}
                       className="p-4 rounded-2xl bg-[#1f1d19] border border-[#d4a373]/20 flex flex-col gap-2 group hover:bg-[#d4a373]/5 transition-all"
                     >
                       <div className="flex items-center justify-between">
@@ -825,7 +932,7 @@ export function TaskPanel({
                         </div>
                         <div className="flex items-center gap-2">
                           <button 
-                            onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event._id); }}
+                            onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event); }}
                             className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -839,6 +946,12 @@ export function TaskPanel({
                           <Clock className="w-3 h-3" />
                           <span>{format(new Date(event.startTime), "HH:mm")} - {format(new Date(event.endTime), "HH:mm")}</span>
                         </div>
+                        {event.recurrence && (
+                          <div className="flex items-center gap-1 text-[#d4a373]">
+                            <RefreshCw className="w-2.5 h-2.5" />
+                            <span className="capitalize font-bold">{event.recurrence.frequency === "daily" ? (event.recurrence.interval === 1 ? "Daily" : `Every ${event.recurrence.interval} days`) : (event.recurrence.interval === 1 ? "Weekly" : `Every ${event.recurrence.interval} weeks`)}</span>
+                          </div>
+                        )}
                         {event.location && (
                           <div className="flex items-center gap-1">
                             <Tag className="w-3 h-3" />
@@ -856,8 +969,7 @@ export function TaskPanel({
                   ))}
 
                   {/* Tasks Section */}
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  {tasksOnSelectedDate.map((task: any) => (
+                  {tasksOnSelectedDate.map((task: Doc<"tasks">) => (
                     <div 
                       key={task._id}
                       className={`p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] flex items-center gap-4 group hover:border-[#d4a373]/20 transition-all ${
@@ -919,21 +1031,45 @@ export function TaskPanel({
                 Delete {confirmDelete.type === "task" ? "Task" : "Event"}?
               </h3>
               <p className="text-sm text-[#a8a29e] mb-6 leading-relaxed">
-                This action cannot be undone. All data associated with this {confirmDelete.type} will be permanently removed.
+                {confirmDelete.type === "event" && confirmDelete.event?.recurrence
+                  ? "This is a repeating event. You can delete just this occurrence or the entire series."
+                  : `This action cannot be undone. All data associated with this ${confirmDelete.type} will be permanently removed.`}
               </p>
               <div className="flex flex-col gap-2">
-                <button 
-                  onClick={() => {
-                    if (confirmDelete.type === "task") {
-                      executeDeleteTask(confirmDelete.id as Id<"tasks">);
-                    } else {
-                      executeDeleteEvent(confirmDelete.id as Id<"events">);
-                    }
-                  }}
-                  className="w-full py-3 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
-                >
-                  Delete Permanently
-                </button>
+                {confirmDelete.type === "event" && confirmDelete.event?.recurrence ? (
+                  <>
+                    <button 
+                      onClick={() => {
+                        if (confirmDelete.event) {
+                          cancelEventOccurrence({ id: confirmDelete.id as Id<"events">, timestamp: confirmDelete.event.startTime });
+                          setConfirmDelete(null);
+                        }
+                      }}
+                      className="w-full py-3 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg"
+                    >
+                      Delete Occurrence Only
+                    </button>
+                    <button 
+                      onClick={() => executeDeleteEvent(confirmDelete.id as Id<"events">)}
+                      className="w-full py-3 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                    >
+                      Delete Entire Series
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    onClick={() => {
+                      if (confirmDelete.type === "task") {
+                        executeDeleteTask(confirmDelete.id as Id<"tasks">);
+                      } else {
+                        executeDeleteEvent(confirmDelete.id as Id<"events">);
+                      }
+                    }}
+                    className="w-full py-3 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                  >
+                    Delete Permanently
+                  </button>
+                )}
                 <button 
                   onClick={() => setConfirmDelete(null)}
                   className="w-full py-3 bg-transparent text-[#a8a29e] rounded-xl text-xs font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all"
