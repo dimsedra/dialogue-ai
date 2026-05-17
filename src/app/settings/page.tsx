@@ -168,6 +168,11 @@ export default function SettingsPage() {
                       <div className="space-y-1.5">
                         <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">Preferred Name</label>
                         <input 
+                          name="settings-pref-name"
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           placeholder="e.g. Alex"
@@ -178,6 +183,11 @@ export default function SettingsPage() {
                       <div className="space-y-1.5">
                         <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">Persona & Instructions</label>
                         <textarea 
+                          name="settings-persona-bio"
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
                           value={bio}
                           onChange={(e) => setBio(e.target.value)}
                           rows={4}
@@ -288,6 +298,11 @@ export default function SettingsPage() {
 
                     <div className="mb-4 flex gap-2">
                       <input 
+                        name="settings-new-memory"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         value={newMemoryText}
                         onChange={(e) => setNewMemoryText(e.target.value)}
                         placeholder="Add insight..."
@@ -317,6 +332,11 @@ export default function SettingsPage() {
                             <div className="flex gap-2 items-center">
                               <input 
                                 autoFocus
+                                name="settings-edit-memory"
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="off"
+                                spellCheck={false}
                                 value={editMemoryText}
                                 onChange={(e) => setEditMemoryText(e.target.value)}
                                 className="flex-1 bg-transparent border-none outline-none text-xs text-[#f2efeb]"

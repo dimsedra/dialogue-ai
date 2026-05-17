@@ -571,10 +571,20 @@ export function Chat({
   
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevScrollSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
+  const prevSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+  const scrollToBottom = useCallback((forceInstant?: boolean | React.MouseEvent) => {
+    const isInstant = forceInstant === true;
+    let behavior: ScrollBehavior = "smooth";
+    if (isInstant || activeSessionId !== prevScrollSessionIdRef.current) {
+      behavior = "instant";
+      if (activeSessionId) {
+        prevScrollSessionIdRef.current = activeSessionId;
+      }
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  }, [activeSessionId]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -603,7 +613,21 @@ export function Chat({
     }
   }, [sessions, activeSessionId, setActiveSessionId]);
 
-
+  useEffect(() => {
+    if (activeSessionId && !isSyncing && messages !== undefined) {
+      if (activeSessionId !== prevSessionIdRef.current) {
+        prevSessionIdRef.current = activeSessionId;
+        setShowScrollBottom(false);
+        const jump = () => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+        };
+        jump();
+        requestAnimationFrame(jump);
+        setTimeout(jump, 50);
+        setTimeout(jump, 150);
+      }
+    }
+  }, [activeSessionId, isSyncing, messages]);
 
   useEffect(() => {
     if (!showScrollBottom) {
@@ -885,6 +909,9 @@ export function Chat({
       workspaceId: activeWorkspaceId
     });
     setActiveSessionId(id);
+    if (!isLargeViewport) {
+      setShowHistory(false);
+    }
   };
 
   const handleAddWorkspace = async (e: React.FormEvent) => {
@@ -1074,7 +1101,7 @@ export function Chat({
           opacity: isLargeViewport ? (showHistory ? 1 : 0) : (showHistory ? 1 : 0),
           x: isLargeViewport ? 0 : (showHistory ? 0 : "-100%")
         }}
-        transition={{ type: "spring", damping: 30, stiffness: 250 }}
+        transition={isLargeViewport ? { type: "spring", damping: 30, stiffness: 250 } : { duration: 0 }}
         className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 z-[100] overflow-hidden ${
           isLargeViewport ? "relative border-r" : "fixed left-0 shadow-[20px_0_40px_rgba(0,0,0,0.5)]"
         }`}
@@ -1182,6 +1209,9 @@ export function Chat({
                     } else {
                       setActiveSessionId(session._id);
                     }
+                    if (!isLargeViewport) {
+                      setShowHistory(false);
+                    }
                   }}
                   className={`group flex items-center justify-between p-2.5 lg:p-3.5 rounded-2xl cursor-pointer transition-all duration-300 ${
                     activeSessionId === session._id 
@@ -1194,6 +1224,11 @@ export function Chat({
                     {editingSessionId === session._id ? (
                       <input
                         autoFocus
+                        name="chat-session-rename"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleRename(session._id)}
@@ -1427,6 +1462,11 @@ export function Chat({
                                 </div>
                                 <textarea
                                   autoFocus
+                                  name="chat-ws-context"
+                                  autoComplete="off"
+                                  autoCorrect="off"
+                                  autoCapitalize="off"
+                                  spellCheck={false}
                                   value={tempContext}
                                   onChange={(e) => setTempContext(e.target.value)}
                                   onKeyDown={(e) => {
@@ -1895,6 +1935,7 @@ export function Chat({
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="sentences"
+              spellCheck={false}
               rows={1}
               value={input}
               onChange={(e) => {
@@ -1961,6 +2002,11 @@ export function Chat({
                   <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#a8a29e] ml-1">Workspace Name</label>
                   <input
                     autoFocus
+                    name="chat-new-ws-name"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     value={newWorkspaceName}
                     onChange={(e) => setNewWorkspaceName(e.target.value)}
                     placeholder="e.g. Creative Lab, Work, Studies..."

@@ -33,6 +33,14 @@ export function TaskPanel({
   const [view, setView] = useState<"tasks" | "events" | "calendar">("tasks");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLargeViewport, setIsLargeViewport] = useState(true);
+
+  useEffect(() => {
+    const checkViewport = () => setIsLargeViewport(window.innerWidth >= 1024);
+    checkViewport();
+    window.addEventListener("resize", checkViewport);
+    return () => window.removeEventListener("resize", checkViewport);
+  }, []);
   
   // Editing State
   const [editingTaskId, setEditingTaskId] = useState<Id<"tasks"> | null>(null);
@@ -389,6 +397,11 @@ export function TaskPanel({
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a8a29e]/40 group-focus-within:text-[#d4a373] transition-colors" />
                   <input 
                     type="text"
+                    name="panel-search-filter"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search..."
@@ -444,6 +457,7 @@ export function TaskPanel({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
+              transition={isLargeViewport ? undefined : { duration: 0 }}
               className="space-y-3"
             >
               {sortedAndFilteredTasks?.map((task) => {
@@ -454,6 +468,7 @@ export function TaskPanel({
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
+                    transition={isLargeViewport ? { duration: 0.5 } : { duration: 0 }}
                     className={`rounded-3xl border group transition-all duration-500 overflow-hidden ${
                       task.priority === "high" 
                         ? "bg-[#d4a373]/5 border-[#d4a373]/20 hover:border-[#d4a373]/40 shadow-xl shadow-[#d4a373]/5" 
@@ -609,6 +624,7 @@ export function TaskPanel({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
+              transition={isLargeViewport ? undefined : { duration: 0 }}
               className="space-y-3"
             >
               {displayEvents.map((event) => {
@@ -618,6 +634,7 @@ export function TaskPanel({
                   key={`${event._id}_${event.startTime}`}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
+                  transition={isLargeViewport ? undefined : { duration: 0 }}
                   className="p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group"
                 >
                   <div className="flex items-start justify-between gap-4 mb-2">
@@ -744,6 +761,7 @@ export function TaskPanel({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
+              transition={isLargeViewport ? undefined : { duration: 0 }}
               className="space-y-6"
             >
               <div className="p-4 bg-[#1f1d19] rounded-3xl border border-[#2a2723] flex justify-center shadow-xl shadow-black/20">
@@ -1183,6 +1201,11 @@ export function TaskPanel({
                   <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Task Description</label>
                   <textarea
                     autoFocus
+                    name="panel-task-desc"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     rows={3}
                     className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-2xl p-3 text-sm text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none resize-none transition-all"
                     value={editTaskText}
@@ -1236,6 +1259,11 @@ export function TaskPanel({
                     <div className="relative flex items-center">
                       <Tag className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                       <input
+                        name="panel-task-category"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all"
                         value={editTaskCategory}
                         onChange={(e) => setEditTaskCategory(e.target.value)}
@@ -1249,6 +1277,8 @@ export function TaskPanel({
                       <Clock className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                       <input
                         type="datetime-local"
+                        name="panel-task-due"
+                        autoComplete="off"
                         className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
                         value={editTaskDueDate}
                         onChange={(e) => setEditTaskDueDate(e.target.value)}
@@ -1347,6 +1377,11 @@ export function TaskPanel({
                   <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Event Title</label>
                   <input
                     autoFocus
+                    name="panel-event-title"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-3 text-sm font-bold text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none transition-all"
                     value={editEventTitle}
                     onChange={(e) => setEditEventTitle(e.target.value)}
@@ -1357,6 +1392,11 @@ export function TaskPanel({
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Description</label>
                   <textarea
+                    name="panel-event-desc"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     rows={2}
                     className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-3 text-xs text-[#a8a29e] placeholder:text-[#a8a29e]/30 outline-none resize-none transition-all"
                     value={editEventDesc}
@@ -1370,6 +1410,11 @@ export function TaskPanel({
                   <div className="relative flex items-center">
                     <Tag className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                     <input
+                      name="panel-event-loc"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
                       className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all"
                       value={editEventLocation}
                       onChange={(e) => setEditEventLocation(e.target.value)}
@@ -1413,6 +1458,8 @@ export function TaskPanel({
                     </label>
                     <input
                       type="datetime-local"
+                      name="panel-event-start"
+                      autoComplete="off"
                       className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
                       value={editEventStartTime}
                       onChange={(e) => setEditEventStartTime(e.target.value)}
@@ -1424,6 +1471,8 @@ export function TaskPanel({
                       <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">End Time</label>
                       <input
                         type="datetime-local"
+                        name="panel-event-end"
+                        autoComplete="off"
                         className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
                         value={editEventEndTime}
                         onChange={(e) => setEditEventEndTime(e.target.value)}
@@ -1450,6 +1499,8 @@ export function TaskPanel({
                         <span className="text-xs text-[#a8a29e]">Every</span>
                         <input
                           type="number"
+                          name="panel-event-interval"
+                          autoComplete="off"
                           min={1}
                           max={30}
                           className="w-12 bg-transparent text-xs text-[#f2efeb] font-bold outline-none text-center"
@@ -1493,6 +1544,8 @@ export function TaskPanel({
                         <CalendarIcon className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                         <input
                           type="date"
+                          name="panel-event-until"
+                          autoComplete="off"
                           className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2 text-xs text-[#f2efeb] outline-none transition-all cursor-pointer appearance-none"
                           value={editEventUntil}
                           onChange={(e) => setEditEventUntil(e.target.value)}
