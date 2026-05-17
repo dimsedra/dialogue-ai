@@ -3,6 +3,8 @@ import { User, Bot, Copy, Check, ExternalLink, File as FileIcon } from "lucide-r
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { ToolCall } from "./types";
@@ -118,7 +120,8 @@ export const MessageBubble = React.memo(function MessageBubble({ msg }: MessageB
           ) : (
             <div className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.6] markdown-content">
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
                 components={{
                   p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
                   ul: ({ children }) => <ul className="list-disc pl-4 mb-4 space-y-1">{children}</ul>,

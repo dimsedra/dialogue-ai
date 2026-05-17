@@ -39,6 +39,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark h-full" suppressHydrationWarning>
+      <head>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-full bg-[#0a0a0a] text-zinc-200`}
       >
