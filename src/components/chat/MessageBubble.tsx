@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { User, Bot, Copy, Check, ExternalLink, File as FileIcon } from "lucide-react";
-import { motion } from "framer-motion";
+import { User, Bot, Copy, Check, ExternalLink, File as FileIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -9,6 +9,74 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { ToolCall } from "./types";
 import { ToolCard } from "./ToolCard";
+
+const COLLAPSE_THRESHOLD = 3;
+
+const TOOL_BADGE_COLORS: Record<string, string> = {
+  addTask: "bg-[#d4a373]", // Gold
+  updateTask: "bg-orange-400", // Orange
+  completeTask: "bg-emerald-400", // Emerald
+  deleteTask: "bg-slate-400", // Slate
+  addEvent: "bg-[#8b5cf6]", // Purple
+  updateEvent: "bg-indigo-400", // Indigo
+  updateEventOccurrence: "bg-amber-400", // Amber
+  deleteEvent: "bg-rose-400", // Rose
+  searchWeb: "bg-[#3b82f6]", // Blue
+  multiSearch: "bg-[#3b82f6]", // Blue
+  updateMemory: "bg-emerald-400", // Emerald
+};
+
+function ToolCallGroup({ calls, isLargeViewport, msgId }: { calls: ToolCall[]; isLargeViewport: boolean; msgId: string }) {
+  const [expanded, setExpanded] = useState(isLargeViewport);
+
+  return (
+    <div className="mt-3 w-full space-y-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/30 transition-all text-left shadow-sm group cursor-pointer"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-5 h-5 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+            <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
+          </div>
+          <span className="text-[12px] font-bold text-[#f2efeb] truncate">
+            {calls.length} Actions Completed
+          </span>
+          <div className="flex items-center gap-1 pl-1 shrink-0">
+            {calls.slice(0, 5).map((call, idx) => (
+              <div
+                key={idx}
+                className={`w-1.5 h-1.5 rounded-full ${TOOL_BADGE_COLORS[call.name] || "bg-[#d4a373]"}`}
+              />
+            ))}
+            {calls.length > 5 && (
+              <span className="text-[9px] font-bold text-[#a8a29e] pl-0.5">+{calls.length - 5}</span>
+            )}
+          </div>
+        </div>
+        <div className="p-1 rounded-lg bg-black/20 text-[#a8a29e] group-hover:text-[#d4a373] transition-colors shrink-0">
+          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="space-y-3 overflow-hidden"
+          >
+            {calls.map((tc, idx) => (
+              <ToolCard key={`${msgId}_tool_${idx}`} toolCall={tc} />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 interface MessageBubbleProps {
   msg: {
@@ -30,7 +98,7 @@ interface MessageBubbleProps {
   isLargeViewport: boolean;
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ msg }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport }: MessageBubbleProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   return (
@@ -214,14 +282,27 @@ export const MessageBubble = React.memo(function MessageBubble({ msg }: MessageB
               </ReactMarkdown>
             </div>
           )}
-          {msg.author === "AI" && !!msg.toolCall && (
-            <ToolCard toolCall={msg.toolCall as ToolCall} />
-          )}
-          {msg.author === "AI" && !!msg.toolCalls && (msg.toolCalls as ToolCall[]).map((tc, idx) => (
-            <div key={idx} className="mt-3">
-              <ToolCard toolCall={tc} />
-            </div>
-          ))}
+          {/* Consolidated Tool Calls with Progressive Disclosure */}
+          {msg.author === "AI" && (msg.toolCalls || msg.toolCall) ? ((): React.ReactNode => {
+            const allToolCalls = (
+              (msg.toolCalls as ToolCall[]) ||
+              (msg.toolCall ? [msg.toolCall as ToolCall] : [])
+            ).filter(Boolean);
+
+            if (allToolCalls.length === 0) return null;
+
+            if (allToolCalls.length < COLLAPSE_THRESHOLD) {
+              return (
+                <div className="space-y-3 mt-3 w-full">
+                  {allToolCalls.map((tc, idx) => (
+                    <ToolCard key={`${msg._id}_tool_${idx}`} toolCall={tc} />
+                  ))}
+                </div>
+              );
+            }
+
+            return <ToolCallGroup calls={allToolCalls} isLargeViewport={isLargeViewport} msgId={msg._id} />;
+          })() : null}
         </div>
         <span className="text-[9px] text-[#a8a29e]/60 font-bold tracking-widest uppercase px-1">
           {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
