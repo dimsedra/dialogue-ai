@@ -123,7 +123,14 @@ export const MessageStream = React.memo(function MessageStream({
       if (newestMsg.author === "User") {
         anchorToMessage(newestMsg._id, "start");
       }
-      // AI response → do nothing. User reads naturally, FAB available if needed.
+      // AI response arrived → re-anchor to user's last message at "start"
+      // so the user sees their prompt at top with AI response flowing below
+      else if (newestMsg.author === "AI") {
+        const lastUserMsg = [...messages].reverse().find(m => m.author === "User");
+        if (lastUserMsg) {
+          anchorToMessage(lastUserMsg._id, "start");
+        }
+      }
     }
 
     // Clear typing indicator when last message is from AI
