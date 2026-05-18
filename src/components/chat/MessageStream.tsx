@@ -109,14 +109,14 @@ export const MessageStream = React.memo(function MessageStream({
   }, [activeSessionId, messages, anchorToMessage]);
 
   useEffect(() => {
+    // Only scroll when the user explicitly just sent a message — anchor to their bubble.
+    // Do NOT auto-scroll on AI responses; the user reads naturally and uses the FAB if needed.
     if (userJustSent && messages && messages.length > 0) {
       const lastUserMsg = [...messages].reverse().find(m => m.author === "User");
       if (lastUserMsg) {
         anchorToMessage(lastUserMsg._id, "start");
         if (onUserSentAcknowledged) setTimeout(() => onUserSentAcknowledged(), 0);
       }
-    } else if (!showScrollBottom) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
     
     // Clear typing indicator when messages update and last message is from AI
@@ -126,7 +126,7 @@ export const MessageStream = React.memo(function MessageStream({
         setTimeout(() => onTypingDone(), 0);
       }
     }
-  }, [messages, isTyping, userJustSent, onUserSentAcknowledged, showScrollBottom, anchorToMessage, onTypingDone]);
+  }, [messages, isTyping, userJustSent, onUserSentAcknowledged, anchorToMessage, onTypingDone]);
 
   return (
     <>
