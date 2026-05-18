@@ -72,7 +72,6 @@ export function Chat({
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [confirmDeleteSession, setConfirmDeleteSession] = useState<{ id: Id<"chatSessions">; title: string } | null>(null);
   const [isTyping, setIsTyping] = useState(false);
-  const [userJustSent, setUserJustSent] = useState(false);
   const isSyncing = !!(activeSessionId && messages === undefined);
 
   const [provider, setProvider] = useState<"gemini" | "lmstudio">(() => {
@@ -297,7 +296,6 @@ export function Chat({
       provider,
     });
 
-    setUserJustSent(true);
     setIsTyping(true);
 
     if (provider === "lmstudio") {
@@ -347,7 +345,6 @@ export function Chat({
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
       });
 
-      setUserJustSent(true);
       setIsTyping(true);
 
       if (provider === "lmstudio") {
@@ -465,8 +462,6 @@ export function Chat({
           isSyncing={isSyncing}
           isLargeViewport={isLargeViewport}
           keyboardOffset={keyboardOffset}
-          userJustSent={userJustSent}
-          onUserSentAcknowledged={() => setUserJustSent(false)}
           onTypingDone={handleTypingDone}
         />
 

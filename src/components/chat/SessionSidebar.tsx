@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Bot, Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff } from "lucide-react";
+import { Bot, Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -58,10 +58,15 @@ export function SessionSidebar({
     setEditingSessionId(null);
   };
 
-  const handleTogglePin = async (id: Id<"chatSessions">, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleTogglePin = async (id: Id<"chatSessions">, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     await togglePinSession({ id });
+    setActionMenuSessionId(null);
   };
+
+  const [actionMenuSessionId, setActionMenuSessionId] = useState<Id<"chatSessions"> | null>(null);
+  const [sheetRenameMode, setSheetRenameMode] = useState(false);
+  const [sheetRenameTitle, setSheetRenameTitle] = useState("");
 
   const pinnedSessions = useMemo(() => {
     if (!sessions) return [];
@@ -134,9 +139,30 @@ export function SessionSidebar({
           </div>
         )}
       </div>
-      <div className={`flex items-center shrink-0 transition-all ${session.pinned ? "opacity-100" : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100"}`}>
-        {editingSessionId !== session._id && (
-          <>
+
+      {/* Actions: Mobile = ⋯ button, Desktop = inline hover buttons */}
+      {editingSessionId === session._id ? (
+        <button 
+          onClick={(e) => { e.stopPropagation(); handleRename(session._id); }}
+          className="p-2 text-[#d4a373] transition-all shrink-0"
+        >
+          <Check className="w-4 h-4" />
+        </button>
+      ) : (
+        <>
+          {/* Mobile: single ⋯ button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setActionMenuSessionId(session._id);
+            }}
+            className="lg:hidden p-2 text-[#a8a29e] active:text-[#d4a373] transition-all shrink-0"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+
+          {/* Desktop: inline hover buttons */}
+          <div className="hidden lg:flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-all">
             <button 
               onClick={(e) => handleTogglePin(session._id, e)}
               className={`p-1 transition-all mr-1 ${session.pinned ? "text-[#d4a373]" : "hover:text-[#d4a373]"}`}
@@ -156,21 +182,14 @@ export function SessionSidebar({
             >
               <X className="w-3.5 h-3.5" />
             </button>
-          </>
-        )}
-        {editingSessionId === session._id && (
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleRename(session._id); }}
-            className="p-1 text-[#d4a373] transition-all"
-          >
-            <Check className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 
   return (
+    <>
     <motion.div
       initial={false}
       animate={{ 
@@ -300,5 +319,125 @@ export function SessionSidebar({
         </div>
       </div>
     </motion.div>
+
+    {/* Mobile Action Bottom Sheet */}
+    {actionMenuSessionId && (() => {
+      const session = sessions?.find(s => s._id === actionMenuSessionId);
+      if (!session) return null;
+      return (
+        <div 
+          className="lg:hidden fixed inset-0 z-[200] flex items-end justify-center"
+          onClick={() => { setActionMenuSessionId(null); setSheetRenameMode(false); }}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          
+          {/* Sheet */}
+          <div 
+            className="relative w-full max-w-sm mx-4 mb-6 bg-[#1a1814] border border-[#2a2723] rounded-3xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 pt-5 pb-3 border-b border-[#2a2723]/50">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/50">
+                {sheetRenameMode ? "Rename Session" : "Session Actions"}
+              </p>
+              {!sheetRenameMode && (
+                <p className="text-sm font-medium text-[#f2efeb] mt-1 truncate">{session.title || "Untitled"}</p>
+              )}
+            </div>
+
+            {sheetRenameMode ? (
+              /* Rename Mode */
+              <div className="px-5 py-4 space-y-4">
+                <input
+                  autoFocus
+                  value={sheetRenameTitle}
+                  onChange={(e) => setSheetRenameTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && sheetRenameTitle.trim()) {
+                      renameSession({ id: session._id, title: sheetRenameTitle.trim() });
+                      setActionMenuSessionId(null);
+                      setSheetRenameMode(false);
+                    }
+                  }}
+                  placeholder="Session title..."
+                  className="w-full px-4 py-3 rounded-2xl bg-[#0f0e0c] border border-[#2a2723] text-[#f2efeb] text-sm placeholder:text-[#a8a29e]/40 outline-none focus:border-[#d4a373]/50 transition-all"
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setSheetRenameMode(false)}
+                    className="flex-1 py-3 rounded-2xl bg-[#2a2723] text-[#a8a29e] text-sm font-bold transition-all active:bg-[#3a3733]"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (sheetRenameTitle.trim()) {
+                        renameSession({ id: session._id, title: sheetRenameTitle.trim() });
+                      }
+                      setActionMenuSessionId(null);
+                      setSheetRenameMode(false);
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-[#d4a373] text-[#0f0e0c] text-sm font-bold transition-all active:bg-[#c39262]"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Actions Mode */
+              <>
+                <div className="py-2">
+                  <button
+                    onClick={() => handleTogglePin(session._id)}
+                    className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-[#f2efeb] active:bg-[#2a2723] transition-all"
+                  >
+                    {session.pinned 
+                      ? <PinOff className="w-5 h-5 text-[#d4a373]" />
+                      : <Pin className="w-5 h-5 text-[#a8a29e]" />
+                    }
+                    <span className="text-sm font-medium">{session.pinned ? "Unpin Session" : "Pin Session"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setSheetRenameTitle(session.title || "");
+                      setSheetRenameMode(true);
+                    }}
+                    className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-[#f2efeb] active:bg-[#2a2723] transition-all"
+                  >
+                    <Edit3 className="w-5 h-5 text-[#a8a29e]" />
+                    <span className="text-sm font-medium">Rename Session</span>
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      setActionMenuSessionId(null);
+                      onDeleteChat(session._id, e as unknown as React.MouseEvent);
+                    }}
+                    className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-red-400 active:bg-[#2a2723] transition-all"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    <span className="text-sm font-medium">Delete Session</span>
+                  </button>
+                </div>
+
+                {/* Cancel */}
+                <div className="px-4 pb-4 pt-1">
+                  <button
+                    onClick={() => setActionMenuSessionId(null)}
+                    className="w-full py-3 rounded-2xl bg-[#2a2723] text-[#a8a29e] text-sm font-bold transition-all active:bg-[#3a3733]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    })()}
+    </>
   );
 }

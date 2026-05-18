@@ -29,8 +29,6 @@ interface MessageStreamProps {
   isSyncing: boolean;
   isLargeViewport: boolean;
   keyboardOffset: number;
-  userJustSent?: boolean;
-  onUserSentAcknowledged?: () => void;
   onTypingDone: () => void;
 }
 
@@ -41,8 +39,6 @@ export const MessageStream = React.memo(function MessageStream({
   isSyncing,
   isLargeViewport,
   keyboardOffset,
-  userJustSent,
-  onUserSentAcknowledged,
   onTypingDone,
 }: MessageStreamProps) {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -50,6 +46,7 @@ export const MessageStream = React.memo(function MessageStream({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevScrollSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
   const lastAnchoredSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
+  const prevMessageCountRef = useRef(0);
 
   const anchorToMessage = useCallback((targetId?: string, block: ScrollLogicalPosition = "center") => {
     if (targetId) {
@@ -99,7 +96,7 @@ export const MessageStream = React.memo(function MessageStream({
         const targetMsg = [...messages].reverse().find(m => m.author === "User") || messages[messages.length - 1];
         const targetId = targetMsg?._id;
 
-        const executeAnchor = () => anchorToMessage(targetId, "center");
+        const executeAnchor = () => anchorToMessage(targetId, "start");
         executeAnchor();
         requestAnimationFrame(executeAnchor);
         setTimeout(executeAnchor, 50);
@@ -109,24 +106,34 @@ export const MessageStream = React.memo(function MessageStream({
   }, [activeSessionId, messages, anchorToMessage]);
 
   useEffect(() => {
-    // Only scroll when the user explicitly just sent a message — anchor to their bubble.
-    // Do NOT auto-scroll on AI responses; the user reads naturally and uses the FAB if needed.
-    if (userJustSent && messages && messages.length > 0) {
-      const lastUserMsg = [...messages].reverse().find(m => m.author === "User");
-      if (lastUserMsg) {
-        anchorToMessage(lastUserMsg._id, "start");
-        if (onUserSentAcknowledged) setTimeout(() => onUserSentAcknowledged(), 0);
-      }
+    if (!messages || messages.length === 0) {
+      prevMessageCountRef.current = 0;
+      return;
     }
-    
-    // Clear typing indicator when messages update and last message is from AI
-    if (isTyping && messages && messages.length > 0) {
+
+    const prevCount = prevMessageCountRef.current;
+    const newCount = messages.length;
+    prevMessageCountRef.current = newCount;
+
+    // New message(s) appeared (not initial load or session switch — those are handled by useLayoutEffect)
+    if (newCount > prevCount && prevCount > 0) {
+      const newestMsg = messages[newCount - 1];
+
+      // User's own message just appeared → anchor it to the top of the viewport
+      if (newestMsg.author === "User") {
+        anchorToMessage(newestMsg._id, "start");
+      }
+      // AI response → do nothing. User reads naturally, FAB available if needed.
+    }
+
+    // Clear typing indicator when last message is from AI
+    if (isTyping && messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg.author === "AI") {
         setTimeout(() => onTypingDone(), 0);
       }
     }
-  }, [messages, isTyping, userJustSent, onUserSentAcknowledged, anchorToMessage, onTypingDone]);
+  }, [messages, isTyping, anchorToMessage, onTypingDone]);
 
   return (
     <>
