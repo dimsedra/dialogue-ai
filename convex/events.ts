@@ -124,6 +124,8 @@ export const add = mutation({
     eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    statusHook: v.optional(v.string()),
     recurrence: recurrenceValidator,
     workspaceId: v.optional(v.id("workspaces")),
     userId: v.optional(v.id("users")),
@@ -140,6 +142,9 @@ export const add = mutation({
       description: args.description,
       location: args.location,
       notes: args.notes,
+      outcome: args.outcome,
+      statusHook: args.statusHook,
+      contextUpdatedAt: (args.notes !== undefined || args.outcome !== undefined || args.statusHook !== undefined) ? Date.now() : undefined,
       recurrence: args.recurrence ?? undefined,
       workspaceId: args.workspaceId,
       userId,
@@ -177,8 +182,11 @@ export const update = mutation({
     eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    statusHook: v.optional(v.string()),
     recurrence: recurrenceValidator,
     userId: v.optional(v.id("users")),
+    timezoneOffset: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
@@ -187,13 +195,34 @@ export const update = mutation({
 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
-      if (value !== undefined && key !== "id" && key !== "userId") {
+      if (value !== undefined && key !== "id" && key !== "userId" && key !== "notes" && key !== "timezoneOffset") {
         if (value === null) {
           updates[key] = undefined;
         } else {
           updates[key] = value;
         }
       }
+    }
+    if (args.notes !== undefined) {
+      let incomingNote = args.notes.trim();
+      const existingNotes = event.notes ? event.notes.trim() : "";
+      if (existingNotes && incomingNote.startsWith(existingNotes)) {
+        incomingNote = incomingNote.slice(existingNotes.length).trim();
+      }
+      incomingNote = incomingNote.replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*/, "").trim();
+      if (incomingNote) {
+        let now = new Date();
+        if (args.timezoneOffset !== undefined) {
+          now = new Date(Date.now() - (args.timezoneOffset * 60000));
+        }
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        const timestamp = `[${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}]`;
+        const newEntry = `${timestamp} ${incomingNote}`;
+        updates.notes = existingNotes ? `${existingNotes}\n${newEntry}` : newEntry;
+      }
+    }
+    if (args.notes !== undefined || args.outcome !== undefined || args.statusHook !== undefined) {
+      updates.contextUpdatedAt = Date.now();
     }
     await ctx.db.patch(args.id, updates);
   },
@@ -265,6 +294,9 @@ export const updateOccurrence = mutation({
       description: args.description ?? parent.description,
       location: args.location ?? parent.location,
       notes: parent.notes,
+      outcome: parent.outcome,
+      statusHook: parent.statusHook,
+      contextUpdatedAt: parent.contextUpdatedAt,
       startTime: finalStartTime,
       endTime: finalEndTime,
       eventType: args.eventType ?? parent.eventType,

@@ -31,7 +31,7 @@ export function SignInForm() {
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#d4a373]/5 blur-[120px] rounded-full" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#d4a373]/5 blur-[120px] rounded-full" />
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md relative z-10"
@@ -49,13 +49,13 @@ export function SignInForm() {
 
         <div className="bg-[#1a1814] border border-[#2a2723] rounded-[32px] p-8 shadow-2xl shadow-black/50">
           <div className="flex gap-1 bg-[#0f0e0c] p-1 rounded-2xl mb-8 border border-[#2a2723]">
-            <button 
+            <button
               onClick={() => setStep("signIn")}
               className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl transition-all ${step === "signIn" ? "bg-[#d4a373] text-[#0f0e0c]" : "text-zinc-500 hover:text-zinc-300"}`}
             >
               Sign In
             </button>
-            <button 
+            <button
               onClick={() => setStep("signUp")}
               className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl transition-all ${step === "signUp" ? "bg-[#d4a373] text-[#0f0e0c]" : "text-zinc-500 hover:text-zinc-300"}`}
             >
@@ -68,10 +68,10 @@ export function SignInForm() {
               <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1">Email Address</label>
               <div className="relative group">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-[#d4a373] transition-colors" />
-                <input 
-                  name="email" 
-                  type="email" 
-                  required 
+                <input
+                  name="email"
+                  type="email"
+                  required
                   placeholder="name@example.com"
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 focus:ring-0 rounded-2xl py-4 pl-12 pr-4 text-sm text-zinc-200 placeholder:text-zinc-700 transition-all"
                 />
@@ -82,10 +82,10 @@ export function SignInForm() {
               <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1">Password</label>
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-[#d4a373] transition-colors" />
-                <input 
-                  name="password" 
-                  type="password" 
-                  required 
+                <input
+                  name="password"
+                  type="password"
+                  required
                   placeholder="••••••••"
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 focus:ring-0 rounded-2xl py-4 pl-12 pr-4 text-sm text-zinc-200 placeholder:text-zinc-700 transition-all"
                 />
@@ -96,7 +96,7 @@ export function SignInForm() {
 
             <AnimatePresence>
               {error && (
-                <motion.p 
+                <motion.p
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
@@ -107,8 +107,8 @@ export function SignInForm() {
               )}
             </AnimatePresence>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-full bg-[#d4a373] hover:bg-[#e5b383] disabled:bg-[#d4a373]/50 text-[#0f0e0c] font-black uppercase tracking-[0.2em] text-xs py-4 rounded-2xl transition-all shadow-lg shadow-[#d4a373]/10 flex items-center justify-center gap-2 group mt-2"
             >

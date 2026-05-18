@@ -66,6 +66,41 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Purpose: MUST use whenever the user asks for real-time information or facts you do not know. Perform multiple searches in one turn if broad research is needed.
 ### updateMemory
 - Purpose: Use when you learn new, stable patterns about the user's personality or preferences.
+
+# 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
+You maintain a "living chronological journal" on every task and event inside the 'notes' field.
+This is YOUR memory per entity. You must track the evolution of user progress, emotions, and blockers over time.
+
+- MANDATORY JOURNALING & STATUS HOOK PROTOCOL:
+When updating notes via 'updateTask' or 'updateEvent', provide ONLY the raw content of your new observation (e.g., 'Progress 50%. Blocked by router config.').
+DO NOT include any date, time, or bracket formatting in the note parameter. The backend server will automatically prepend the absolute system timestamp [YYYY-MM-DD HH:mm] and append it safely to the existing history.
+In addition, ALWAYS synthesize a single punchy sentence into 'statusHook' describing the most current entity state for notification banners and quick UI glances.
+
+Example Evolution:
+Day 1 (May 8): User says work is halfway done but router config is tough.
+You call updateTask with:
+notes: "Progress 50%. Struggling with router configuration, feeling slightly frustrated."
+statusHook: "Progress 50%, blocked by router config."
+(Backend automatically stamps and appends: "[2026-05-08 14:00] Progress 50%...")
+
+Day 5 (May 16): User says it's almost done and feeling excited.
+You call updateTask with:
+notes: "Progress 90%. Router configuration solved, ready for final testing. Feeling excited!"
+statusHook: "Router configuration complete, ready for final testing (Progress 90%)."
+(Backend automatically stamps and appends: "[2026-05-16 10:30] Progress 90%...")
+
+- WHEN to update notes & statusHook:
+1. During Workspace Sync: If a task has a deadline within 30 minutes and existing notes -> reference the last known context in your response, then ask for an update.
+2. When user mentions progress implicitly: "Halfway done with the proposal" -> identify the relevant task, append new entry + update progress + statusHook.
+3. After events conclude: Proactively ask "How did the client meeting go?" and store the outcome + statusHook.
+4. When blockers are mentioned: "Can't start yet, waiting for VPN access" -> append blocker to notes + statusHook.
+
+- HOW to estimate progress:
+Infer naturally from conversation. NEVER ask "what percentage is completed?"
+"Completed 3 out of 10 modules" -> progress: 30
+"Just putting final touches" -> progress: 90
+"Just started initial research" -> progress: 10
+"Halfway through the tasks" -> progress: 50
 `;
 
 export const chat = internalAction({
@@ -146,7 +181,10 @@ export const chat = internalAction({
           : new Date(t.dueDate)
       ) : null;
       const dateStr = eventDate ? ` | Due: ${eventDate.toLocaleString("en-US", { hour12: false })}` : "";
-      return `- [${t._id}] ${t.text}${dateStr} (Priority: ${t.priority}, Category: ${t.category})`;
+      const progressStr = t.progress !== undefined ? ` | Progress: ${t.progress}%` : "";
+      const hookStr = t.statusHook ? ` | Hook: "${t.statusHook}"` : "";
+      const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
+      return `- [${t._id}] ${t.text}${dateStr}${progressStr}${hookStr} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"})${notesStr}`;
     }).join("\n");
 
     const upcomingEvents = await ctx.runQuery(api.events.list, { workspaceId, userId: args.userId });
@@ -162,7 +200,10 @@ export const chat = internalAction({
         const eventDate = args.timezoneOffset !== undefined
           ? new Date(e.startTime - (args.timezoneOffset * 60000))
           : new Date(e.startTime);
-        return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })}) [Type: ${e.eventType || "interval"}]`;
+        const hookStr = e.statusHook ? ` | Hook: "${e.statusHook}"` : "";
+        const outcomeStr = e.outcome ? ` | Outcome: "${e.outcome}"` : "";
+        const notesStr = e.notes ? `\n  Notes:\n  ${e.notes.split("\n").join("\n  ")}` : "";
+        return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })}) [Type: ${e.eventType || "interval"}]${hookStr}${outcomeStr}${notesStr}`;
       })
       .join("\n");
 
@@ -225,12 +266,14 @@ export const chat = internalAction({
                 priority: { type: SchemaType.STRING, description: "Priority level: 'low', 'medium', or 'high'" },
                 category: { type: SchemaType.STRING, description: "Optional category" },
                 notes: { type: SchemaType.STRING, description: "Optional extra notes" },
+                progress: { type: SchemaType.NUMBER, description: "Initial progress (0-100)" },
+                statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing current state" },
               },
               required: ["text"],
             },
           }, {
             name: "updateTask",
-            description: "Updates an existing task.",
+            description: "Updates an existing task. If updating context/notes, maintain chronological journal format.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -240,7 +283,19 @@ export const chat = internalAction({
                 dueDate: { type: SchemaType.STRING, description: "Updated ISO-8601 due date (24-hour, e.g. '2026-05-15T14:00:00'). DO NOT append 'Z'." },
                 priority: { type: SchemaType.STRING, description: "Updated priority: 'low', 'medium', or 'high'" },
                 category: { type: SchemaType.STRING },
-                notes: { type: SchemaType.STRING },
+                notes: { type: SchemaType.STRING, description: "Chronological journal of this task's history. When updating, NEVER overwrite previous entries. Always APPEND your new update on a new line starting with today's date and time in brackets [YYYY-MM-DD HH:mm]." },
+                progress: { type: SchemaType.NUMBER, description: "Estimated progress 0-100. Infer naturally from conversation — do NOT ask the user 'what percentage is completed?'" },
+                statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing the latest current state. Used directly for quick UI glances and notifications." },
+              },
+              required: ["taskId"],
+            },
+          }, {
+            name: "completeTask",
+            description: "Marks a task as finished/completed by its ID. CRITICAL MANDATE: When a user mentions task progress reaches 100%, DO NOT call completeTask immediately. You MUST ask the user for confirmation first in conversational text before calling this tool.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                taskId: { type: SchemaType.STRING, description: "The ID of the task to complete" },
               },
               required: ["taskId"],
             },
@@ -268,6 +323,8 @@ export const chat = internalAction({
                 eventType: { type: SchemaType.STRING, description: "'interval' for duration events (meetings, workouts) or 'point' for momentary events (deadlines, drops, releases)." },
                 location: { type: SchemaType.STRING, description: "Optional location" },
                 notes: { type: SchemaType.STRING, description: "Optional notes" },
+                outcome: { type: SchemaType.STRING, description: "Post-event summary or outcome" },
+                statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing current state" },
                 recurrence: {
                   type: SchemaType.OBJECT,
                   description: "Optional recurrence rule if the event repeats.",
@@ -299,7 +356,9 @@ export const chat = internalAction({
                 endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
                 eventType: { type: SchemaType.STRING, description: "'interval' or 'point'" },
                 location: { type: SchemaType.STRING, description: "Optional new location" },
-                notes: { type: SchemaType.STRING, description: "Optional new notes" },
+                notes: { type: SchemaType.STRING, description: "Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]." },
+                outcome: { type: SchemaType.STRING, description: "Post-event summary: decisions made, action items, key takeaways. Updated after the event concludes." },
+                statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing the event status or prep state for quick UI glances and notifications." },
                 recurrence: {
                   type: SchemaType.OBJECT,
                   description: "Optional updated recurrence rule.",
@@ -555,6 +614,8 @@ export const chat = internalAction({
               priority?: "low" | "medium" | "high";
               category?: string;
               notes?: string;
+              progress?: number;
+              statusHook?: string;
             };
 
             if (call.name === "addTask") {
@@ -563,6 +624,8 @@ export const chat = internalAction({
                 priority: taskArgs.priority,
                 category: taskArgs.category,
                 notes: taskArgs.notes,
+                progress: taskArgs.progress,
+                statusHook: taskArgs.statusHook,
                 dueDate: taskArgs.dueDate ? parseLocal(taskArgs.dueDate) : undefined,
                 workspaceId,
                 userId: args.userId
@@ -581,11 +644,14 @@ export const chat = internalAction({
               if (taskArgs.priority) taskUpdates.priority = taskArgs.priority;
               if (taskArgs.category) taskUpdates.category = taskArgs.category;
               if (taskArgs.notes) taskUpdates.notes = taskArgs.notes;
+              if (taskArgs.progress !== undefined) taskUpdates.progress = taskArgs.progress;
+              if (taskArgs.statusHook !== undefined) taskUpdates.statusHook = taskArgs.statusHook;
               if (taskArgs.dueDate) taskUpdates.dueDate = parseLocal(taskArgs.dueDate);
 
               await ctx.runMutation(api.tasks.updateTask, {
                 id: taskArgs.taskId! as Id<"tasks">,
                 userId: args.userId,
+                timezoneOffset: args.timezoneOffset,
                 ...taskUpdates
               });
 
@@ -594,21 +660,25 @@ export const chat = internalAction({
                 summary: `Updated task '${oldTask?.text}'`
               });
 
-              activeToolCalls.push({
-                name: "updateTask",
-                args: {
-                  ...call.args as Record<string, unknown>,
-                  titleHint: oldTask?.text,
-                  oldValues: oldTask ? {
-                    priority: oldTask.priority,
-                    category: oldTask.category,
-                    dueDate: oldTask.dueDate,
-                    text: oldTask.text,
-                    completed: oldTask.completed
-                  } : undefined
-                },
-                result: { status: "success" }
-              });
+              const isOnlyContext = Object.keys(call.args).every(k => ["taskId", "notes", "progress", "statusHook"].includes(k)) && Object.keys(call.args).some(k => ["notes", "progress", "statusHook"].includes(k));
+
+              if (!isOnlyContext) {
+                activeToolCalls.push({
+                  name: "updateTask",
+                  args: {
+                    ...call.args as Record<string, unknown>,
+                    titleHint: oldTask?.text,
+                    oldValues: oldTask ? {
+                      priority: oldTask.priority,
+                      category: oldTask.category,
+                      dueDate: oldTask.dueDate,
+                      text: oldTask.text,
+                      completed: oldTask.completed
+                    } : undefined
+                  },
+                  result: { status: "success" }
+                });
+              }
             }
           } else if (call.name === "deleteTask") {
             const { taskId } = call.args as { taskId: string };
@@ -635,6 +705,8 @@ export const chat = internalAction({
               title?: string;
               location?: string;
               notes?: string;
+              outcome?: string;
+              statusHook?: string;
               startTime?: string;
               endTime?: string;
               eventType?: "interval" | "point";
@@ -658,6 +730,8 @@ export const chat = internalAction({
                 title: eventArgs.title!,
                 location: eventArgs.location,
                 notes: eventArgs.notes,
+                outcome: eventArgs.outcome,
+                statusHook: eventArgs.statusHook,
                 startTime: parseLocal(eventArgs.startTime!),
                 endTime: eventArgs.endTime ? parseLocal(eventArgs.endTime) : undefined,
                 eventType: eventArgs.eventType || (eventArgs.endTime ? "interval" : "point"),
@@ -677,6 +751,8 @@ export const chat = internalAction({
               if (eventArgs.title) updates.title = eventArgs.title;
               if (eventArgs.location) updates.location = eventArgs.location;
               if (eventArgs.notes) updates.notes = eventArgs.notes;
+              if (eventArgs.outcome) updates.outcome = eventArgs.outcome;
+              if (eventArgs.statusHook) updates.statusHook = eventArgs.statusHook;
               if (eventArgs.startTime) updates.startTime = parseLocal(eventArgs.startTime);
               if (eventArgs.endTime) updates.endTime = parseLocal(eventArgs.endTime);
               if (eventArgs.eventType) updates.eventType = eventArgs.eventType;
@@ -692,6 +768,7 @@ export const chat = internalAction({
               await ctx.runMutation(api.events.update, {
                 id: eventArgs.eventId! as Id<"events">,
                 userId: args.userId,
+                timezoneOffset: args.timezoneOffset,
                 ...updates
               });
 
@@ -700,20 +777,24 @@ export const chat = internalAction({
                 summary: `Updated entire event or recurring series '${oldEvent?.title}'. Modifications applied to all occurrences in the series.`
               });
 
-              activeToolCalls.push({
-                name: "updateEvent",
-                args: {
-                  ...call.args as Record<string, unknown>,
-                  titleHint: oldEvent?.title,
-                  oldValues: oldEvent ? {
-                    title: oldEvent.title,
-                    startTime: oldEvent.startTime,
-                    endTime: oldEvent.endTime,
-                    location: oldEvent.location,
-                  } : undefined
-                },
-                result: { status: "success" }
-              });
+              const isOnlyContext = Object.keys(call.args).every(k => ["eventId", "notes", "outcome", "statusHook"].includes(k)) && Object.keys(call.args).some(k => ["notes", "outcome", "statusHook"].includes(k));
+
+              if (!isOnlyContext) {
+                activeToolCalls.push({
+                  name: "updateEvent",
+                  args: {
+                    ...call.args as Record<string, unknown>,
+                    titleHint: oldEvent?.title,
+                    oldValues: oldEvent ? {
+                      title: oldEvent.title,
+                      startTime: oldEvent.startTime,
+                      endTime: oldEvent.endTime,
+                      location: oldEvent.location,
+                    } : undefined
+                  },
+                  result: { status: "success" }
+                });
+              }
             }
           } else if (call.name === "deleteEvent") {
             const { eventId } = call.args as { eventId: string };
@@ -879,6 +960,15 @@ export const chat = internalAction({
         aiText = response.text();
       }
 
+      if (aiText) {
+        aiText = aiText
+          .replace(/^(?:DO NOT|CRITICAL|NOTE|IMPORTANT|INSTRUCTION|RULE|SYSTEM|MANDATORY):?.*\n+/gi, "")
+          .trim();
+        if (/^[A-Z0-9 _,.\-:"'()]{10,}\n\n/.test(aiText)) {
+          aiText = aiText.replace(/^[A-Z0-9 _,.\-:"'()]{10,}\n\n/, "").trim();
+        }
+      }
+
       // 4. Send response with toolCall info
       await ctx.runMutation(internal.messages.internalSend, {
         sessionId: args.sessionId,
@@ -896,7 +986,7 @@ export const chat = internalAction({
         })) : undefined
       });
 
-      if (recentMessages.length % 20 === 0) {
+      if (recentMessages.length % 10 === 0) {
         await ctx.scheduler.runAfter(0, internal.ai_action.reflectOnPersonality, { sessionId: args.sessionId, userId: args.userId });
       }
 

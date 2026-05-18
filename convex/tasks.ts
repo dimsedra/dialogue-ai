@@ -61,7 +61,7 @@ export const completeTask = mutation({
       throw new Error("Unauthorized");
     }
 
-    await ctx.db.patch(args.id, { completed: true });
+    await ctx.db.patch(args.id, { completed: true, completedAt: Date.now() });
   },
 });
 
@@ -88,7 +88,10 @@ export const updateTask = mutation({
     priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
+    progress: v.optional(v.number()),
+    statusHook: v.optional(v.string()),
     userId: v.optional(v.id("users")),
+    timezoneOffset: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
@@ -103,11 +106,37 @@ export const updateTask = mutation({
       throw new Error("Unauthorized");
     }
 
-    const updates: Record<string, string | boolean | number | undefined> = {};
+    const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
-      if (value !== undefined && key !== "id" && key !== "userId") {
+      if (value !== undefined && key !== "id" && key !== "userId" && key !== "notes" && key !== "timezoneOffset") {
         updates[key] = value;
       }
+    }
+    if (args.notes !== undefined) {
+      let incomingNote = args.notes.trim();
+      const existingNotes = task.notes ? task.notes.trim() : "";
+      if (existingNotes && incomingNote.startsWith(existingNotes)) {
+        incomingNote = incomingNote.slice(existingNotes.length).trim();
+      }
+      incomingNote = incomingNote.replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*/, "").trim();
+      if (incomingNote) {
+        let now = new Date();
+        if (args.timezoneOffset !== undefined) {
+          now = new Date(Date.now() - (args.timezoneOffset * 60000));
+        }
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        const timestamp = `[${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}]`;
+        const newEntry = `${timestamp} ${incomingNote}`;
+        updates.notes = existingNotes ? `${existingNotes}\n${newEntry}` : newEntry;
+      }
+    }
+    if (args.notes !== undefined || args.progress !== undefined || args.statusHook !== undefined) {
+      updates.contextUpdatedAt = Date.now();
+    }
+    if (args.completed === true && !task.completed) {
+      updates.completedAt = Date.now();
+    } else if (args.completed === false && task.completed) {
+      updates.completedAt = undefined;
     }
     await ctx.db.patch(args.id, updates);
   },

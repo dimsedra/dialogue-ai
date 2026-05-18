@@ -146,6 +146,8 @@ export function Chat({
                 priority: args.priority as "low" | "medium" | "high" | undefined,
                 category: args.category as string | undefined,
                 notes: args.notes as string | undefined,
+                progress: args.progress !== undefined ? Number(args.progress) : undefined,
+                statusHook: args.statusHook as string | undefined,
                 dueDate: args.dueDate ? parseLocal(args.dueDate as string) : undefined,
                 workspaceId: promptCtx.workspaceId ?? undefined,
               });
@@ -157,10 +159,13 @@ export function Chat({
               if (args.priority) taskUpdates.priority = args.priority as "low" | "medium" | "high";
               if (args.category) taskUpdates.category = args.category as string;
               if (args.notes) taskUpdates.notes = args.notes as string;
+              if (args.progress !== undefined) taskUpdates.progress = Number(args.progress);
+              if (args.statusHook !== undefined) taskUpdates.statusHook = args.statusHook as string;
               if (args.dueDate) taskUpdates.dueDate = parseLocal(args.dueDate as string);
 
               await updateTask({
                 id: args.taskId as Id<"tasks">,
+                timezoneOffset: promptCtx.timezoneOffset ?? undefined,
                 ...taskUpdates
               });
 
@@ -185,6 +190,8 @@ export function Chat({
                 location: args.location as string | undefined,
                 description: args.description as string | undefined,
                 notes: args.notes as string | undefined,
+                outcome: args.outcome as string | undefined,
+                statusHook: args.statusHook as string | undefined,
                 startTime, 
                 endTime, 
                 eventType,
@@ -196,12 +203,15 @@ export function Chat({
               if (args.title) updates.title = args.title as string;
               if (args.location) updates.location = args.location as string;
               if (args.notes) updates.notes = args.notes as string;
+              if (args.outcome) updates.outcome = args.outcome as string;
+              if (args.statusHook) updates.statusHook = args.statusHook as string;
               if (args.startTime) updates.startTime = parseLocal(args.startTime as string);
               if (args.endTime) updates.endTime = parseLocal(args.endTime as string);
               if (args.eventType) updates.eventType = args.eventType as string;
 
               await updateEvent({
                 id: args.eventId as Id<"events">,
+                timezoneOffset: promptCtx.timezoneOffset ?? undefined,
                 ...updates
               });
 
@@ -247,15 +257,20 @@ export function Chat({
             enrichedArgs.oldBio = profile?.bio;
           }
 
-          executedCalls.push({ name, args: enrichedArgs, result: { status: "success" } });
+          const isOnlyContext = (name === "updateTask" && Object.keys(args).every(k => ["taskId", "notes", "progress", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "progress", "statusHook"].includes(k))) ||
+            (name === "updateEvent" && Object.keys(args).every(k => ["eventId", "notes", "outcome", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "outcome", "statusHook"].includes(k)));
+
+          if (!isOnlyContext) {
+            executedCalls.push({ name, args: enrichedArgs, result: { status: "success" } });
+          }
         }
 
         await sendMessage({
           sessionId,
           text: result.aiText || "Done!",
           author: "AI",
-          toolCall: executedCalls[0],
-          toolCalls: executedCalls,
+          toolCall: executedCalls.length > 0 ? executedCalls[0] : undefined,
+          toolCalls: executedCalls.length > 0 ? executedCalls : undefined,
         });
       } else {
         await sendMessage({

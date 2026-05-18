@@ -60,6 +60,9 @@ export default defineSchema({
     priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
+    progress: v.optional(v.number()),
+    statusHook: v.optional(v.string()),
+    contextUpdatedAt: v.optional(v.number()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
   }).index("by_user", ["userId"])
@@ -92,6 +95,9 @@ export default defineSchema({
     eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
     location: v.optional(v.string()),
     notes: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    statusHook: v.optional(v.string()),
+    contextUpdatedAt: v.optional(v.number()),
     workspaceId: v.optional(v.id("workspaces")),
     recurrence: v.optional(v.object({
       frequency: v.union(v.literal("daily"), v.literal("weekly")),

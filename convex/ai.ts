@@ -62,6 +62,42 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Purpose: MUST use whenever the user asks for real-time information or facts you do not know. Perform multiple searches in one turn if broad research is needed.
 ### updateMemory
 - Purpose: Use when you learn new, stable patterns about the user's personality or preferences.
+
+# 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
+You maintain a "living chronological journal" on every task and event inside the 'notes' field.
+This is YOUR memory per entity. You must track the evolution of user progress, emotions, and blockers over time.
+
+- MANDATORY JOURNALING & STATUS HOOK PROTOCOL:
+When updating notes via 'updateTask' or 'updateEvent', provide ONLY the raw content of your new observation (e.g., 'Progress 50%. Blocked by router config.').
+DO NOT include any date, time, or bracket formatting in the note parameter. The backend server will automatically prepend the absolute system timestamp [YYYY-MM-DD HH:mm] and append it safely to the existing history.
+In addition, ALWAYS synthesize a single punchy sentence into 'statusHook' describing the most current entity state for notification banners and quick UI glances.
+
+Example Evolution:
+Day 1 (May 8): User says work is halfway done but router config is tough.
+You call updateTask with:
+notes: "Progress 50%. Struggling with router configuration, feeling slightly frustrated."
+statusHook: "Progress 50%, blocked by router config."
+(Backend automatically stamps and appends: "[2026-05-08 14:00] Progress 50%...")
+
+Day 5 (May 16): User says it's almost done and feeling excited.
+You call updateTask with:
+notes: "Progress 90%. Router configuration solved, ready for final testing. Feeling excited!"
+statusHook: "Router configuration complete, ready for final testing (Progress 90%)."
+(Backend automatically stamps and appends: "[2026-05-16 10:30] Progress 90%...")
+
+- WHEN to update notes & statusHook:
+1. During Workspace Sync: If a task has a deadline within 30 minutes and existing notes -> reference the last known context in your response, then ask for an update.
+2. When user mentions progress implicitly: "Halfway done with the proposal" -> identify the relevant task, append new entry + update progress + statusHook.
+3. After events conclude: Proactively ask "How did the client meeting go?" and store the outcome + statusHook.
+4. When blockers are mentioned: "Can't start yet, waiting for VPN access" -> append blocker to notes + statusHook.
+5. When task progress reaches 100%: When you update a task's progress to 100 (e.g. user says "I finished the research"), DO NOT call completeTask immediately. Proactively ask the user in your natural response if they would like the task officially marked as completed.
+
+- HOW to estimate progress:
+Infer naturally from conversation. NEVER ask "what percentage is completed?"
+"Completed 3 out of 10 modules" -> progress: 30
+"Just putting final touches" -> progress: 90
+"Just started initial research" -> progress: 10
+"Halfway through the tasks" -> progress: 50
 `;
 
 export const getPromptContext = query({
@@ -117,8 +153,16 @@ export const getPromptContext = query({
       ? await ctx.db.query("tasks").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).filter((q) => q.eq(q.field("completed"), false)).collect()
       : await ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).filter((q) => q.eq(q.field("completed"), false)).collect();
     const pendingTasksContext = tasks.map(t => {
-      const dateStr = t.dueDate ? ` | Due: ${t.dueDate}` : "";
-      return `- [${t._id}] ${t.text}${dateStr} (Priority: ${t.priority}, Category: ${t.category})`;
+      const eventDate = t.dueDate ? (
+        args.timezoneOffset !== undefined
+          ? new Date(t.dueDate - (args.timezoneOffset * 60000))
+          : new Date(t.dueDate)
+      ) : null;
+      const dateStr = eventDate ? ` | Due: ${eventDate.toLocaleString("en-US", { hour12: false })}` : "";
+      const progressStr = t.progress !== undefined ? ` | Progress: ${t.progress}%` : "";
+      const hookStr = t.statusHook ? ` | Hook: "${t.statusHook}"` : "";
+      const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
+      return `- [${t._id}] ${t.text}${dateStr}${progressStr}${hookStr} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"})${notesStr}`;
     }).join("\n");
 
     const events = workspaceId
@@ -130,7 +174,10 @@ export const getPromptContext = query({
         const eventDate = args.timezoneOffset !== undefined
           ? new Date(e.startTime - (args.timezoneOffset * 60000))
           : new Date(e.startTime);
-        return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })}) [Type: ${e.eventType || "interval"}]`;
+        const hookStr = e.statusHook ? ` | Hook: "${e.statusHook}"` : "";
+        const outcomeStr = e.outcome ? ` | Outcome: "${e.outcome}"` : "";
+        const notesStr = e.notes ? `\n  Notes:\n  ${e.notes.split("\n").join("\n  ")}` : "";
+        return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })}) [Type: ${e.eventType || "interval"}]${hookStr}${outcomeStr}${notesStr}`;
       })
       .join("\n");
 
@@ -180,7 +227,7 @@ export const getPromptContext = query({
       (Note: Local LLM mode supports tool execution and web search. Attachment reasoning across files is subject to your local model vision capabilities.)
     `;
 
-    return { systemInstruction, workspaceId };
+    return { systemInstruction, workspaceId, timezoneOffset: args.timezoneOffset };
   }
 });
 
@@ -326,6 +373,8 @@ export const addTask = mutation({
     priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
+    progress: v.optional(v.number()),
+    statusHook: v.optional(v.string()),
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -341,6 +390,9 @@ export const addTask = mutation({
       priority: args.priority || "medium",
       category: args.category || "General",
       notes: args.notes,
+      progress: args.progress,
+      statusHook: args.statusHook,
+      contextUpdatedAt: (args.notes || args.progress !== undefined || args.statusHook) ? Date.now() : undefined,
       createdAt: Date.now(),
     });
   },
