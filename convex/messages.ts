@@ -253,3 +253,14 @@ export const getFileMetadata = query({
     return null;
   },
 });
+
+export const togglePinSession = mutation({
+  args: { id: v.id("chatSessions") },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) throw new Error("Unauthorized");
+    const session = await ctx.db.get(args.id);
+    if (!session || session.userId !== userId) throw new Error("Session not found or unauthorized");
+    await ctx.db.patch(args.id, { pinned: !session.pinned });
+  },
+});

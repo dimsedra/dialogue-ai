@@ -20,6 +20,7 @@ export default defineSchema({
     workspaceId: v.optional(v.id("workspaces")),
     createdAt: v.number(),
     lastActivity: v.number(),
+    pinned: v.optional(v.boolean()),
   }).index("by_user", ["userId"])
     .index("by_workspace", ["workspaceId"]),
 

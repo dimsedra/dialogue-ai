@@ -29,6 +29,8 @@ interface MessageStreamProps {
   isSyncing: boolean;
   isLargeViewport: boolean;
   keyboardOffset: number;
+  userJustSent?: boolean;
+  onUserSentAcknowledged?: () => void;
   onTypingDone: () => void;
 }
 
@@ -39,6 +41,8 @@ export const MessageStream = React.memo(function MessageStream({
   isSyncing,
   isLargeViewport,
   keyboardOffset,
+  userJustSent,
+  onUserSentAcknowledged,
   onTypingDone,
 }: MessageStreamProps) {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -47,11 +51,11 @@ export const MessageStream = React.memo(function MessageStream({
   const prevScrollSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
   const lastAnchoredSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
 
-  const anchorToMessage = useCallback((targetId?: string) => {
+  const anchorToMessage = useCallback((targetId?: string, block: ScrollLogicalPosition = "center") => {
     if (targetId) {
       const el = document.getElementById(`msg-${targetId}`);
       if (el) {
-        el.scrollIntoView({ behavior: "instant", block: "center" });
+        el.scrollIntoView({ behavior: "instant", block });
         return;
       }
     }
@@ -70,7 +74,7 @@ export const MessageStream = React.memo(function MessageStream({
     }
     if (isInstant) {
       const targetMsg = messages && messages.length > 0 ? ([...messages].reverse().find(m => m.author === "User") || messages[messages.length - 1]) : undefined;
-      anchorToMessage(targetMsg?._id);
+      anchorToMessage(targetMsg?._id, "center");
     } else {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
@@ -92,10 +96,10 @@ export const MessageStream = React.memo(function MessageStream({
         lastAnchoredSessionIdRef.current = activeSessionId;
         setShowScrollBottom(false);
         
-        const lastMsg = messages[messages.length - 1];
-        const targetId = lastMsg?._id;
+        const targetMsg = [...messages].reverse().find(m => m.author === "User") || messages[messages.length - 1];
+        const targetId = targetMsg?._id;
 
-        const executeAnchor = () => anchorToMessage(targetId);
+        const executeAnchor = () => anchorToMessage(targetId, "center");
         executeAnchor();
         requestAnimationFrame(executeAnchor);
         setTimeout(executeAnchor, 50);
@@ -105,8 +109,14 @@ export const MessageStream = React.memo(function MessageStream({
   }, [activeSessionId, messages, anchorToMessage]);
 
   useEffect(() => {
-    if (!showScrollBottom) {
-      scrollToBottom();
+    if (userJustSent && messages && messages.length > 0) {
+      const lastUserMsg = [...messages].reverse().find(m => m.author === "User");
+      if (lastUserMsg) {
+        anchorToMessage(lastUserMsg._id, "start");
+        if (onUserSentAcknowledged) setTimeout(() => onUserSentAcknowledged(), 0);
+      }
+    } else if (!showScrollBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
     
     // Clear typing indicator when messages update and last message is from AI
@@ -116,7 +126,7 @@ export const MessageStream = React.memo(function MessageStream({
         setTimeout(() => onTypingDone(), 0);
       }
     }
-  }, [messages, isTyping, scrollToBottom, showScrollBottom, onTypingDone]);
+  }, [messages, isTyping, userJustSent, onUserSentAcknowledged, showScrollBottom, anchorToMessage, onTypingDone]);
 
   return (
     <>
