@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: Satoshi, var(--font-plus-jakarta-sans), sans-serif;
+  --font-mono: var(--font-jetbrains-mono);
 }
 
 :root {
@@ -16,6 +16,7 @@
 }
 
 html, body {
+  font-family: var(--font-sans), sans-serif;
   background: var(--background);
   color: var(--foreground);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -28,8 +29,17 @@ html, body {
 }
 
 @layer base {
-  * {
+  *, ::before, ::after {
     @apply border-[#2a2723];
+    font-family: Satoshi, var(--font-plus-jakarta-sans), sans-serif;
+  }
+
+  pre, code, kbd, samp, .font-mono, [class*="font-mono"], pre *, code * {
+    font-family: var(--font-mono), monospace !important;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.025em;
   }
 }
 
