@@ -2,69 +2,104 @@
 
 **A sovereign, agent-native productivity workspace.**
 
-Most AI productivity tools are built the same way: take an existing app (notes, to-dos, calendar), add a chat box, and call it "AI-powered." The AI is an afterthought. It can suggest things, but it cannot *act*.
+Dialogue is built on a simple premise: **your AI should work *for* you, not just respond *to* you.** 
 
-Dialogue inverts this entirely. The agent is the product. Tasks, events, and memory are its native tools — not wrappers around a pre-existing system.
-
----
-
-## The Paradigm
-
-Dialogue is built around a single idea: **your AI should work *for* you, not just respond *to* you.**
-
-This means three things in practice:
-
-1. **Agent-first, not AI-featured.** The agent can read your workspace context, cross-reference your schedule, execute mutations on your data, and remember your patterns — all within a single conversation. There is no "switch to the app to actually do the thing."
-
-2. **Sovereign by design.** You bring your own keys. Your data lives in your Convex deployment. You choose your inference provider — cloud (Gemini Pro) or fully local (LM Studio). Nothing phones home. Nothing is monetized. You own the stack.
-
-3. **Human-in-the-loop, not autopilot.** The agent operates on a strict Verification Policy. It will not add a task, schedule an event, or delete anything without first presenting a plan and receiving explicit confirmation. It asks before it assumes. This is not a limitation — it is a design choice for people who care about precision.
+Most productivity tools treat AI as an afterthought—an assistant placed next to a traditional task manager or calendar. Dialogue inverts this paradigm. The AI agent is the core engine, and tasks, calendar events, workspaces, and memory are its native tools rather than wrappers around an external system.
 
 ---
 
-## What It Does
+## Technical Architecture & Paradigm
 
-### Conversational Task and Event Management
+Dialogue is structured around three key engineering decisions designed to put you in control:
 
-Tell Dialogue what you need to do. It will gather the details — priority, category, deadline — confirm the plan, and execute. Changes show up in real time across your workspace.
+### 1. Dual-Engine Inference Model (Cloud / Local)
+* **What it is**: Hot-swapping between any standard Cloud LLM provider (such as Google Gemini, OpenAI, or Anthropic) and fully offline local models (via LM Studio, Ollama, etc.) running on your own machine.
+* **Why it matters**: You shouldn't be locked into a single AI provider or forced to pay a monthly subscription. If you need hyper-fast, cloud-based reasoning, plug in your preferred API key. If you want absolute, offline privacy for sensitive data, switch to a local model running on your computer with a single click.
 
-Tasks support priority levels, category tags, and due dates. Events support both **interval scheduling** (meetings, focus blocks) and **point-in-time tracking** (releases, drops, launches, comebacks) — because not everything has a duration.
+### 2. Server-Blind Timezone Architecture
+* **What it is**: Storing all temporal values in raw Unix milliseconds and parsing relative dates ("tomorrow at 3 PM") at the client edge using your browser's local timezone offset.
+* **Why it matters**: Have you ever set a reminder in an app, traveled to another city, and had all your notifications go off at the wrong hour? Dialogue runs client-blind timezone matching. Your schedule moves with you, automatically calibrating to your local clock, resolving UTC timezone drift permanently.
 
-### Multi-Workspace Context Isolation
-
-Every workspace is a complete silo: its own conversation history, task list, event calendar, and agent context. The agent knows which workspace it is operating in and calibrates its tone and advice accordingly.
-
-### Semantic Memory
-
-Every 20 messages, Dialogue runs a background reflection pass and synthesizes what it has learned about you — your work style, preferences, patterns — into a persistent memory layer. Future conversations build on this model. It gets more useful the more you use it.
-
-### Multimodal Reasoning
-
-Upload images, PDFs, or Word documents directly into the conversation. The agent reads them, reasons across them, and uses their content to inform its suggestions and actions. Hand it a meeting invite and it will offer to add it to your calendar. Hand it two financial reports and it will compare them.
-
-### Integrated Research Engine
-
-When you need current information, the agent issues real-time web queries through Tavily or Serper — and can run multiple parallel searches in a single turn for complex questions. Results are synthesized directly into its response.
-
-### Sovereign Authentication
-
-Your workspace is protected by **Convex Auth**, providing built-in, secure access across all your devices without compromising the "bring your own keys" philosophy. By using native authentication within your own database deployment, your identity and your data remain truly siloed and sovereign.
-
-### Premium Interaction Surface
-
-Dialogue isn't just a chat box; it's a living interface. It features:
-
-- **Compact Tool Cards**: Visual feedback for every action (tasks, events, searches) designed to support, not dominate, the conversation.
-- **Motion-Enabled Feedback**: Fluid animations and a non-intrusive typing indicator that provide a tactile sense of the agent's "thinking" process.
-- **Glassmorphism Aesthetic**: A meticulously crafted dark-themed workspace that feels premium, modern, and focused.
+### 3. Human-in-the-Loop Consent Gate (Verification Protocol)
+* **What it is**: A strict rule where the AI must propose a plan before calling database mutations, coupled with secure prompt sanitization.
+* **Why it matters**: Autopilot agents are dangerous—they delete files, schedule ghost meetings, and hallucinate tasks. Dialogue builds trust. The agent drafts a plan, and you click "Confirm" on a physical card to execute it. No surprises, no accidental wipes.
 
 ---
 
-## What It Is Not
+## Core Features & Why They Matter
 
-- It is not a SaaS product with a subscription tier.
-- It is not a wrapper around someone else's productivity app.
-- It is not always listening, always processing, or sending your data anywhere you did not configure.
+Instead of dumping raw developer specs, here is why each core feature was built and what it means for your daily productivity:
+
+### 1. Living Chronological Task & Event Journals
+* **What it does**: Instead of overwriting your notes, Dialogue appends timestamped logs (`[2026-05-19 22:45] Started layout...`) whenever you update a task or event's progress. It also auto-generates a one-sentence "Status Hook" for quick glance dashboards.
+* **Why we built it**: Traditional to-do apps are black holes of history. Once a task is done or updated, the contextual journey—the struggles, decisions, and micro-milestones—is lost.
+* **What it means for you**: You get an automated, searchable "developer diary" of your life. If you forget how you resolved a bug last Tuesday, or when a specific detail changed, you can simply ask Dialogue. It reads the entire ledger for you.
+
+### 2. Collapsible Checkmark Archive & Pruning
+* **What it does**: Tasks completed within the last 7 days are neatly grouped in a collapsible, restorable checkmark list. Older completed items are automatically tucked away from your screen and the AI's instant context window.
+* **Why we built it**: A cluttered dashboard breeds mental anxiety. But deleting old tasks makes you lose progress records. Furthermore, feeding thousands of old completed tasks to an AI slows down its response time and eats up compute power.
+* **What it means for you**: A clean, focused workspace every single morning. You only see what matters *now*. Your historical achievements are kept safe and searchable, but they won't clutter your visual space or slow down the agent's thinking.
+
+### 3. Background Semantic Memory
+* **What it does**: Dialogue runs quiet background checks on your conversations, summarizing your work style, preference patterns, and goals, and storing them as a persistent memory layer.
+* **Why we built it**: Standard AI assistants suffer from "amnesia." Every time you open a new chat session, you have to re-explain who you are, how you work, and what your preferences are.
+* **What it means for you**: Dialogue learns and grows with you. If you prefer deep work in the mornings, code in short sprints, or hate meeting overlaps, the agent naturally suggests schedules and tones that align with your style. The app adapts to you—not the other way around.
+
+### 4. Multimodal & Web Ingestion
+* **What it does**: Drag and drop documents (PDFs, images, Word docs) directly into your chat, while the agent issues parallel, real-time web searches to fact-check or research complex questions.
+* **Why we built it**: Modern knowledge work is scattered. You are constantly jumping between reading manuals, googling resources, and updating your calendar.
+* **What it means for you**: Zero friction. Hand Dialogue a messy meeting brief PDF, and it will read it, search the web for context, and offer to schedule the follow-up meeting in one go. You have a unified researcher and action-taker in a single chat bubble.
+
+### 5. Interactive Periodic Reflections
+* **What it does**: Dialogue periodically synthesizes your tasks, milestones, and notes into visual weekly, monthly, and yearly summaries—reminiscent of a "Spotify Wrapped" for your productivity.
+* **Why we built it**: Standard productivity tools are great at tracking what you need to do, but terrible at celebrating what you actually did. Without reflection, productivity feels like an endless treadmill.
+* **What it means for you**: You get an emotional, gamified summary of your wins and learning patterns. It transforms checklist compliance into a satisfying journey of self-reflection and milestone tracking.
+
+### 6. Context-Aware Smart Notifications
+* **What it does**: Delivers dynamic browser push notifications that understand what you're working on, why it's important, and the exact context surrounding it.
+* **Why we built it**: "Dumb" notifications (e.g. *Task X is due in 10 minutes*) are easily dismissed and lead to notification fatigue. Reminders are only useful if they provide context.
+* **What it means for you**: Instead of generic alerts, you get smart nudges that remind you of the bigger picture (e.g. *"Time for meeting with team. Don't forget the slides you finished yesterday are saved in the Workspace context."*) with instant shortcuts to take action.
+
+## Agent Capability Library (Tools & Skills)
+
+The Dialogue agent interacts with your workspace by executing specific, permission-gated actions. Here is the full library of tools available to the agent:
+
+### 1. Task Management Suite
+* **`addTask`**: Creates a single task with custom priority, category, progress, and initial status hooks.
+* **`batchAddTasks`**: Groups multiple task creations into a single instant database transaction (e.g. when dumping a checklist).
+* **`updateTask`**: Updates task details and progress percentage, appending notes chronologically.
+* **`completeTask`**: Safely signs off on completed tasks, placing them in the 7-day archive.
+* **`deleteTask`**: Permanently deletes a task.
+* **`getTaskNotes`**: Retrieves the full, detailed chronological progress logs of a specific task only when requested, keeping the chat interface fast and lightweight.
+
+### 2. Time & Calendar Scheduling
+* **`addEvent`**: Schedules calendar blocks (point-in-time launches or duration-based focus sessions).
+* **`updateEvent`**: Modifies event metadata, prep instructions, location details, and summaries.
+* **`updateEventOccurrence`**: Targets and reschedules a single occurrence of a repeating event series without breaking the master recurrence pattern.
+* **`deleteEvent`**: Deletes calendar bookings.
+
+### 3. Long-Term Memory & Search
+* **`updateMemory`**: Refines and updates the user's permanent biography summary based on behavioral insights.
+* **`searchHistoricalEntities`**: Allows keyword and date range searches across completed tasks and past meetings, giving the agent a backward-looking historical perspective.
+* **`listWorkspaces`**: Reads all active workspaces to help users route, organize, and categorize items.
+
+### 4. Real-Time Research
+* **`searchWeb`**: Executes parallel search queries across Tavily or Serper, feeding live internet search results directly into the conversation.
+
+---
+
+## Database Schema (Convex)
+
+Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
+
+* **`users`**: Manages authenticated profiles.
+* **`userProfile`**: Stores user-specific settings, including `preferences` (selected AI provider, search engine configurations, memory sensitivity sliders) and profile bio summaries.
+* **`workspaces`**: Silos containing a workspace name, branding color, context details, and user ownership mapping.
+* **`chatSessions`**: Conversation containers containing title, pinning status, workspace mapping, and creation stamps.
+* **`messages`**: Multi-turn chat message data. Stores text, author, attachments, extracted file contents, and tool call logs.
+* **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger), progress percentage (0-100), `statusHook`, and time stamps (`dueDate`, `completedAt`).
+* **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema: frequency, interval, daysOfWeek, until, exceptions).
+* **`memories`**: Vector-indexed memory fragments for semantic search retrieval.
 
 ---
 
@@ -72,72 +107,64 @@ Dialogue isn't just a chat box; it's a living interface. It features:
 
 | Layer | Technology |
 | --- | --- |
-| Framework | Next.js 15 (App Router) |
-| Real-time Backend | Convex |
-| Styling & Motion | Tailwind CSS + Framer Motion |
-| AI Providers | Google Gemini Pro / LM Studio |
-| Research | Tavily / Serper |
-| Language | TypeScript (strict) |
-| Auth | Convex Auth (@convex-dev/auth) |
-
-**Architecture note**: All temporal data is stored as raw Unix timestamps. No server-side timezone inference. All local time rendering happens at the client edge — a pattern we call "Server-Blind" infrastructure.
+| **Framework** | Next.js 15 (App Router, React 19) |
+| **Backend & DB** | Convex (Real-time reactive database, vector search) |
+| **Styling** | Tailwind CSS v4 |
+| **Animations** | Framer Motion (Glassmorphic cards, slide sheets) |
+| **AI Providers** | Any Cloud LLM (Gemini, OpenAI, Anthropic, etc.) & Local LLM (LM Studio, Ollama, etc.) |
+| **Integrations** | Tavily / Serper (Web Research), Mammoth (Docx Extraction) |
+| **Auth** | Convex Auth (`@convex-dev/auth` for sovereign multi-device auth) |
 
 ---
 
-## Setup
+## Development Setup
 
-1. **Clone**
+### Prerequisites
+* Node.js v18+
+* A Convex developer account
 
-   ```bash
-   git clone https://github.com/your-username/dialogue-ai.git
-   cd dialogue-ai
-   ```
+### 1. Project Initialization
+```bash
+git clone https://github.com/your-username/dialogue-ai.git
+cd dialogue-ai
+npm install
+```
 
-2. **Install**
+### 2. Environment Configuration
+Create a `.env.local` file in the root directory:
+```env
+CONVEX_DEPLOYMENT=your_deployment_name
+NEXT_PUBLIC_CONVEX_URL=your_convex_url
 
-   ```bash
-   npm install
-   ```
+# Cloud Inference (Plug in your preferred API key)
+GEMINI_API_KEY=your_google_gemini_key
+OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
 
-3. **Configure environment**
+# Local Inference (Optional - supporting LM Studio, Ollama, etc.)
+NEXT_PUBLIC_LM_API_TOKEN=lm-studio
+LOCAL_LLM_BASE_URL=http://localhost:1234/v1
 
-   Create `.env.local`:
+# Web Search Integration (Optional)
+TAVILY_API_KEY=your_tavily_api_key
+SERPER_API_KEY=your_serper_api_key
+```
 
-   ```env
-   CONVEX_DEPLOYMENT=your_deployment_name
-   NEXT_PUBLIC_CONVEX_URL=your_convex_url
+### 3. Running Locally
+Launch the Convex backend compiler and the Next.js development server:
 
-   # AI provider (at least one required)
-   GEMINI_API_KEY=your_google_ai_key
+```bash
+# Terminal 1: Starts Convex reactive dev compiler
+npx convex dev
 
-   # Research providers (optional but recommended)
-   TAVILY_API_KEY=your_tavily_key
-   SERPER_API_KEY=your_serper_key
+# Terminal 2: Starts Next.js client
+npm run dev
+```
 
-   # Authentication (Convex Auth)
-   # No external keys required; uses your Convex deployment.
-   ```
-
-4. **Run**
-
-   ```bash
-   # In one terminal
-   npx convex dev
-
-   # In another
-   npm run dev
-   ```
-
----
-
-## Deployment
-
-Dialogue is optimized for Vercel.
-
-1. Deploy backend functions: `npx convex deploy`
-2. Connect the repository to a new Vercel project.
-3. Set production environment variables in the Vercel dashboard.
+Open `http://localhost:3000` to access your sovereign workspace.
 
 ---
 
-*Built with intentionality. Designed to stay out of your way.*
+## License & Sovereignty
+
+Dialogue is built as an open stack under a "bring-your-own-keys" philosophy. Your conversations, calendar entries, and tasks are completely contained within your private Convex deployment. No usage data, telemetry, or personal information is transmitted to third-party databases.
