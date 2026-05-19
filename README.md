@@ -92,6 +92,12 @@ Instead of dumping raw developer specs, here is why each core feature was built 
 * **Why we built it**: "Dumb" notifications (e.g. *Task X is due in 10 minutes*) are easily dismissed and lead to notification fatigue. Reminders are only useful if they provide context.
 * **What it means for you**: Instead of generic alerts, you get smart nudges that remind you of the bigger picture (e.g. *"Time for meeting with team. Don't forget the slides you finished yesterday are saved in the Workspace context."*) with instant shortcuts to take action.
 
+### 7. Context-Isolated Workspaces & Universal Space (Global Command Center)
+
+* **What it does**: Silos chat sessions, tasks, calendar entries, and agent memory context into independent project containers (e.g. "Work", "Personal"), while providing a **Universal Chat Space** that aggregates all workspaces into a single global view.
+* **Why we built it**: Standard productivity tools either force you into one massive, unstructured list or silo projects so deeply that you lose the big picture. Dialogue balances focus and synthesis.
+* **What it means for you**: You get the best of both worlds. Switch into a specific workspace to eliminate distractions and let the agent work with isolated context. When you need a bird's-eye view, hop into the **Universal Space**—your command center where the agent coordinates your entire day, schedules across project boundaries, and summarizes your overall productivity.
+
 ---
 
 ## Agent Capability Library (Tools & Skills)
