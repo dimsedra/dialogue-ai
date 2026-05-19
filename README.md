@@ -4,7 +4,30 @@
 
 Dialogue is built on a simple premise: **your AI should work *for* you, not just respond *to* you.**
 
-Most productivity tools treat AI as an afterthought—an assistant placed next to a traditional task manager or calendar. Dialogue inverts this paradigm. The AI agent is the core engine, and tasks, calendar events, workspaces, and memory are its native tools rather than wrappers around an external system.
+Most modern productivity tools treat artificial intelligence as a marketing feature—a chat bubble bolted onto a traditional database, or a text summarizer floating beside a calendar. In these setups, you are still the manual coordinate executor. You read the AI's suggestions, copy-paste the text, create the task rows, and schedule the calendar events.
+
+Dialogue inverts this entire paradigm. Here, the AI agent is the **core runtime engine**. Your tasks, calendar events, workspaces, and memories are not just database entries—they are the agent's native toolset. When you tell Dialogue what is happening in your life, the agent directly interacts with your database, building your schedule, logging task progress, updating its own memory of your preferences, and morphing the user interface dynamically in front of your eyes.
+
+---
+
+## Three Sovereign Pillars
+
+### 1. Agent-Native Architecture
+
+* **What it means**: Instead of just returning text formatting, the Dialogue agent has full read/write database tool capabilities. The agent can build complex workflows, insert batched tasks, resolve conflicts in calendar schedules, and organize workspaces directly. You talk to Dialogue like a colleague, and the app mutates its state in real-time.
+
+### 2. Dual-Pane Reactive Workspace
+
+* **What it means**: Dialogue rejects static layouts in favor of a cohesive, real-time reactive workspace. The UI is built as a dual-pane workstation that updates instantly via reactive Convex subscriptions:
+  * **Interactive Left Rail (`WorkspaceRail`)**: Quick navigation between colored workspace contexts and user silos.
+  * **Session Controller Sidebar (`SessionSidebar`)**: Manages conversational threads, pinned sessions, and houses the hot-swap toggle for the AI provider engine.
+  * **Consent-Gated Chat Feed (`MessageStream` & `ToolCard`)**: Streams multi-turn conversations. When the agent triggers a tool mutation, it renders an inline glassmorphic `ToolCard` (e.g. for `addTask` or `addEvent`), letting you approve or modify plans with a physical click directly in the chat bubble sequence.
+  * **Collapsible Companion Pane (`TaskPanel`)**: The right side of the screen houses the structural view of your workspace, seamlessly hosting the living checklist (**`TaskList`**) and visual schedule grid (**`CalendarView`**).
+  * **Aesthetic Language**: Fully styled using translucent backdrops, border rings, and dark mode filters, wrapped in Framer Motion micro-animations to make the interface feel alive.
+
+### 3. Absolute Ownership (Private & BYOK)
+
+* **What it means**: Your data belongs to you. Dialogue operates under a Bring-Your-Own-Keys (BYOK) model. All chat histories, task logs, calendar details, and vector-indexed semantic memories are stored directly in your own private Convex instance. No vendor lock-in, no silent telemetry tracking, and no centralized databases harvesting your daily routines.
 
 ---
 
