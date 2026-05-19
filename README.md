@@ -102,7 +102,7 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 
 * **`addTask`**: Creates a single task with custom priority, category, progress, and initial status hooks.
 * **`batchAddTasks`**: Groups multiple task creations into a single instant database transaction (e.g. when dumping a checklist).
-* **`updateTask`**: Updates task details and progress percentage, appending notes chronologically.
+* **`updateTask`**: Updates task details, progress percentage, and attaches resource references (external URLs or document storage IDs) by appending standardized markdown asset logs chronologically to the task ledger.
 * **`completeTask`**: Safely signs off on completed tasks, placing them in the 7-day archive.
 * **`deleteTask`**: Permanently deletes a task.
 * **`getTaskNotes`**: Retrieves the full, detailed chronological progress logs of a specific task only when requested, keeping the chat interface fast and lightweight.
@@ -135,8 +135,8 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 * **`workspaces`**: Silos containing a workspace name, branding color, context details, and user ownership mapping.
 * **`chatSessions`**: Conversation containers containing title, pinning status, workspace mapping, and creation stamps.
 * **`messages`**: Multi-turn chat message data. Stores text, author, attachments, extracted file contents, and tool call logs.
-* **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger), progress percentage (0-100), `statusHook`, and time stamps (`dueDate`, `completedAt`).
-* **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema: frequency, interval, daysOfWeek, until, exceptions).
+* **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger incorporating chronological links and document storage references), progress percentage (0-100), `statusHook`, and time stamps (`dueDate`, `completedAt`).
+* **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema) and chronological notes ledger.
 * **`memories`**: Vector-indexed memory fragments for semantic search retrieval.
 
 ---
