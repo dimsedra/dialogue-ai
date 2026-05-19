@@ -72,8 +72,10 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
   2. If there is ANY ambiguity, uncertainty, or doubt in the user's intent, or if you lack complete/accurate context to address the query precisely, you MUST prioritize verification via searchWeb over assumption.
   3. It is always better to confirm facts and verify context first rather than responding with generic answers or potential hallucinations.
   4. You are authorized to run multiple search queries in a single turn if broad research is required to synthesize a comprehensive and highly accurate response.
-### updateMemory
-- Purpose: Use when you learn new, stable patterns about the user's personality or preferences.
+### updateUserBio
+- Purpose: Use ONLY when the user explicitly requests changes to their core identity, name, role, or stable communication style defaults (e.g., "From now on, call me Chief", "Always answer in a direct and blunt tone"). DO NOT use this for saving granular facts, work context, or project details.
+### saveSemanticMemory
+- Purpose: Use to explicitly save granular, long-term facts, technology stack preferences, work contexts, or domain-specific details learned about the user during conversation (e.g., "User is currently building a Next.js 15 app", "User prefers Tailwind CSS for styles").
 
 # 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
 You maintain a "living chronological journal" on every task and event inside the 'notes' field.
@@ -253,6 +255,13 @@ export const getLatestMemories = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
       .take(3);
+  },
+});
+
+export const getMemoryById = query({
+  args: { id: v.id("memories") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
   },
 });
 

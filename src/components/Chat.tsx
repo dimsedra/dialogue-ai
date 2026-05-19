@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useConvex } from "convex/react";
+import { useQuery, useMutation, useConvex, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useEffect, useCallback } from "react";
 import { Id } from "../../convex/_generated/dataModel";
@@ -65,7 +65,8 @@ export function Chat({
   const completeTask = useMutation(api.tasks.toggleCompleted);
   const deleteTask = useMutation(api.tasks.deleteTask);
   const updateTask = useMutation(api.tasks.updateTask);
-  const updateMemory = useMutation(api.ai.updateProfile);
+  const updateUserBio = useMutation(api.ai.updateProfile);
+  const saveSemanticMemory = useAction(api.ai_action.saveSemanticMemoryAction);
 
   const convex = useConvex();
 
@@ -252,9 +253,12 @@ export function Chat({
             await deleteTask({ id: args.taskId as Id<"tasks"> });
             enrichedArgs.titleHint = task?.text;
           }
-          else if (name === "updateMemory") {
-            await updateMemory({ bio: args.bio as string });
+          else if (name === "updateUserBio") {
+            await updateUserBio({ bio: args.bio as string });
             enrichedArgs.oldBio = profile?.bio;
+          }
+          else if (name === "saveSemanticMemory") {
+            await saveSemanticMemory({ text: args.text as string });
           }
 
           const isOnlyContext = (name === "updateTask" && Object.keys(args).every(k => ["taskId", "notes", "progress", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "progress", "statusHook"].includes(k))) ||

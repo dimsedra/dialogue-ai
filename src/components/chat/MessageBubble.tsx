@@ -23,7 +23,8 @@ const TOOL_BADGE_COLORS: Record<string, string> = {
   deleteEvent: "bg-rose-400", // Rose
   searchWeb: "bg-[#3b82f6]", // Blue
   multiSearch: "bg-[#3b82f6]", // Blue
-  updateMemory: "bg-emerald-400", // Emerald
+  updateUserBio: "bg-emerald-400", // Emerald
+  saveSemanticMemory: "bg-emerald-400", // Emerald
 };
 
 function ToolCallGroup({ calls, isLargeViewport, msgId }: { calls: ToolCall[]; isLargeViewport: boolean; msgId: string }) {

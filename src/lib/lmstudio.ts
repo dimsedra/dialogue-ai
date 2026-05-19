@@ -175,14 +175,28 @@ export async function processLocalLLMRequest({
     {
       type: "function",
       function: {
-        name: "updateMemory",
-        description: "Updates the long-term memory/bio of the user.",
+        name: "updateUserBio",
+        description: "Updates the core user profile bio/personality summary and preferences.",
         parameters: {
           type: "object",
           properties: {
             bio: { type: "string", description: "The updated bio/personality summary" },
           },
           required: ["bio"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "saveSemanticMemory",
+        description: "Saves a granular, long-term semantic memory/fact about the user (e.g., technical preferences, project details).",
+        parameters: {
+          type: "object",
+          properties: {
+            text: { type: "string", description: "The granular fact or preference to remember" },
+          },
+          required: ["text"],
         },
       },
     },

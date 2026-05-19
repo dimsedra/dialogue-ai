@@ -6,6 +6,19 @@ import { Id } from "./_generated/dataModel";
 import { GoogleGenerativeAI, SchemaType, Tool, Part } from "@google/generative-ai";
 import mammoth from "mammoth";
 
+async function getEmbedding(genAI: GoogleGenerativeAI, text: string): Promise<number[]> {
+  const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+  const embedRes = await model.embedContent({
+    content: { role: "user", parts: [{ text }] },
+    outputDimensionality: 768,
+  } as any);
+  const rawVector = embedRes.embedding.values;
+  const sumSq = rawVector.reduce((sum, v) => sum + v * v, 0);
+  const magnitude = Math.sqrt(sumSq);
+  if (magnitude === 0) return rawVector;
+  return rawVector.map(v => v / magnitude);
+}
+
 const SKILLS_INSTRUCTION = `
 ## Agent Skills Reference
 You are Dialogue, an advanced personal assistant operating with high intelligence and structure.
@@ -76,8 +89,10 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
   2. If there is ANY ambiguity, uncertainty, or doubt in the user's intent, or if you lack complete/accurate context to address the query precisely, you MUST prioritize verification via searchWeb over assumption.
   3. It is always better to confirm facts and verify context first rather than responding with generic answers or potential hallucinations.
   4. You are authorized to run multiple search queries in a single turn if broad research is required to synthesize a comprehensive and highly accurate response.
-### updateMemory
-- Purpose: Use when you learn new, stable patterns about the user's personality or preferences.
+### updateUserBio
+- Purpose: Use ONLY when the user explicitly requests changes to their core identity, name, role, or stable communication style defaults (e.g., "From now on, call me Chief", "Always answer in a direct and blunt tone"). DO NOT use this for saving granular facts, work context, or project details.
+### saveSemanticMemory
+- Purpose: Use to explicitly save granular, long-term facts, technology stack preferences, work contexts, or domain-specific details learned about the user during conversation (e.g., "User is currently building a Next.js 15 app", "User prefers Tailwind CSS for styles").
 
 # 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
 You maintain a "living chronological journal" on every task and event inside the 'notes' field.
@@ -149,10 +164,39 @@ export const chat = internalAction({
     const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId, userId: args.userId });
     const workspaceId = session?.workspaceId;
 
-    // 1. Fetch user profile and relevant memories
+    // 1. Fetch user profile and relevant memories via Vector Search
     const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
-    const memories = await ctx.runQuery(api.ai.getLatestMemories, { userId: args.userId });
-    const personalityFragments = memories.map(m => m.text).join("\n- ");
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    let personalityFragments = "No specific patterns learned yet.";
+    try {
+      const queryEmbedding = await getEmbedding(genAI, args.text);
+
+      const searchResults = await ctx.vectorSearch("memories", "by_embedding", {
+        vector: queryEmbedding,
+        limit: 5,
+        filter: (q) => q.eq("userId", args.userId),
+      });
+
+      if (searchResults.length > 0) {
+        const matchedMemories = await Promise.all(
+          searchResults.map(async (res) => {
+            const doc = await ctx.runQuery(api.ai.getMemoryById, { id: res._id });
+            return doc?.text;
+          })
+        );
+        const filteredMatched = matchedMemories.filter(Boolean);
+        if (filteredMatched.length > 0) {
+          personalityFragments = filteredMatched.join("\n- ");
+        }
+      }
+    } catch (err) {
+      console.error("Vector search failed, falling back to chronological memories:", err);
+      const memories = await ctx.runQuery(api.ai.getLatestMemories, { userId: args.userId });
+      if (memories.length > 0) {
+        personalityFragments = memories.map(m => m.text).join("\n- ");
+      }
+    }
 
     // Calculate local time based on offset if provided
     let nowString = "";
@@ -415,14 +459,25 @@ export const chat = internalAction({
             },
           },
           {
-            name: "updateMemory",
-            description: "Updates the long-term memory/bio of the user.",
+            name: "updateUserBio",
+            description: "Updates the core user profile bio/personality summary and preferences.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
                 bio: { type: SchemaType.STRING, description: "The updated bio/personality summary" },
               },
               required: ["bio"],
+            },
+          },
+          {
+            name: "saveSemanticMemory",
+            description: "Saves a granular, long-term semantic memory/fact about the user (e.g., technical preferences, project details).",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                text: { type: SchemaType.STRING, description: "The granular fact or preference to remember" },
+              },
+              required: ["text"],
             },
           },
           {
@@ -463,7 +518,6 @@ export const chat = internalAction({
         result?: Record<string, unknown>;
       }> = [];
 
-      const genAI = new GoogleGenerativeAI(apiKey!);
       const model = genAI.getGenerativeModel({
         model: "gemini-3.1-flash-lite-preview",
         systemInstruction,
@@ -842,20 +896,33 @@ export const chat = internalAction({
               },
               result: { status: "success" }
             });
-          } else if (call.name === "updateMemory") {
+          } else if (call.name === "updateUserBio") {
             const updates = call.args as { bio: string };
             const oldProfile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
             await ctx.runMutation(api.ai.updateProfile, { ...updates, userId: args.userId });
             executedActionSummaries.push({
-              name: "updateMemory",
+              name: "updateUserBio",
               summary: `Updated user profile/memory bio.`
             });
             activeToolCalls.push({
-              name: "updateMemory",
+              name: "updateUserBio",
               args: {
                 ...call.args as Record<string, unknown>,
                 oldBio: oldProfile?.bio
               },
+              result: { status: "success" }
+            });
+          } else if (call.name === "saveSemanticMemory") {
+            const { text } = call.args as { text: string };
+            const realEmbedding = await getEmbedding(genAI, text);
+            await ctx.runMutation(api.ai.saveMemory, { text, embedding: realEmbedding, userId: args.userId });
+            executedActionSummaries.push({
+              name: "saveSemanticMemory",
+              summary: `Saved a new granular semantic memory: "${text}"`
+            });
+            activeToolCalls.push({
+              name: "saveSemanticMemory",
+              args: call.args as Record<string, unknown>,
               result: { status: "success" }
             });
           }
@@ -998,9 +1065,7 @@ export const chat = internalAction({
         })) : undefined
       });
 
-      if (recentMessages.length % 10 === 0) {
-        await ctx.scheduler.runAfter(0, internal.ai_action.reflectOnPersonality, { sessionId: args.sessionId, userId: args.userId });
-      }
+      // Dynamic reflection is disabled under Option A (AI-driven explicit saving via saveSemanticMemory).
 
       // Auto-title if it's the first few messages and title is default
       if (recentMessages.length >= 1 && recentMessages.length <= 4) {
@@ -1079,9 +1144,7 @@ export const reflectOnPersonality = internalAction({
       );
 
       if (!isDuplicate) {
-        const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
-        const embedRes = await embedModel.embedContent(insight);
-        const realEmbedding = embedRes.embedding.values;
+        const realEmbedding = await getEmbedding(genAI, insight);
         await ctx.runMutation(api.ai.saveMemory, { text: insight, embedding: realEmbedding, userId: args.userId });
         console.log("Captured new intelligence:", insight);
       }
@@ -1143,4 +1206,15 @@ Respond ONLY with the ISO-8601 string or "null" if invalid.`;
     if (responseText === "null") return null;
     return responseText;
   },
+});
+
+export const saveSemanticMemoryAction = action({
+  args: { text: v.string(), userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const embedding = await getEmbedding(genAI, args.text);
+    await ctx.runMutation(api.ai.saveMemory, { text: args.text, embedding, userId: args.userId });
+  }
 });

@@ -300,7 +300,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
     );
   }
 
-  if (toolCall.name === "updateMemory") {
+  if (toolCall.name === "updateUserBio") {
     return (
       <motion.div 
         initial={{ opacity: 0, scale: 0.98 }}
@@ -310,9 +310,28 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
         <div className="p-1.5 rounded-lg bg-emerald-500/10">
           <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
         </div>
-        <span className="text-[11px] text-[#a8a29e] font-medium italic">
-          Dialogue learned something new about you.
+        <span className="text-[11px] text-[#a8a29e] font-medium">
+          Profile bio updated.
         </span>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "saveSemanticMemory") {
+    const { text } = toolCall.args as { text: string };
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="mt-3 flex flex-col gap-1.5 p-3 rounded-2xl bg-emerald-500/[0.03] border border-emerald-500/10 shadow-sm max-w-[400px]"
+      >
+        <div className="flex items-center gap-2 text-emerald-500">
+          <Sparkles className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Memory Retained</span>
+        </div>
+        <p className="text-[12px] text-[#a8a29e] italic leading-relaxed">
+          &quot;{text}&quot;
+        </p>
       </motion.div>
     );
   }
