@@ -148,21 +148,31 @@ export const getDailyBriefing = query({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) return { tasks: [], profile: null };
 
+    const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+
     const tasks = args.workspaceId
       ? await ctx.db
           .query("tasks")
           .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
           .filter((q) => 
             q.and(
-              q.eq(q.field("completed"), false),
-              q.eq(q.field("userId"), userId)
+              q.eq(q.field("userId"), userId),
+              q.or(
+                q.eq(q.field("completed"), false),
+                q.gte(q.field("completedAt"), fortyEightHoursAgo)
+              )
             )
           )
           .collect()
       : await ctx.db
           .query("tasks")
           .withIndex("by_user", (q) => q.eq("userId", userId))
-          .filter((q) => q.eq(q.field("completed"), false))
+          .filter((q) => 
+            q.or(
+              q.eq(q.field("completed"), false),
+              q.gte(q.field("completedAt"), fortyEightHoursAgo)
+            )
+          )
           .collect();
 
     const profile = await ctx.db

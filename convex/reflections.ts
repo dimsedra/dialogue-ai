@@ -331,9 +331,16 @@ export const compileReflectionStats = query({
       checkDate.setDate(checkDate.getDate() - 1);
     }
 
-    // Detail context for LLM narrative generation
+    const formatTaskDate = (ts?: number) => {
+      if (!ts) return "N/A";
+      return new Date(ts).toLocaleString("en-US", { hour12: false });
+    };
+
     const completedTasksDetails = tasksCompletedList.map((t) => {
-      return `- [Task] ${t.text}${t.category ? ` (${t.category})` : ""}${t.notes ? ` (Notes: ${t.notes})` : ""}`;
+      const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
+      const dueStr = t.dueDate ? `, Due: ${formatTaskDate(t.dueDate)}` : "";
+      const completedStr = t.completedAt ? `, Completed: ${formatTaskDate(t.completedAt)}` : "";
+      return `- [Task] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${t.notes ? `\n  Notes: ${t.notes.split("\n").join("\n  ")}` : ""}`;
     }).join("\n");
 
     const eventsDetails = eventsList.map((e) => {
@@ -346,7 +353,7 @@ export const compileReflectionStats = query({
       eventsAttended: eventsList.length,
       topCategories,
       streakDays: streak,
-      rawDetails: `COMPLETED TASKS:\n${completedTasksDetails || "None."}\n\nEVENTS IN PERIOD:\n${eventsDetails || "None."}`,
+      rawDetails: `COMPLETED TASKS:\n${completedTasksDetails || "None."}\n\nEVENTS IN PERIOD:\n${eventsDetails || "None."}\n\nCRITICAL TIMELINESS RULE: To evaluate if a task was completed fast or late, you MUST compare the Completion time against the Due Date, not the Creation time. A large gap between Creation and Completion does not mean the user procrastinated if the task was completed before its Due Date. Emphasize and heavily weight High Priority tasks in your summaries.`,
     };
   },
 });

@@ -168,20 +168,46 @@ export const getPromptContext = query({
       ? `ACTIVE WORKSPACE: "${workspace.name}"\nWORKSPACE CONTEXT/RULES: "${workspace.context}"\n(Reminder: This context takes precedence over your default persona)`
       : "No specific workspace context provided. Follow your default adaptive persona.";
 
-    const tasks = workspaceId 
-      ? await ctx.db.query("tasks").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).filter((q) => q.eq(q.field("completed"), false)).collect()
-      : await ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).filter((q) => q.eq(q.field("completed"), false)).collect();
-    const pendingTasksContext = tasks.map(t => {
-      const eventDate = t.dueDate ? (
-        args.timezoneOffset !== undefined
-          ? new Date(t.dueDate - (args.timezoneOffset * 60000))
-          : new Date(t.dueDate)
-      ) : null;
-      const dateStr = eventDate ? ` | Due: ${eventDate.toLocaleString("en-US", { hour12: false })}` : "";
+    const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
+    const allTasks = workspaceId 
+      ? await ctx.db.query("tasks").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).filter((q) => q.or(q.eq(q.field("completed"), false), q.gte(q.field("completedAt"), fortyEightHoursAgo))).collect()
+      : await ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).filter((q) => q.or(q.eq(q.field("completed"), false), q.gte(q.field("completedAt"), fortyEightHoursAgo))).collect();
+
+    const priorityWeight: Record<string, number> = { high: 1, medium: 2, low: 3 };
+    const pendingTasks = allTasks.filter((t) => !t.completed);
+    const completedTasks = allTasks.filter((t) => t.completed);
+
+    const sortedPendingTasks = [...pendingTasks].sort((a, b) => {
+      const pA = priorityWeight[a.priority || "medium"] ?? 2;
+      const pB = priorityWeight[b.priority || "medium"] ?? 2;
+      if (pA !== pB) return pA - pB;
+      if (a.dueDate && b.dueDate) return a.dueDate - b.dueDate;
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    });
+
+    const formatTaskDate = (ts?: number) => {
+      if (!ts) return "N/A";
+      const dt = args.timezoneOffset !== undefined ? new Date(ts - (args.timezoneOffset * 60000)) : new Date(ts);
+      return dt.toLocaleString("en-US", { hour12: false });
+    };
+
+    const pendingTasksContext = sortedPendingTasks.map(t => {
+      const dateStr = t.dueDate ? ` | Due: ${formatTaskDate(t.dueDate)}` : "";
       const progressStr = t.progress !== undefined ? ` | Progress: ${t.progress}%` : "";
       const hookStr = t.statusHook ? ` | Hook: "${t.statusHook}"` : "";
       const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
       return `- [${t._id}] ${t.text}${dateStr}${progressStr}${hookStr} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"})${notesStr}`;
+    }).join("\n");
+
+    const sortedCompletedTasks = [...completedTasks].sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+    const completedTasksContext = sortedCompletedTasks.map(t => {
+      const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
+      const dueStr = t.dueDate ? `, Due: ${formatTaskDate(t.dueDate)}` : "";
+      const completedStr = t.completedAt ? `, Completed: ${formatTaskDate(t.completedAt)}` : "";
+      const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
+      return `- [${t._id}] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${notesStr}`;
     }).join("\n");
 
     const events = workspaceId
@@ -205,7 +231,7 @@ export const getPromptContext = query({
       briefingContext = `
       USER REQUESTED A WORKSPACE SYNC.
       Current Time: ${nowString}
-      Pending Tasks: ${JSON.stringify(tasks)}
+      Pending Tasks: ${JSON.stringify(sortedPendingTasks)}
       Upcoming Calendar Events: ${JSON.stringify(events)}
       
       Provide a personalized, contextual "Sync" update. 
@@ -234,6 +260,11 @@ export const getPromptContext = query({
 
       Pending Tasks for Reference:
       ${pendingTasksContext || "No pending tasks."}
+      
+      Recently Completed Tasks (Last 48 Hours):
+      ${completedTasksContext || "No recently completed tasks."}
+
+      CRITICAL TIMELINESS RULE: To evaluate if a task was completed fast or late, you MUST compare the Completion time against the Due Date, not the Creation time. A large gap between Creation and Completion does not mean the user procrastinated if the task was completed before its Due Date. Emphasize and heavily weight High Priority tasks in your summaries.
       
       Upcoming Events for Reference:
       ${upcomingEventsContext || "No upcoming events."}

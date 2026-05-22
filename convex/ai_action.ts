@@ -310,7 +310,10 @@ export const chat = internalAction({
 
     const briefing = await ctx.runQuery(api.tasks.getDailyBriefing, { workspaceId, userId: args.userId });
     const priorityWeight: Record<string, number> = { high: 1, medium: 2, low: 3 };
-    const sortedTasks = [...briefing.tasks].sort((a, b) => {
+    const pendingTasks = briefing.tasks.filter((t) => !t.completed);
+    const completedTasks = briefing.tasks.filter((t) => t.completed);
+
+    const sortedTasks = [...pendingTasks].sort((a, b) => {
       const pA = priorityWeight[a.priority || "medium"] ?? 2;
       const pB = priorityWeight[b.priority || "medium"] ?? 2;
       if (pA !== pB) return pA - pB;
@@ -319,17 +322,28 @@ export const chat = internalAction({
       if (b.dueDate) return 1;
       return 0;
     });
+
+    const formatTaskDate = (ts?: number) => {
+      if (!ts) return "N/A";
+      const dt = args.timezoneOffset !== undefined ? new Date(ts - (args.timezoneOffset * 60000)) : new Date(ts);
+      return dt.toLocaleString("en-US", { hour12: false });
+    };
+
     const pendingTasksContext = sortedTasks.map(t => {
-      const eventDate = t.dueDate ? (
-        args.timezoneOffset !== undefined
-          ? new Date(t.dueDate - (args.timezoneOffset * 60000))
-          : new Date(t.dueDate)
-      ) : null;
-      const dateStr = eventDate ? ` | Due: ${eventDate.toLocaleString("en-US", { hour12: false })}` : "";
+      const dateStr = t.dueDate ? ` | Due: ${formatTaskDate(t.dueDate)}` : "";
       const progressStr = t.progress !== undefined ? ` | Progress: ${t.progress}%` : "";
       const hookStr = t.statusHook ? ` | Hook: "${t.statusHook}"` : "";
       const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
       return `- [${t._id}] ${t.text}${dateStr}${progressStr}${hookStr} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"})${notesStr}`;
+    }).join("\n");
+
+    const sortedCompletedTasks = [...completedTasks].sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+    const completedTasksContext = sortedCompletedTasks.map(t => {
+      const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
+      const dueStr = t.dueDate ? `, Due: ${formatTaskDate(t.dueDate)}` : "";
+      const completedStr = t.completedAt ? `, Completed: ${formatTaskDate(t.completedAt)}` : "";
+      const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
+      return `- [${t._id}] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${notesStr}`;
     }).join("\n");
 
     const upcomingEvents = await ctx.runQuery(api.events.list, { workspaceId, userId: args.userId });
@@ -386,6 +400,11 @@ export const chat = internalAction({
 
       Pending Tasks for Reference:
       ${pendingTasksContext || "No pending tasks."}
+
+      Recently Completed Tasks (Last 48 Hours):
+      ${completedTasksContext || "No recently completed tasks."}
+
+      CRITICAL TIMELINESS RULE: To evaluate if a task was completed fast or late, you MUST compare the Completion time against the Due Date, not the Creation time. A large gap between Creation and Completion does not mean the user procrastinated if the task was completed before its Due Date. Emphasize and heavily weight High Priority tasks in your summaries.
       
       Upcoming Events for Reference:
       ${upcomingEventsContext || "No upcoming events."}
