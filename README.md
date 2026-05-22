@@ -10,6 +10,33 @@ Dialogue inverts this entire paradigm. Here, the AI agent is the **core runtime 
 
 ---
 
+## Core Features & System Capabilities
+
+### Core Productivity Pillars (Primary Engines)
+
+#### Living Chronological Journals
+Traditional to-do list apps are static black holes where history goes to die. Once a task is completed, the struggles, decisions, and micro-milestones that got you there are lost forever. Dialogue turns this on its head by capturing a timestamped stream of your active consciousness. Every struggle, shift in scope, or design choice is appended as a live cognitive node. Because the agent understands the context of *how* you do things, it can resume paused tasks, trace technical blockers, and act as an automated developer diary that grows with you.
+
+#### Native Habits & Routine Tracking
+Checked off your habits twenty days in a row? Standard checklists break down when forced to manage repeating daily and weekly identities—they lack streak math, consistency grids, and agent intelligence. Dialogue treats habits as first-class schemas distinct from one-off tasks. The agent silently monitors your routines, updates streaks without blocking you with authorization cards, handles timezone-aware plan-approved skips (streak freezes), and automatically links routine trends directly to your reflections.
+
+#### Background Semantic Memory
+Standard AI assistants suffer from total amnesia—requiring you to re-introduce yourself, your goals, and your work style at the start of every new chat session. Dialogue runs quiet background evaluations to synthesize your workspace activity, storing your workflow patterns, preferences, and long-term milestones in a vector-indexed memory layer. The next time you open a thread, the agent already knows you prefer deep-work mornings, short code sprints, and clean boundaries.
+
+#### Interactive Periodic Reflections
+Productivity isn't just about crossing items off a list; it is about recognizing your growth. Dialogue periodically aggregates your task velocity, habit streaks, and journaled milestones, compiling them into a visual, gamified summary—a "Spotify Wrapped" for your life. By reflecting on your output, the agent helps you celebrate wins and identify cognitive bottlenecks, transforming checklist compliance into a satisfying journey of self-reflection.
+
+---
+
+### Supporting Workspace Mechanics (Secondary Layer)
+
+* **Multimodal Ingestion & Web Research**: Drag PDFs, images, or briefs directly into your chat. The agent reads the content and launches real-time web searches to fact-check, synthesize, and execute schedule updates in a single turn.
+* **Context-Aware Smart Notifications**: No more dismissible, timezone-broken reminders. Dialogue fires browser notifications packed with active workspace context, giving you instant shortcuts to the exact resources and designs you need.
+* **Context-Isolated Workspaces & Universal Center**: Silo chats, tasks, and memory context into dedicated project workspaces (e.g. "Work", "Sovereign"). Then, step back into the **Universal Space**—a global control center where the agent coordinates tasks across boundaries.
+* **Task & Event Resource Tray**: A clean visual panel that aggregates external links, Figma specs, and PDF documents attached directly to your chronological logs, putting your active references a single click away.
+
+---
+
 ## Three Sovereign Pillars
 
 ### 1. Agent-Native Architecture
@@ -52,54 +79,6 @@ Dialogue is structured around three key engineering decisions designed to put yo
 
 ---
 
-## Core Features & Why They Matter
-
-Instead of dumping raw developer specs, here is why each core feature was built and what it means for your daily productivity:
-
-### 1. Living Chronological Task & Event Journals
-
-* **What it does**: Instead of overwriting your notes, Dialogue appends timestamped logs (`[2026-05-19 22:45] Started layout...`) whenever you update a task or event's progress. It also auto-generates a one-sentence "Status Hook" for quick glance dashboards.
-* **Why we built it**: Traditional to-do apps are black holes of history. Once a task is done or updated, the contextual journey—the struggles, decisions, and micro-milestones—is lost.
-* **What it means for you**: You get an automated, searchable "developer diary" of your life. If you forget how you resolved a bug last Tuesday, or when a specific detail changed, you can simply ask Dialogue. It reads the entire ledger for you.
-
-### 2. Collapsible Checkmark Archive & Pruning
-
-* **What it does**: Tasks completed within the last 7 days are neatly grouped in a collapsible, restorable checkmark list. Older completed items are automatically tucked away from your screen and the AI's instant context window.
-* **Why we built it**: A cluttered dashboard breeds mental anxiety. But deleting old tasks makes you lose progress records. Furthermore, feeding thousands of old completed tasks to an AI slows down its response time and eats up compute power.
-* **What it means for you**: A clean, focused workspace every single morning. You only see what matters *now*. Your historical achievements are kept safe and searchable, but they won't clutter your visual space or slow down the agent's thinking.
-
-### 3. Background Semantic Memory
-
-* **What it does**: Dialogue runs quiet background checks on your conversations, summarizing your work style, preference patterns, and goals, and storing them as a persistent memory layer.
-* **Why we built it**: Standard AI assistants suffer from "amnesia." Every time you open a new chat session, you have to re-explain who you are, how you work, and what your preferences are.
-* **What it means for you**: Dialogue learns and grows with you. If you prefer deep work in the mornings, code in short sprints, or hate meeting overlaps, the agent naturally suggests schedules and tones that align with your style. The app adapts to you—not the other way around.
-
-### 4. Multimodal & Web Ingestion
-
-* **What it does**: Drag and drop documents (PDFs, images, Word docs) directly into your chat, while the agent issues parallel, real-time web searches to fact-check or research complex questions.
-* **Why we built it**: Modern knowledge work is scattered. You are constantly jumping between reading manuals, googling resources, and updating your calendar.
-* **What it means for you**: Zero friction. Hand Dialogue a messy meeting brief PDF, and it will read it, search the web for context, and offer to schedule the follow-up meeting in one go. You have a unified researcher and action-taker in a single chat bubble.
-
-### 5. Interactive Periodic Reflections
-
-* **What it does**: Dialogue periodically synthesizes your tasks, milestones, and notes into visual weekly, monthly, and yearly summaries—reminiscent of a "Spotify Wrapped" for your productivity.
-* **Why we built it**: Standard productivity tools are great at tracking what you need to do, but terrible at celebrating what you actually did. Without reflection, productivity feels like an endless treadmill.
-* **What it means for you**: You get an emotional, gamified summary of your wins and learning patterns. It transforms checklist compliance into a satisfying journey of self-reflection and milestone tracking.
-
-### 6. Context-Aware Smart Notifications
-
-* **What it does**: Delivers dynamic browser push notifications that understand what you're working on, why it's important, and the exact context surrounding it.
-* **Why we built it**: "Dumb" notifications (e.g. *Task X is due in 10 minutes*) are easily dismissed and lead to notification fatigue. Reminders are only useful if they provide context.
-* **What it means for you**: Instead of generic alerts, you get smart nudges that remind you of the bigger picture (e.g. *"Time for meeting with team. Don't forget the slides you finished yesterday are saved in the Workspace context."*) with instant shortcuts to take action.
-
-### 7. Context-Isolated Workspaces & Universal Space (Global Command Center)
-
-* **What it does**: Silos chat sessions, tasks, calendar entries, and agent memory context into independent project containers (e.g. "Work", "Personal"), while providing a **Universal Chat Space** that aggregates all workspaces into a single global view.
-* **Why we built it**: Standard productivity tools either force you into one massive, unstructured list or silo projects so deeply that you lose the big picture. Dialogue balances focus and synthesis.
-* **What it means for you**: You get the best of both worlds. Switch into a specific workspace to eliminate distractions and let the agent work with isolated context. When you need a bird's-eye view, hop into the **Universal Space**—your command center where the agent coordinates your entire day, schedules across project boundaries, and summarizes your overall productivity.
-
----
-
 ## Agent Capability Library (Tools & Skills)
 
 The Dialogue agent interacts with your workspace by executing specific, permission-gated actions. Here is the full library of tools available to the agent:
@@ -109,7 +88,7 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 * **`addTask`**: Creates a single task with custom priority, category, progress, and initial status hooks.
 * **`batchAddTasks`**: Groups multiple task creations into a single instant database transaction (e.g. when dumping a checklist).
 * **`updateTask`**: Updates task details, progress percentage, and attaches resource references (external URLs or document storage IDs) by appending standardized markdown asset logs chronologically to the task ledger.
-* **`completeTask`**: Safely signs off on completed tasks, placing them in the 7-day archive.
+* **`completeTask`**: Safely signs off on completed tasks, updating their status and storing their completion metadata.
 * **`deleteTask`**: Permanently deletes a task.
 * **`getTaskNotes`**: Retrieves the full, detailed chronological progress logs of a specific task only when requested, keeping the chat interface fast and lightweight.
 
@@ -134,6 +113,12 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 
 * **`triggerReflection`**: Aggregates workspace metrics (completed tasks, streaks, active categories) and invokes the LLM to generate an engaging, Spotify-Wrapped style narrative summary and stats card for a given period (weekly, monthly, or yearly).
 
+### 6. Native Habits & Routine Tracking
+
+* **`createHabit`**: Creates a new habit routine with custom frequency structures (daily, weekly, specific days) isolated to a workspace context.
+* **`logHabit`**: Logs an execution instance (`completed` or `skipped`) for an active habit. This tool is exempt from confirmation gates, running instantly and silently when the user reports routine progress.
+* **`getHabitConsistency`**: Queries completion logs, streaks, and focus metrics for active habits across specific date ranges to generate consistency statistics.
+
 ---
 
 ## Database Schema (Convex)
@@ -149,6 +134,8 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 * **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema) and chronological notes ledger.
 * **`memories`**: Vector-indexed memory fragments for semantic search retrieval.
 * **`reflections`**: Periodic summary logs containing the synthesized weekly, monthly, and yearly summaries, compiled focus statistics, and optional user feedback comments.
+* **`habits`**: Habit definitions including name, workspace configuration mapping, target completion metrics, and cached streak stats.
+* **`habitLogs`**: Timezone-adjusted completion logs, recording exact timestamps, skipped/completed states, and contextual progress notes.
 
 ---
 
