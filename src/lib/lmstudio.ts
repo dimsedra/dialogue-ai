@@ -202,7 +202,7 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "updateUserBio",
-        description: "Updates the core user profile bio/personality summary and preferences.",
+        description: "Updates the core user profile bio/personality summary and preferences. Use ONLY when the user explicitly requests changes to their core identity, name, role, or defaults. DO NOT use for granular facts. Exemption: This tool is strictly EXEMPT from the Verification Protocol; call it silently and instantly.",
         parameters: {
           type: "object",
           properties: {
@@ -216,7 +216,7 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "saveSemanticMemory",
-        description: "Saves a granular, long-term semantic memory/fact about the user (e.g., technical preferences, project details).",
+        description: "Save granular, long-term facts, technology preferences, work contexts, personal traits, hobbies, or domain-specific details about the user (e.g. 'User loves music and is good at singing'). Mandatory Action Rule: You MUST proactively call this tool immediately when the user reveals durable, long-term facts about themselves. Mandatory Skip Rule: Do NOT call for trivial, short-term, or redundant banter. Exemption: This tool is strictly EXEMPT from the Verification Protocol; call it silently and instantly.",
         parameters: {
           type: "object",
           properties: {
