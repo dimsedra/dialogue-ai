@@ -44,9 +44,26 @@ export default function Home() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInitialHeight(window.innerHeight);
-    const check = () => setIsLargeViewport(window.innerWidth >= 1024);
-    check();
-    window.addEventListener("resize", check);
+    let lastWidth = window.innerWidth;
+
+    const handleResize = () => {
+      const currentWidth = window.innerWidth;
+      const currentHeight = window.innerHeight;
+      setIsLargeViewport(currentWidth >= 1024);
+
+      // On desktop, or if the width changed (meaning it's a zoom, window resize, or rotation - not just a mobile keyboard popping up), update the locked height.
+      // We also update it if the new height is greater (e.g., keyboard closing).
+      if (currentWidth >= 1024 || currentWidth !== lastWidth) {
+        setInitialHeight(currentHeight);
+        lastWidth = currentWidth;
+      } else {
+        // If height increased while width stayed the same (keyboard hiding or vertical resize on small window)
+        setInitialHeight((prev) => currentHeight > (prev || 0) ? currentHeight : prev);
+      }
+    };
+    
+    handleResize();
+    window.addEventListener("resize", handleResize);
 
     // Keyboard handling via Visual Viewport API
     const handleViewportChange = () => {
@@ -80,7 +97,7 @@ export default function Home() {
     window.addEventListener("scroll", preventNativeScroll, { passive: false });
 
     return () => {
-      window.removeEventListener("resize", check);
+      window.removeEventListener("resize", handleResize);
       if (window.visualViewport) {
         window.visualViewport.removeEventListener("resize", handleViewportChange);
         window.visualViewport.removeEventListener("scroll", handleViewportChange);
