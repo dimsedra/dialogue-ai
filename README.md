@@ -130,6 +130,10 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 
 * **`searchWeb`**: Executes parallel search queries across Tavily or Serper, feeding live internet search results directly into the conversation.
 
+### 5. Periodic Reflections
+
+* **`triggerReflection`**: Aggregates workspace metrics (completed tasks, streaks, active categories) and invokes the LLM to generate an engaging, Spotify-Wrapped style narrative summary and stats card for a given period (weekly, monthly, or yearly).
+
 ---
 
 ## Database Schema (Convex)
@@ -144,6 +148,7 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 * **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger incorporating chronological links and document storage references), progress percentage (0-100), `statusHook`, and time stamps (`dueDate`, `completedAt`).
 * **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema) and chronological notes ledger.
 * **`memories`**: Vector-indexed memory fragments for semantic search retrieval.
+* **`reflections`**: Periodic summary logs containing the synthesized weekly, monthly, and yearly summaries, compiled focus statistics, and optional user feedback comments.
 
 ---
 
