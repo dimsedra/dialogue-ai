@@ -25,6 +25,7 @@ const TOOL_BADGE_COLORS: Record<string, string> = {
   multiSearch: "bg-[#3b82f6]", // Blue
   updateUserBio: "bg-emerald-400", // Emerald
   saveSemanticMemory: "bg-emerald-400", // Emerald
+  triggerReflection: "bg-[#d4a373]", // Gold
 };
 
 function ToolCallGroup({ calls, isLargeViewport, msgId }: { calls: ToolCall[]; isLargeViewport: boolean; msgId: string }) {

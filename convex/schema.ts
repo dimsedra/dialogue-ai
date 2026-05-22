@@ -111,4 +111,24 @@ export default defineSchema({
   }).index("by_user", ["userId"])
     .index("by_workspace", ["workspaceId"])
     .index("by_series", ["seriesId"]),
+
+  reflections: defineTable({
+    userId: v.id("users"),
+    workspaceId: v.optional(v.id("workspaces")),
+    type: v.union(v.literal("weekly"), v.literal("monthly"), v.literal("yearly")),
+    periodStart: v.number(),      // Epoch ms — start of the period
+    periodEnd: v.number(),        // Epoch ms — end of the period
+    periodLabel: v.string(),      // e.g. "Week 3, May 2026"
+    summary: v.string(),          // Agent-synthesized narrative
+    stats: v.object({
+      tasksCompleted: v.number(),
+      tasksCreated: v.number(),
+      eventsAttended: v.number(),
+      topCategories: v.optional(v.array(v.string())),
+      streakDays: v.optional(v.number()),
+    }),
+    userReflection: v.optional(v.string()),  // User's own words during reflection conversation
+    createdAt: v.number(),
+  }).index("by_user_type", ["userId", "type"])
+    .index("by_user_period", ["userId", "periodStart"]),
 });

@@ -110,6 +110,21 @@ export async function processLocalLLMRequest({
             notes: { type: "string", description: "Optional extra notes or context" },
             outcome: { type: "string", description: "Post-event summary or outcome" },
             statusHook: { type: "string", description: "A single punchy sentence summarizing current state" },
+            recurrence: {
+              type: "object",
+              description: "Optional recurrence rule if the event repeats.",
+              properties: {
+                frequency: { type: "string", description: "'daily' or 'weekly'" },
+                interval: { type: "number", description: "Interval count, e.g. 1 for every day/week, 2 for bi-weekly" },
+                daysOfWeek: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "For weekly recurrence: array of day numbers (0=Sun, 1=Mon, ..., 6=Sat)"
+                },
+                until: { type: "string", description: "Optional ISO-8601 end date for the recurrence series." }
+              },
+              required: ["frequency", "interval"]
+            }
           },
           required: ["title", "startTime", "eventType"],
         },
@@ -147,6 +162,17 @@ export async function processLocalLLMRequest({
             notes: { type: "string", description: "Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]." },
             outcome: { type: "string", description: "Post-event summary: decisions made, action items, key takeaways. Updated after the event concludes." },
             statusHook: { type: "string", description: "A single punchy sentence summarizing the event status or prep state for quick UI glances and notifications." },
+            recurrence: {
+              type: "object",
+              description: "Optional updated recurrence rule.",
+              properties: {
+                frequency: { type: "string", description: "'daily' or 'weekly'" },
+                interval: { type: "number" },
+                daysOfWeek: { type: "array", items: { type: "number" } },
+                until: { type: "string" }
+              },
+              required: ["frequency", "interval"]
+            }
           },
           required: ["eventId"],
         },
@@ -197,6 +223,23 @@ export async function processLocalLLMRequest({
             text: { type: "string", description: "The granular fact or preference to remember" },
           },
           required: ["text"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "triggerReflection",
+        description: "Triggers a periodic reflection (Spotify Wrapped style) for the user to summarize tasks completed, events attended, streaks, etc. Can be weekly, monthly, or yearly.",
+        parameters: {
+          type: "object",
+          properties: {
+            type: { type: "string", description: "Type of reflection: 'weekly', 'monthly', or 'yearly'" },
+            offsetWeeks: { type: "number", description: "Offset weeks to look back (default 0 for current week)" },
+            offsetMonths: { type: "number", description: "Offset months to look back (default 0)" },
+            offsetYears: { type: "number", description: "Offset years to look back (default 0)" },
+          },
+          required: ["type"],
         },
       },
     },

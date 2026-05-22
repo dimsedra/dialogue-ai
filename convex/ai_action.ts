@@ -19,6 +19,89 @@ async function getEmbedding(genAI: GoogleGenerativeAI, text: string): Promise<nu
   return rawVector.map(v => v / magnitude);
 }
 
+function getPeriodRange(
+  type: "weekly" | "monthly" | "yearly",
+  offset: number,
+  timezoneOffset?: number
+) {
+  const now = new Date();
+  if (timezoneOffset !== undefined) {
+    now.setTime(now.getTime() - timezoneOffset * 60000);
+  }
+
+  const periodStart = new Date(now);
+  let periodEnd = new Date(now);
+
+  if (type === "weekly") {
+    const day = now.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    
+    periodStart.setDate(now.getDate() + diffToMonday);
+    periodStart.setHours(0, 0, 0, 0);
+    
+    periodStart.setDate(periodStart.getDate() - 7 * offset);
+    
+    periodEnd = new Date(periodStart);
+    periodEnd.setDate(periodStart.getDate() + 6);
+    periodEnd.setHours(23, 59, 59, 999);
+  } else if (type === "monthly") {
+    periodStart.setDate(1);
+    periodStart.setHours(0, 0, 0, 0);
+    
+    periodStart.setMonth(periodStart.getMonth() - offset);
+    
+    periodEnd = new Date(periodStart);
+    periodEnd.setMonth(periodStart.getMonth() + 1);
+    periodEnd.setDate(0);
+    periodEnd.setHours(23, 59, 59, 999);
+  } else if (type === "yearly") {
+    periodStart.setMonth(0, 1);
+    periodStart.setHours(0, 0, 0, 0);
+    
+    periodStart.setFullYear(periodStart.getFullYear() - offset);
+    
+    periodEnd = new Date(periodStart);
+    periodEnd.setFullYear(periodStart.getFullYear() + 1);
+    periodEnd.setMonth(0, 0);
+    periodEnd.setHours(23, 59, 59, 999);
+  }
+
+  let startMs = periodStart.getTime();
+  let endMs = periodEnd.getTime();
+
+  if (timezoneOffset !== undefined) {
+    startMs = startMs + timezoneOffset * 60000;
+    endMs = endMs + timezoneOffset * 60000;
+  }
+
+  const currentRealTimeMs = Date.now();
+  if (endMs > currentRealTimeMs) {
+    endMs = currentRealTimeMs;
+  }
+
+  return { startMs, endMs };
+}
+
+function getPeriodLabel(type: "weekly" | "monthly" | "yearly", startMs: number, timezoneOffset?: number) {
+  const d = new Date(startMs);
+  if (timezoneOffset !== undefined) {
+    d.setTime(d.getTime() - timezoneOffset * 60000);
+  }
+  
+  if (type === "weekly") {
+    const month = d.toLocaleString("en-US", { month: "short" });
+    const day = d.getDate();
+    const year = d.getFullYear();
+    return `Week of ${month} ${day}, ${year}`;
+  } else if (type === "monthly") {
+    const month = d.toLocaleString("en-US", { month: "long" });
+    const year = d.getFullYear();
+    return `${month} ${year}`;
+  } else {
+    return `${d.getFullYear()}`;
+  }
+}
+
 const SKILLS_INSTRUCTION = `
 ## Agent Skills Reference
 You are Dialogue, an advanced personal assistant operating with high intelligence and structure.
@@ -93,6 +176,11 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Purpose: Use ONLY when the user explicitly requests changes to their core identity, name, role, or stable communication style defaults (e.g., "From now on, call me Chief", "Always answer in a direct and blunt tone"). DO NOT use this for saving granular facts, work context, or project details.
 ### saveSemanticMemory
 - Purpose: Use to explicitly save granular, long-term facts, technology stack preferences, work contexts, or domain-specific details learned about the user during conversation (e.g., "User is currently building a Next.js 15 app", "User prefers Tailwind CSS for styles").
+### triggerReflection
+- Purpose: Use to trigger a Spotify-Wrapped style periodic reflection summary of the user's tasks, events, categories, and streaks over a specific period. Use when the user asks how they are doing, requests a summary/reflection of their week/month/year, or says "How is my week going?"
+- Parameters:
+  * type: "weekly", "monthly", or "yearly".
+  * offsetWeeks, offsetMonths, offsetYears: number (optional, default 0 for current week/month/year. Use positive numbers to look back in history).
 
 # 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
 You maintain a "living chronological journal" on every task and event inside the 'notes' field.
@@ -121,6 +209,7 @@ statusHook: "Router configuration complete, ready for final testing (Progress 90
 2. When user mentions progress implicitly: "Halfway done with the proposal" -> identify the relevant task, append new entry + update progress + statusHook.
 3. After events conclude: Proactively ask "How did the client meeting go?" and store the outcome + statusHook.
 4. When blockers are mentioned: "Can't start yet, waiting for VPN access" -> append blocker to notes + statusHook.
+5. When task progress reaches 100%: When you update a task's progress to 100 (e.g. user says "I finished the research"), DO NOT call completeTask immediately. Proactively ask the user in your natural response if they would like the task officially marked as completed.
 
 - HOW to estimate progress:
 Infer naturally from conversation. NEVER ask "what percentage is completed?"
@@ -481,6 +570,20 @@ export const chat = internalAction({
             },
           },
           {
+            name: "triggerReflection",
+            description: "Triggers a periodic reflection (Spotify Wrapped style) for the user to summarize tasks completed, events attended, streaks, etc. Can be weekly, monthly, or yearly.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                type: { type: SchemaType.STRING, description: "Type of reflection: 'weekly', 'monthly', or 'yearly'" },
+                offsetWeeks: { type: SchemaType.NUMBER, description: "Offset weeks to look back (default 0 for current week)" },
+                offsetMonths: { type: SchemaType.NUMBER, description: "Offset months to look back (default 0)" },
+                offsetYears: { type: SchemaType.NUMBER, description: "Offset years to look back (default 0)" },
+              },
+              required: ["type"],
+            },
+          },
+          {
             name: "searchWeb",
             description: "YOU MUST call this whenever the user asks for news, real-time info, or facts you do not know. DO NOT apologize for lack of real-time data, use this tool instead.",
             parameters: {
@@ -512,6 +615,7 @@ export const chat = internalAction({
         .join("\n");
 
       let aiText = "";
+      let reflectionSummaryText: string | undefined = undefined;
       const activeToolCalls: Array<{
         name: string;
         args: Record<string, unknown>;
@@ -925,6 +1029,112 @@ export const chat = internalAction({
               args: call.args as Record<string, unknown>,
               result: { status: "success" }
             });
+          } else if (call.name === "triggerReflection") {
+            const reflArgs = call.args as {
+              type: "weekly" | "monthly" | "yearly";
+              offsetWeeks?: number;
+              offsetMonths?: number;
+              offsetYears?: number;
+            };
+
+            const type = reflArgs.type;
+            const offset = type === "weekly"
+              ? (reflArgs.offsetWeeks ?? 0)
+              : type === "monthly"
+                ? (reflArgs.offsetMonths ?? 0)
+                : (reflArgs.offsetYears ?? 0);
+
+            const { startMs, endMs } = getPeriodRange(type, offset, args.timezoneOffset);
+            const periodLabel = getPeriodLabel(type, startMs, args.timezoneOffset);
+
+            const stats = await ctx.runQuery(api.reflections.compileReflectionStats, {
+              workspaceId,
+              type,
+              periodStart: startMs,
+              periodEnd: endMs,
+              userId: args.userId
+            });
+
+            if (stats) {
+              const summaryModel = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+              const statsText = `
+                Type: ${type}
+                Period: ${periodLabel}
+                Tasks Completed: ${stats.tasksCompleted}
+                Tasks Created: ${stats.tasksCreated}
+                Events Attended: ${stats.eventsAttended}
+                Top Categories: ${stats.topCategories?.join(", ") || "None"}
+                Streak Days: ${stats.streakDays || 0}
+                
+                ${stats.subSummaries ? `SUB-PERIOD SUMMARIES:\n${stats.subSummaries}` : ""}
+                ${stats.rawDetails ? `RAW LOGS:\n${stats.rawDetails}` : ""}
+              `;
+
+              const summaryPrompt = `
+                You are Dialogue, a productivity companion.
+                Create a high-fidelity, Spotify-Wrapped style periodic reflection summary.
+                Keep it highly engaging, celebratory, motivating, but honest.
+                Use bullet points, emojis, bold text, and highlights.
+                Draw connections between tasks and events if possible.
+                Address the user by name: "${profile?.name || "User"}".
+                
+                Stats data:
+                ${statsText}
+                
+                CRITICAL INSTRUCTION:
+                1. Make it feel extremely personalized and premium.
+                2. Write the ENTIRE reflection summary, all bullet points, and the concluding question in the same language as the user's query: "${args.text.replace(/"/g, '\\"')}".
+                   - Detect the language of the user's query (e.g., English, Indonesian, Japanese, or any other language).
+                   - You MUST translate and write everything (headings, stats summaries, list items, and the concluding question) in that exact query language.
+                   - Ignore the language of the source tasks or events in the Stats data (which may be in Indonesian). The query's language is the ONLY language allowed for the output.
+                3. Conclude with a single open-ended question in that query language inviting the user's feedback/reflection on their progress (e.g., "How do you feel about this week's progress?"). Do NOT output any internal formatting, instructions, or robotic tags.
+              `;
+
+              const summaryRes = await summaryModel.generateContent(summaryPrompt);
+              const summaryText = summaryRes.response.text();
+              reflectionSummaryText = summaryText;
+
+              const reflectionId = await ctx.runMutation(api.reflections.saveReflection, {
+                workspaceId,
+                type,
+                periodStart: startMs,
+                periodEnd: endMs,
+                periodLabel,
+                summary: summaryText,
+                stats: {
+                  tasksCompleted: stats.tasksCompleted,
+                  tasksCreated: stats.tasksCreated,
+                  eventsAttended: stats.eventsAttended,
+                  topCategories: stats.topCategories || [],
+                  streakDays: stats.streakDays,
+                },
+                userId: args.userId,
+              });
+
+              executedActionSummaries.push({
+                name: "triggerReflection",
+                summary: `Generated and saved a ${type} reflection for ${periodLabel}`
+              });
+
+              activeToolCalls.push({
+                name: "triggerReflection",
+                args: call.args as Record<string, unknown>,
+                result: {
+                  status: "success",
+                  reflectionId,
+                  type,
+                  periodLabel,
+                  summary: summaryText,
+                  stats: {
+                    tasksCompleted: stats.tasksCompleted,
+                    tasksCreated: stats.tasksCreated,
+                    eventsAttended: stats.eventsAttended,
+                    topCategories: stats.topCategories || [],
+                    streakDays: stats.streakDays,
+                  }
+                }
+              });
+            }
           }
         }
 
@@ -1019,6 +1229,10 @@ export const chat = internalAction({
           };
           const confirmResult = await model.generateContent(confirmationPrompt);
           aiText = confirmResult.response.text();
+        }
+
+        if (reflectionSummaryText) {
+          aiText = reflectionSummaryText;
         }
 
         if (!aiText) {
@@ -1216,5 +1430,142 @@ export const saveSemanticMemoryAction = action({
     const genAI = new GoogleGenerativeAI(apiKey);
     const embedding = await getEmbedding(genAI, args.text);
     await ctx.runMutation(api.ai.saveMemory, { text: args.text, embedding, userId: args.userId });
+  }
+});
+
+export const generateCronReflection = internalAction({
+  args: {
+    userId: v.id("users"),
+    sessionId: v.id("chatSessions"),
+    type: v.union(v.literal("weekly"), v.literal("monthly")),
+  },
+  handler: async (ctx, args) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is not set.");
+      return;
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
+    
+    const recentMessages = await ctx.runQuery(api.messages.list, {
+      sessionId: args.sessionId,
+      userId: args.userId
+    });
+    const lastUserText = recentMessages.slice().reverse().find(m => m.author === "User")?.text || "Hello";
+    const lastMsgWithTz = recentMessages.slice().reverse().find(m => m.timezoneOffset !== undefined);
+    const timezoneOffset = lastMsgWithTz?.timezoneOffset ?? 0;
+
+    const offset = args.type === "monthly" ? 1 : 0;
+    
+    const { startMs, endMs } = getPeriodRange(args.type, offset, timezoneOffset);
+    const periodLabel = getPeriodLabel(args.type, startMs, timezoneOffset);
+
+    const stats = await ctx.runQuery(api.reflections.compileReflectionStats, {
+      type: args.type,
+      periodStart: startMs,
+      periodEnd: endMs,
+      userId: args.userId
+    });
+
+    if (!stats) return;
+
+    const summaryModel = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    const statsText = `
+      Type: ${args.type}
+      Period: ${periodLabel}
+      Tasks Completed: ${stats.tasksCompleted}
+      Tasks Created: ${stats.tasksCreated}
+      Events Attended: ${stats.eventsAttended}
+      Top Categories: ${stats.topCategories?.join(", ") || "None"}
+      Streak Days: ${stats.streakDays || 0}
+      
+      ${stats.subSummaries ? `SUB-PERIOD SUMMARIES:\n${stats.subSummaries}` : ""}
+      ${stats.rawDetails ? `RAW LOGS:\n${stats.rawDetails}` : ""}
+    `;
+
+    const summaryPrompt = `
+      You are Dialogue, a productivity companion.
+      Create a high-fidelity, Spotify-Wrapped style periodic reflection summary.
+      Keep it highly engaging, celebratory, motivating, but honest.
+      Use bullet points, emojis, bold text, and highlights.
+      Draw connections between tasks and events if possible.
+      Address the user by name: "${profile?.name || "User"}".
+      
+      Stats data:
+      ${statsText}
+      
+      CRITICAL INSTRUCTION:
+      1. Make it feel extremely personalized and premium.
+      2. Write the ENTIRE reflection summary, all bullet points, and the concluding question in the same language as the user's last message: "${lastUserText.replace(/"/g, '\\"')}".
+         - Detect the language of the user's last message (e.g., English, Indonesian, Japanese, or any other language).
+         - You MUST translate and write everything (headings, stats summaries, list items, and the concluding question) in that exact query language.
+         - Ignore the language of the source tasks or events in the Stats data (which may be in Indonesian). The last message's language is the ONLY language allowed for the output.
+      3. Conclude with a single open-ended question in that query language inviting the user's feedback/reflection on their progress (e.g., "How do you feel about this week's progress?"). Do NOT output any internal formatting, instructions, or robotic tags.
+    `;
+
+    const summaryRes = await summaryModel.generateContent(summaryPrompt);
+    const summaryText = summaryRes.response.text();
+
+    const reflectionId = await ctx.runMutation(api.reflections.saveReflection, {
+      type: args.type,
+      periodStart: startMs,
+      periodEnd: endMs,
+      periodLabel,
+      summary: summaryText,
+      stats: {
+        tasksCompleted: stats.tasksCompleted,
+        tasksCreated: stats.tasksCreated,
+        eventsAttended: stats.eventsAttended,
+        topCategories: stats.topCategories || [],
+        streakDays: stats.streakDays,
+      },
+      userId: args.userId,
+    });
+
+    await ctx.runMutation(internal.messages.internalSend, {
+      sessionId: args.sessionId,
+      text: summaryText,
+      author: "AI",
+      toolCall: {
+        name: "triggerReflection",
+        args: { type: args.type, offsetWeeks: args.type === "weekly" ? 0 : 0, offsetMonths: args.type === "monthly" ? 1 : 0 },
+        result: {
+          status: "success",
+          reflectionId,
+          type: args.type,
+          periodLabel,
+          summary: summaryText,
+          stats: {
+            tasksCompleted: stats.tasksCompleted,
+            tasksCreated: stats.tasksCreated,
+            eventsAttended: stats.eventsAttended,
+            topCategories: stats.topCategories || [],
+            streakDays: stats.streakDays,
+          }
+        }
+      },
+      toolCalls: [
+        {
+          name: "triggerReflection",
+          args: { type: args.type, offsetWeeks: args.type === "weekly" ? 0 : 0, offsetMonths: args.type === "monthly" ? 1 : 0 },
+          result: {
+            status: "success",
+            reflectionId,
+            type: args.type,
+            periodLabel,
+            summary: summaryText,
+            stats: {
+              tasksCompleted: stats.tasksCompleted,
+              tasksCreated: stats.tasksCreated,
+              eventsAttended: stats.eventsAttended,
+              topCategories: stats.topCategories || [],
+              streakDays: stats.streakDays,
+            }
+          }
+        }
+      ]
+    });
   }
 });

@@ -67,6 +67,7 @@ export function Chat({
   const updateTask = useMutation(api.tasks.updateTask);
   const updateUserBio = useMutation(api.ai.updateProfile);
   const saveSemanticMemory = useAction(api.ai_action.saveSemanticMemoryAction);
+  const saveReflection = useMutation(api.reflections.saveReflection);
 
   const convex = useConvex();
 
@@ -123,6 +124,8 @@ export function Chat({
         recentMessages: recentMsgs,
         userText,
       });
+
+      let aiTextOverride = result.aiText || "Done!";
 
       if (result.toolCalls && result.toolCalls.length > 0) {
         const parseLocal = (s: string) => {
@@ -185,6 +188,12 @@ export function Chat({
               const startTime = parseLocal(args.startTime as string);
               const endTime = args.endTime ? parseLocal(args.endTime as string) : undefined;
               const eventType = (args.eventType as "interval" | "point") || (args.endTime ? "interval" : "point");
+              const recurrence = args.recurrence ? {
+                frequency: (args.recurrence as any).frequency as "daily" | "weekly",
+                interval: (args.recurrence as any).interval as number,
+                daysOfWeek: (args.recurrence as any).daysOfWeek as number[] | undefined,
+                until: (args.recurrence as any).until ? parseLocal((args.recurrence as any).until as string) : undefined,
+              } : undefined;
               
               await addEvent({ 
                 title: (args.title as string) || "Untitled Event",
@@ -196,11 +205,12 @@ export function Chat({
                 startTime, 
                 endTime, 
                 eventType,
+                recurrence,
                 workspaceId: promptCtx.workspaceId ?? undefined,
               });
             } else {
               const oldEvent = await convex.query(api.events.get, { id: args.eventId as Id<"events"> });
-              const updates: Record<string, string | number> = {};
+              const updates: Record<string, any> = {};
               if (args.title) updates.title = args.title as string;
               if (args.location) updates.location = args.location as string;
               if (args.notes) updates.notes = args.notes as string;
@@ -209,6 +219,14 @@ export function Chat({
               if (args.startTime) updates.startTime = parseLocal(args.startTime as string);
               if (args.endTime) updates.endTime = parseLocal(args.endTime as string);
               if (args.eventType) updates.eventType = args.eventType as string;
+              if (args.recurrence) {
+                updates.recurrence = {
+                  frequency: (args.recurrence as any).frequency,
+                  interval: (args.recurrence as any).interval,
+                  daysOfWeek: (args.recurrence as any).daysOfWeek,
+                  until: (args.recurrence as any).until ? parseLocal((args.recurrence as any).until as string) : undefined,
+                };
+              }
 
               await updateEvent({
                 id: args.eventId as Id<"events">,
@@ -260,6 +278,125 @@ export function Chat({
           else if (name === "saveSemanticMemory") {
             await saveSemanticMemory({ text: args.text as string });
           }
+          else if (name === "triggerReflection") {
+            const reflArgs = args as {
+              type: "weekly" | "monthly" | "yearly";
+              offsetWeeks?: number;
+              offsetMonths?: number;
+              offsetYears?: number;
+            };
+
+            const type = reflArgs.type;
+            const offset = type === "weekly"
+              ? (reflArgs.offsetWeeks ?? 0)
+              : type === "monthly"
+                ? (reflArgs.offsetMonths ?? 0)
+                : (reflArgs.offsetYears ?? 0);
+
+            const { startMs, endMs } = getPeriodRange(type, offset, promptCtx.timezoneOffset);
+            const periodLabel = getPeriodLabel(type, startMs, promptCtx.timezoneOffset);
+
+            const stats = await convex.query(api.reflections.compileReflectionStats, {
+              workspaceId: promptCtx.workspaceId ?? undefined,
+              type,
+              periodStart: startMs,
+              periodEnd: endMs,
+            });
+
+            if (stats) {
+              const statsText = `
+                Type: ${type}
+                Period: ${periodLabel}
+                Tasks Completed: ${stats.tasksCompleted}
+                Tasks Created: ${stats.tasksCreated}
+                Events Attended: ${stats.eventsAttended}
+                Top Categories: ${stats.topCategories?.join(", ") || "None"}
+                Streak Days: ${stats.streakDays || 0}
+                
+                ${stats.subSummaries ? `SUB-PERIOD SUMMARIES:\n${stats.subSummaries}` : ""}
+                ${stats.rawDetails ? `RAW LOGS:\n${stats.rawDetails}` : ""}
+              `;
+
+              const summaryPrompt = `
+                You are Dialogue, a productivity companion.
+                Create a high-fidelity, Spotify-Wrapped style periodic reflection summary.
+                Keep it highly engaging, celebratory, motivating, but honest.
+                Use bullet points, emojis, bold text, and highlights.
+                Draw connections between tasks and events if possible.
+                Address the user by name: "${profile?.name || "User"}".
+                
+                Stats data:
+                ${statsText}
+                
+                CRITICAL INSTRUCTION:
+                1. Make it feel extremely personalized and premium.
+                2. Write the ENTIRE reflection summary, all bullet points, and the concluding question in the same language as the user's query: "${userText.replace(/"/g, '\\"')}".
+                   - Detect the language of the user's query (e.g., English, Indonesian, Japanese, or any other language).
+                   - You MUST translate and write everything (headings, stats summaries, list items, and the concluding question) in that exact query language.
+                   - Ignore the language of the source tasks or events in the Stats data (which may be in Indonesian). The query's language is the ONLY language allowed for the output.
+                3. Conclude with a single open-ended question in that query language inviting the user's feedback/reflection on their progress (e.g., "How do you feel about this week's progress?"). Do NOT output any internal formatting, instructions, or robotic tags.
+              `;
+
+              try {
+                const response = await fetch("http://127.0.0.1:1234/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${process.env.NEXT_PUBLIC_LM_API_TOKEN || "lm-studio"}` 
+                  },
+                  body: JSON.stringify({
+                    model: "local-model",
+                    messages: [
+                      { role: "user", content: summaryPrompt }
+                    ],
+                    temperature: 0.7,
+                  }),
+                });
+
+                if (response.ok) {
+                  const data = await response.json();
+                  let summaryText = data.choices[0].message.content || "";
+                  summaryText = summaryText
+                    .replace(/^(?:DO NOT|CRITICAL|NOTE|IMPORTANT|INSTRUCTION|RULE|SYSTEM|MANDATORY):?.*\n+/gi, "")
+                    .trim();
+                  if (/^[A-Z0-9 _,.\-:"'()]{10,}\n\n/.test(summaryText)) {
+                    summaryText = summaryText.replace(/^[A-Z0-9 _,.\-:"'()]{10,}\n\n/, "").trim();
+                  }
+
+                  const reflectionId = await saveReflection({
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                    type,
+                    periodStart: startMs,
+                    periodEnd: endMs,
+                    periodLabel,
+                    summary: summaryText,
+                    stats: {
+                      tasksCompleted: stats.tasksCompleted,
+                      tasksCreated: stats.tasksCreated,
+                      eventsAttended: stats.eventsAttended,
+                      topCategories: stats.topCategories || [],
+                      streakDays: stats.streakDays,
+                    },
+                  });
+
+                  enrichedArgs.reflectionId = reflectionId;
+                  enrichedArgs.periodLabel = periodLabel;
+                  enrichedArgs.summary = summaryText;
+                  enrichedArgs.stats = {
+                    tasksCompleted: stats.tasksCompleted,
+                    tasksCreated: stats.tasksCreated,
+                    eventsAttended: stats.eventsAttended,
+                    topCategories: stats.topCategories || [],
+                    streakDays: stats.streakDays,
+                  };
+
+                  aiTextOverride = summaryText;
+                }
+              } catch (err) {
+                console.error("Local reflection synthesis failed:", err);
+              }
+            }
+          }
 
           const isOnlyContext = (name === "updateTask" && Object.keys(args).every(k => ["taskId", "notes", "progress", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "progress", "statusHook"].includes(k))) ||
             (name === "updateEvent" && Object.keys(args).every(k => ["eventId", "notes", "outcome", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "outcome", "statusHook"].includes(k)));
@@ -271,7 +408,7 @@ export function Chat({
 
         await sendMessage({
           sessionId,
-          text: result.aiText || "Done!",
+          text: aiTextOverride,
           author: "AI",
           toolCall: executedCalls.length > 0 ? executedCalls[0] : undefined,
           toolCalls: executedCalls.length > 0 ? executedCalls : undefined,
@@ -279,7 +416,7 @@ export function Chat({
       } else {
         await sendMessage({
           sessionId,
-          text: result.aiText || "Done!",
+          text: aiTextOverride,
           author: "AI",
         });
       }
@@ -510,3 +647,88 @@ export function Chat({
     </div>
   );
 }
+
+function getPeriodRange(
+  type: "weekly" | "monthly" | "yearly",
+  offset: number,
+  timezoneOffset?: number
+) {
+  const now = new Date();
+  if (timezoneOffset !== undefined) {
+    now.setTime(now.getTime() - timezoneOffset * 60000);
+  }
+
+  const periodStart = new Date(now);
+  let periodEnd = new Date(now);
+
+  if (type === "weekly") {
+    const day = now.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    
+    periodStart.setDate(now.getDate() + diffToMonday);
+    periodStart.setHours(0, 0, 0, 0);
+    
+    periodStart.setDate(periodStart.getDate() - 7 * offset);
+    
+    periodEnd = new Date(periodStart);
+    periodEnd.setDate(periodStart.getDate() + 6);
+    periodEnd.setHours(23, 59, 59, 999);
+  } else if (type === "monthly") {
+    periodStart.setDate(1);
+    periodStart.setHours(0, 0, 0, 0);
+    
+    periodStart.setMonth(periodStart.getMonth() - offset);
+    
+    periodEnd = new Date(periodStart);
+    periodEnd.setMonth(periodStart.getMonth() + 1);
+    periodEnd.setDate(0);
+    periodEnd.setHours(23, 59, 59, 999);
+  } else if (type === "yearly") {
+    periodStart.setMonth(0, 1);
+    periodStart.setHours(0, 0, 0, 0);
+    
+    periodStart.setFullYear(periodStart.getFullYear() - offset);
+    
+    periodEnd = new Date(periodStart);
+    periodEnd.setFullYear(periodStart.getFullYear() + 1);
+    periodEnd.setMonth(0, 0);
+    periodEnd.setHours(23, 59, 59, 999);
+  }
+
+  let startMs = periodStart.getTime();
+  let endMs = periodEnd.getTime();
+
+  if (timezoneOffset !== undefined) {
+    startMs = startMs + timezoneOffset * 60000;
+    endMs = endMs + timezoneOffset * 60000;
+  }
+
+  const currentRealTimeMs = Date.now();
+  if (endMs > currentRealTimeMs) {
+    endMs = currentRealTimeMs;
+  }
+
+  return { startMs, endMs };
+}
+
+function getPeriodLabel(type: "weekly" | "monthly" | "yearly", startMs: number, timezoneOffset?: number) {
+  const d = new Date(startMs);
+  if (timezoneOffset !== undefined) {
+    d.setTime(d.getTime() - timezoneOffset * 60000);
+  }
+  
+  if (type === "weekly") {
+    const month = d.toLocaleString("en-US", { month: "short" });
+    const day = d.getDate();
+    const year = d.getFullYear();
+    return `Week of ${month} ${day}, ${year}`;
+  } else if (type === "monthly") {
+    const month = d.toLocaleString("en-US", { month: "long" });
+    const year = d.getFullYear();
+    return `${month} ${year}`;
+  } else {
+    return `${d.getFullYear()}`;
+  }
+}
+
+

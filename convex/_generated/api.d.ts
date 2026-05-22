@@ -11,11 +11,13 @@
 import type * as ai from "../ai.js";
 import type * as ai_action from "../ai_action.js";
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as messages from "../messages.js";
 import type * as messages_internal from "../messages_internal.js";
 import type * as migrations from "../migrations.js";
+import type * as reflections from "../reflections.js";
 import type * as tasks from "../tasks.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -29,11 +31,13 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   ai_action: typeof ai_action;
   auth: typeof auth;
+  crons: typeof crons;
   events: typeof events;
   http: typeof http;
   messages: typeof messages;
   messages_internal: typeof messages_internal;
   migrations: typeof migrations;
+  reflections: typeof reflections;
   tasks: typeof tasks;
   workspaces: typeof workspaces;
 }>;

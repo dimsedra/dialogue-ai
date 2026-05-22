@@ -1,4 +1,4 @@
-import { CheckCircle2, Tag, Clock, Edit3, Check, Trash2, Zap, CalendarDays, MapPin, Search, Sparkles, RefreshCw } from "lucide-react";
+import { CheckCircle2, Tag, Clock, Edit3, Check, Trash2, Zap, CalendarDays, MapPin, Search, Sparkles, RefreshCw, Flame, Award } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion } from "framer-motion";
 import { ToolCall, TaskToolArgs, EventToolArgs } from "./types";
@@ -332,6 +332,102 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
         <p className="text-[12px] text-[#a8a29e] italic leading-relaxed">
           &quot;{text}&quot;
         </p>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "triggerReflection") {
+    const args = toolCall.args as { type: "weekly" | "monthly" | "yearly" };
+    const result = toolCall.result as {
+      status?: string;
+      reflectionId?: string;
+      type?: "weekly" | "monthly" | "yearly";
+      periodLabel?: string;
+      summary?: string;
+      stats?: {
+        tasksCompleted: number;
+        tasksCreated: number;
+        eventsAttended: number;
+        topCategories?: string[];
+        streakDays?: number;
+      };
+    } | undefined;
+
+    const displayType = result?.type || args.type || "weekly";
+    const capitalizedType = displayType.charAt(0).toUpperCase() + displayType.slice(1);
+    const label = result?.periodLabel || "Calculating Period...";
+    
+    const stats = result?.stats || {
+      tasksCompleted: 0,
+      tasksCreated: 0,
+      eventsAttended: 0,
+      topCategories: [],
+      streakDays: 0
+    };
+
+    return (
+      <motion.div 
+        initial={{ opacity: 0, y: 15, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="mt-3 p-4.5 rounded-2xl bg-gradient-to-br from-[#d4a373]/10 via-[#d4a373]/2 to-transparent border border-[#d4a373]/15 shadow-xl shadow-black/20 max-w-[400px] space-y-4 backdrop-blur-md"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[#d4a373]">
+            <Sparkles className="w-4 h-4 animate-pulse text-[#d4a373]" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">{capitalizedType} Reflection</span>
+          </div>
+          <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest bg-[#d4a373]/10 border border-[#d4a373]/20 text-[#d4a373]">
+            {label}
+          </span>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-3 gap-2.5">
+          {/* Completed Card */}
+          <div className="bg-emerald-500/[0.04] border border-emerald-500/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
+            <Award className="w-5 h-5 text-emerald-400 mb-1" />
+            <span className="text-[9px] font-bold text-[#a8a29e]/80 uppercase tracking-wider">Done</span>
+            <span className="text-lg font-black text-[#f2efeb] mt-0.5">{stats.tasksCompleted}</span>
+            <span className="text-[8px] text-[#a8a29e]/50 mt-0.5">Created: {stats.tasksCreated}</span>
+          </div>
+
+          {/* Events Card */}
+          <div className="bg-[#8b5cf6]/[0.04] border border-[#8b5cf6]/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
+            <CalendarDays className="w-5 h-5 text-[#8b5cf6] mb-1" />
+            <span className="text-[9px] font-bold text-[#a8a29e]/80 uppercase tracking-wider">Events</span>
+            <span className="text-lg font-black text-[#f2efeb] mt-0.5">{stats.eventsAttended}</span>
+            <span className="text-[8px] text-[#a8a29e]/50 mt-0.5">Attended</span>
+          </div>
+
+          {/* Streak Card */}
+          <div className="bg-orange-500/[0.04] border border-orange-500/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
+            <Flame className="w-5 h-5 text-orange-400 mb-1" />
+            <span className="text-[9px] font-bold text-[#a8a29e]/80 uppercase tracking-wider">Streak</span>
+            <span className="text-lg font-black text-[#f2efeb] mt-0.5">{stats.streakDays ?? 0}</span>
+            <span className="text-[8px] text-[#a8a29e]/50 mt-0.5">Active Days</span>
+          </div>
+        </div>
+
+        {/* Top Focus Areas */}
+        {stats.topCategories && stats.topCategories.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center gap-1.5 text-[9px] text-[#a8a29e] font-bold uppercase tracking-wider">
+              <Tag className="w-3 h-3 text-[#d4a373]/80" />
+              <span>Top Focus Areas</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {stats.topCategories.map((cat, i) => (
+                <span 
+                  key={i} 
+                  className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-[#d4a373]/10 border border-[#d4a373]/15 text-[#d4a373] capitalize"
+                >
+                  {cat}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </motion.div>
     );
   }
