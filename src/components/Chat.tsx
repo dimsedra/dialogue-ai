@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { processLocalLLMRequest } from "../lib/lmstudio";
-import { EnrichedToolArgs } from "./chat/types";
+import { EnrichedToolArgs, Scope } from "./chat/types";
 import { CreateWorkspaceModal } from "./chat/CreateWorkspaceModal";
 import { DeleteSessionModal } from "./chat/DeleteSessionModal";
 import { WorkspaceRail } from "./chat/WorkspaceRail";
@@ -25,6 +25,8 @@ export function Chat({
   setActiveSessionId,
   activeWorkspaceId,
   setActiveWorkspaceId,
+  activeScope,
+  setActiveScope,
   showHistory,
   setShowHistory,
   onSyncRef,
@@ -36,6 +38,8 @@ export function Chat({
   setActiveSessionId: (id: Id<"chatSessions"> | null) => void,
   activeWorkspaceId: Id<"workspaces"> | undefined,
   setActiveWorkspaceId: (id: Id<"workspaces"> | undefined, sessionId?: Id<"chatSessions"> | null) => void,
+  activeScope: Scope | null,
+  setActiveScope: (scope: Scope | null) => void,
   showHistory: boolean,
   setShowHistory: (show: boolean) => void,
   onSyncRef?: React.MutableRefObject<(() => void) | null>,
@@ -136,13 +140,14 @@ export function Chat({
   const runLocalLLMForSession = async (
     sessionId: Id<"chatSessions">,
     userText: string,
-    opts?: { brief?: boolean }
+    opts?: { brief?: boolean; scope?: Scope | null }
   ) => {
     try {
       const promptCtx = await convex.query(api.ai.getPromptContext, {
         sessionId,
         timezoneOffset: new Date().getTimezoneOffset(),
         ...(opts?.brief !== undefined ? { brief: opts.brief } : {}),
+        ...(opts?.scope ? { scope: opts.scope } : {}),
       });
 
       const recentMsgs = (messages || []).slice(-10);
@@ -576,8 +581,8 @@ export function Chat({
     if (onSyncRef) onSyncRef.current = handleSync;
   });
 
-  // ---- Send handler: receives (text, files) from ChatInput, handles upload + message + LLM ----
-  const handleSend = useCallback(async (userText: string, files: File[]) => {
+  // ---- Send handler: receives (text, files, scope) from ChatInput, handles upload + message + LLM ----
+  const handleSend = useCallback(async (userText: string, files: File[], scope?: Scope | null) => {
     if (!activeSessionId) return;
 
     try {
@@ -606,13 +611,14 @@ export function Chat({
         timezoneOffset: new Date().getTimezoneOffset(),
         provider,
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        scope: scope || undefined,
       });
 
       setIsTyping(true);
 
       if (provider === "lmstudio") {
         try {
-          await runLocalLLMForSession(activeSessionId, userText);
+          await runLocalLLMForSession(activeSessionId, userText, { scope });
         } finally {
           setIsTyping(false);
         }
@@ -733,6 +739,8 @@ export function Chat({
           activeSessionId={activeSessionId}
           isLargeViewport={isLargeViewport}
           keyboardOffset={keyboardOffset}
+          activeScope={activeScope}
+          setActiveScope={setActiveScope}
           onSend={handleSend}
           onChatInputResize={onChatInputResize}
         />

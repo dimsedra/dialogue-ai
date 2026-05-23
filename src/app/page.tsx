@@ -9,10 +9,12 @@ import { Authenticated, Unauthenticated, useQuery } from "convex/react";
 import { Grid2x2, Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignInForm } from "@/components/auth/SignInForm";
+import { Scope } from "@/components/chat/types";
 
 export default function Home() {
   const [activeSessionId, setActiveSessionId] = useState<Id<"chatSessions"> | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<Id<"workspaces"> | undefined>(undefined);
+  const [activeScope, setActiveScope] = useState<Scope | null>(null);
   
   // Clear session when workspace changes
   const handleWorkspaceChange = useCallback((id: Id<"workspaces"> | undefined, sessionId?: Id<"chatSessions"> | null) => {
@@ -189,6 +191,8 @@ export default function Home() {
               setActiveSessionId={setActiveSessionId}
               activeWorkspaceId={activeWorkspaceId}
               setActiveWorkspaceId={handleWorkspaceChange}
+              activeScope={activeScope}
+              setActiveScope={setActiveScope}
               showHistory={showHistory}
               setShowHistory={handleSetShowHistory}
               onSyncRef={syncRef}
@@ -237,6 +241,10 @@ export default function Home() {
                 activeWorkspaceId={activeWorkspaceId}
                 onSync={handleSyncFromPanel}
                 onClose={() => handleSetShowTasks(false)}
+                onRefer={(scope) => {
+                  setActiveScope(scope);
+                  if (!isLargeViewport) setShowTasks(false);
+                }}
               />
             </div>
           </motion.div>

@@ -162,6 +162,11 @@ export const getPromptContext = query({
     timezoneOffset: v.optional(v.number()),
     brief: v.optional(v.boolean()),
     userId: v.optional(v.id("users")),
+    scope: v.optional(v.object({
+      type: v.string(),
+      id: v.string(),
+      title: v.string(),
+    })),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
@@ -204,6 +209,10 @@ export const getPromptContext = query({
     const workspaceContext = workspace?.context
       ? `ACTIVE WORKSPACE: "${workspace.name}"\nWORKSPACE CONTEXT/RULES: "${workspace.context}"\n(Reminder: This context takes precedence over your default persona)`
       : "No specific workspace context provided. Follow your default adaptive persona.";
+
+    const scopeContext = args.scope
+      ? `ACTIVE SCOPE (PINNED CONTEXT):\nThe user has explicitly pinned the following item to this chat message:\n[${args.scope.type.toUpperCase()}] ${args.scope.title} (ID: ${args.scope.id})\n\nCRITICAL INSTRUCTION: When answering or executing tool calls for this query, ALWAYS prioritize this specific pinned context. If the user says "this", "reschedule this", "mark this done", etc., they are referring directly to this pinned active scope!`
+      : "";
 
     const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
     const allTasks = workspaceId 
@@ -287,6 +296,7 @@ export const getPromptContext = query({
       ${briefingContext}
  
       ${workspaceContext}
+      ${scopeContext}
 
       Current Time: ${nowString}
       User Name: "${profile?.name || "User"}"

@@ -274,6 +274,11 @@ export const chat = internalAction({
       fileName: v.string(),
       fileType: v.string(),
     }))),
+    scope: v.optional(v.object({
+      type: v.union(v.literal("date"), v.literal("task"), v.literal("event")),
+      id: v.string(),
+      title: v.string(),
+    })),
   },
   handler: async (ctx, args) => {
     const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId, userId: args.userId });
@@ -449,11 +454,16 @@ export const chat = internalAction({
       `;
     }
 
+    const scopeContext = args.scope
+      ? `ACTIVE SCOPE (PINNED CONTEXT):\nThe user has explicitly pinned the following item to this chat message:\n[${args.scope.type.toUpperCase()}] ${args.scope.title} (ID: ${args.scope.id})\n\nCRITICAL INSTRUCTION: When answering or executing tool calls for this query, ALWAYS prioritize this specific pinned context. If the user says "this", "reschedule this", "mark this done", etc., they are referring directly to this pinned active scope!`
+      : "";
+
     const systemInstruction = `
       ${SKILLS_INSTRUCTION}
       ${briefingContext}
  
       ${workspaceContext}
+      ${scopeContext}
 
       Current Time: ${nowString}
       User Name: "${profile?.name || "User"}"
@@ -1592,7 +1602,8 @@ export const chat = internalAction({
             userMessage: args.text,
             calls,
             executedActionSummaries,
-            reasoningContent
+            reasoningContent,
+            rawModelParts: engineResult.rawModelParts
           });
         }
 

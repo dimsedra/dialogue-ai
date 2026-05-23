@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, Bot, Copy, Check, ExternalLink, File as FileIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Bot, Copy, Check, ExternalLink, File as FileIcon, ChevronDown, ChevronUp, Calendar, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -96,6 +96,11 @@ interface MessageBubbleProps {
     storageId?: string;
     fileName?: string;
     fileType?: string;
+    scope?: {
+      type: "date" | "task" | "event";
+      id: string;
+      title: string;
+    };
   };
   isLargeViewport: boolean;
 }
@@ -138,6 +143,16 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
       <div className={`relative w-full ml-2.5 pl-6 min-w-0 ${
         msg.author === "AI" ? "border-l border-[#d4a373]/15" : ""
       }`}>
+        {/* Scope Badge (if any) */}
+        {msg.scope && (
+          <div className="flex mb-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#d4a373]/10 border border-[#d4a373]/20 text-[#d4a373]">
+              {msg.scope.type === "date" ? <Calendar className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              <span className="text-[11px] font-bold uppercase tracking-widest">{msg.scope.title}</span>
+            </div>
+          </div>
+        )}
+
         {/* Unified Attachment Rendering */}
         {((): React.ReactNode => {
           const allAtts = [...(msg.attachments || [])];

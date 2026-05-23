@@ -58,6 +58,11 @@ export default defineSchema({
       fileType: v.string(),
       extractedText: v.optional(v.string()),
     }))),
+    scope: v.optional(v.object({
+      type: v.union(v.literal("date"), v.literal("task"), v.literal("event")),
+      id: v.string(),
+      title: v.string(),
+    })),
   }).index("by_session", ["sessionId"]),
 
   tasks: defineTable({

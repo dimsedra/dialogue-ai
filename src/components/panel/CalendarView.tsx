@@ -1,9 +1,9 @@
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { DayPicker } from "react-day-picker";
-import { Calendar as CalendarIcon, Clock, Edit3, RefreshCw, Tag, Trash2, Zap } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Edit3, RefreshCw, Tag, Trash2, Zap, MessageSquarePlus } from "lucide-react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
-import { EventDoc } from "./types";
+import { EventDoc, TaskDoc } from "./types";
 
 interface CalendarViewProps {
   selectedDate: Date | undefined;
@@ -18,6 +18,9 @@ interface CalendarViewProps {
   onEditEvent: (data: { id: Id<"events">; event: EventDoc; timestamp: number }) => void;
   onDeleteEvent: (event: EventDoc) => void;
   onDeleteTask: (id: Id<"tasks">) => void;
+  onReferDate?: (date: Date) => void;
+  onReferEvent?: (event: EventDoc) => void;
+  onReferTask?: (task: TaskDoc) => void;
 }
 
 export function CalendarView({
@@ -33,6 +36,9 @@ export function CalendarView({
   onEditEvent,
   onDeleteEvent,
   onDeleteTask,
+  onReferDate,
+  onReferEvent,
+  onReferTask,
 }: CalendarViewProps) {
   return (
     <motion.div
@@ -83,11 +89,22 @@ export function CalendarView({
               {selectedDate ? format(selectedDate, "yyyy") : "Select a day"}
             </p>
           </div>
-          <div className="px-3 py-1 rounded-full bg-[#d4a373]/5 border border-[#d4a373]/10">
-            <span className="text-[10px] font-bold text-[#d4a373]">
-              {tasksOnSelectedDate.length + eventsOnSelectedDate.length}{" "}
-              {tasksOnSelectedDate.length + eventsOnSelectedDate.length === 1 ? "Item" : "Items"}
-            </span>
+          <div className="flex items-center gap-2">
+            {selectedDate && onReferDate && (
+              <button
+                onClick={() => onReferDate(selectedDate)}
+                className="p-1.5 rounded-full hover:bg-[#d4a373]/10 text-[#d4a373]/60 hover:text-[#d4a373] transition-colors"
+                title="Pin this Date to Chat"
+              >
+                <MessageSquarePlus className="w-4 h-4" />
+              </button>
+            )}
+            <div className="px-3 py-1 rounded-full bg-[#d4a373]/5 border border-[#d4a373]/10">
+              <span className="text-[10px] font-bold text-[#d4a373]">
+                {tasksOnSelectedDate.length + eventsOnSelectedDate.length}{" "}
+                {tasksOnSelectedDate.length + eventsOnSelectedDate.length === 1 ? "Item" : "Items"}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -123,6 +140,18 @@ export function CalendarView({
                       <span className="text-xs text-[#f2efeb] font-bold tracking-tight">{event.title}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {onReferEvent && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onReferEvent(event as EventDoc);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                          title="Pin this Event to Chat"
+                        >
+                          <MessageSquarePlus className="w-3 h-3" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -218,15 +247,29 @@ export function CalendarView({
                   <span className="text-xs text-[#f2efeb] truncate font-medium tracking-tight">{task.text}</span>
                   <span className="text-[9px] font-bold text-[#a8a29e]/30 uppercase tracking-widest">Task</span>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteTask(task._id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all shrink-0"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                  {onReferTask && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReferTask(task as TaskDoc);
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                      title="Pin this Task to Chat"
+                    >
+                      <MessageSquarePlus className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteTask(task._id);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}

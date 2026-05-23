@@ -5,6 +5,7 @@ import { api } from "../../convex/_generated/api";
 import { useState, useMemo, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Id, Doc } from "../../convex/_generated/dataModel";
+import { Scope } from "@/components/chat/types";
 import { isSameDay } from "date-fns";
 import {
   parseTaskDate,
@@ -28,10 +29,12 @@ export function TaskPanel({
   activeWorkspaceId,
   onSync,
   onClose,
+  onRefer,
 }: {
   activeWorkspaceId: Id<"workspaces"> | undefined;
   onSync?: () => void;
   onClose?: () => void;
+  onRefer?: (scope: Scope) => void;
 }) {
   const tasks = useQuery(api.tasks.list, { workspaceId: activeWorkspaceId });
   const events = useQuery(api.events.list, { workspaceId: activeWorkspaceId });
@@ -221,6 +224,7 @@ export function TaskPanel({
               onToggleTask={(id) => toggleTask({ id })}
               onEditTask={(task) => setEditingTaskObj(task)}
               onDeleteTask={handleDeleteTask}
+              onReferTask={onRefer ? (task) => onRefer({ type: "task", id: task._id, title: task.text }) : undefined}
             />
           ) : view === "events" ? (
             <EventList
@@ -230,6 +234,7 @@ export function TaskPanel({
               isLargeViewport={isLargeViewport}
               onEditEvent={setEditingEventData}
               onDeleteEvent={handleDeleteEvent}
+              onReferEvent={onRefer ? (event) => onRefer({ type: "event", id: event._id, title: event.title }) : undefined}
             />
           ) : (
             <CalendarView
@@ -245,6 +250,15 @@ export function TaskPanel({
               onEditEvent={setEditingEventData}
               onDeleteEvent={handleDeleteEvent}
               onDeleteTask={handleDeleteTask}
+              onReferDate={onRefer ? (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const dateString = `${year}-${month}-${day}`;
+                onRefer({ type: "date", id: dateString, title: date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) });
+              } : undefined}
+              onReferEvent={onRefer ? (event) => onRefer({ type: "event", id: event._id, title: event.title }) : undefined}
+              onReferTask={onRefer ? (task) => onRefer({ type: "task", id: task._id, title: task.text }) : undefined}
             />
           )}
         </AnimatePresence>

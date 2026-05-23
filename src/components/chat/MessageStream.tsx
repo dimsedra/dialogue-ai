@@ -23,6 +23,11 @@ interface MessageStreamProps {
     fileName?: string;
     fileType?: string;
     sessionId?: unknown;
+    scope?: {
+      type: "date" | "task" | "event";
+      id: string;
+      title: string;
+    };
   }> | undefined;
   activeSessionId: Id<"chatSessions"> | null;
   isTyping: boolean;

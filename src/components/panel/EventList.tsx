@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
-import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, ChevronDown, ChevronUp, MessageSquarePlus } from "lucide-react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { EventDoc } from "./types";
 import { formatRecurrenceText } from "./utils";
@@ -13,6 +13,7 @@ interface EventListProps {
   isLargeViewport: boolean;
   onEditEvent: (data: { id: Id<"events">; event: EventDoc; timestamp: number }) => void;
   onDeleteEvent: (event: EventDoc) => void;
+  onReferEvent?: (event: EventDoc) => void;
 }
 
 export function EventList({
@@ -22,6 +23,7 @@ export function EventList({
   isLargeViewport,
   onEditEvent,
   onDeleteEvent,
+  onReferEvent,
 }: EventListProps) {
   const [showPast, setShowPast] = useState(false);
   const [now] = useState(() => Date.now());
@@ -85,6 +87,18 @@ export function EventList({
           </div>
           <div className="flex items-center gap-1">
             <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all">
+              {onReferEvent && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReferEvent(event as EventDoc);
+                  }}
+                  className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                  title="Pin this Event to Chat"
+                >
+                  <MessageSquarePlus className="w-3 h-3" />
+                </button>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();

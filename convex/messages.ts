@@ -147,6 +147,11 @@ const sendArgs = {
     fileName: v.string(),
     fileType: v.string(),
   }))),
+  scope: v.optional(v.object({
+    type: v.union(v.literal("date"), v.literal("task"), v.literal("event")),
+    id: v.string(),
+    title: v.string(),
+  })),
 };
 
 export const send = mutation({
@@ -171,6 +176,7 @@ export const send = mutation({
         fileName: args.fileName,
         fileType: args.fileType,
         attachments: args.attachments,
+        scope: args.scope,
       });
     }
 
@@ -196,8 +202,9 @@ async function sendImplementation(ctx: MutationCtx, args: {
   fileType?: string;
   fileName?: string;
   attachments?: { storageId: Id<"_storage">; fileName: string; fileType: string }[];
+  scope?: { type: "date" | "task" | "event"; id: string; title: string };
 }) {
-  const { sessionId, text, author, timezoneOffset, toolCall, toolCalls, storageId, fileType, fileName, attachments } = args;
+  const { sessionId, text, author, timezoneOffset, toolCall, toolCalls, storageId, fileType, fileName, attachments, scope } = args;
   
   const messageId = await ctx.db.insert("messages", {
     sessionId,
@@ -211,6 +218,7 @@ async function sendImplementation(ctx: MutationCtx, args: {
     fileType,
     fileName,
     attachments,
+    scope,
   });
 
   await ctx.db.patch(sessionId, { lastActivity: Date.now() });

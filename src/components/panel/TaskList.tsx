@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive, Paperclip } from "lucide-react";
+import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive, Paperclip, MessageSquarePlus } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { TaskDoc } from "./types";
@@ -16,6 +16,7 @@ interface TaskListProps {
   onToggleTask: (id: Id<"tasks">) => void;
   onEditTask: (task: TaskDoc) => void;
   onDeleteTask: (id: Id<"tasks">) => void;
+  onReferTask?: (task: TaskDoc) => void;
 }
 
 export function TaskList({
@@ -28,6 +29,7 @@ export function TaskList({
   onToggleTask,
   onEditTask,
   onDeleteTask,
+  onReferTask,
 }: TaskListProps) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -119,6 +121,18 @@ export function TaskList({
                 </div>
                 <div className="mt-1 shrink-0 flex items-center gap-1">
                   <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all mr-2">
+                    {onReferTask && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReferTask(task as TaskDoc);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                        title="Pin this Task to Chat"
+                      >
+                        <MessageSquarePlus className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

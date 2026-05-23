@@ -16,8 +16,9 @@ export interface ChatEngineOptions {
 
 export interface ChatEngineResult {
   text: string;
-  calls: Array<{ name: string; args: Record<string, unknown> }>;
+  calls: Array<{ name: string; args: Record<string, unknown>; originalGeminiCall?: any }>;
   reasoningContent?: string;
+  rawModelParts?: any[];
 }
 
 function parseXmlToolCalls(text: string): Array<{ name: string; args: Record<string, unknown> }> {
@@ -230,10 +231,13 @@ export async function runChatEngine(options: ChatEngineOptions): Promise<ChatEng
     
     const calls = fnCalls ? fnCalls.map(c => ({
       name: c.name,
-      args: c.args as Record<string, unknown>
+      args: c.args as Record<string, unknown>,
+      originalGeminiCall: c
     })) : [];
 
-    return { text, calls };
+    const rawModelParts = response.candidates?.[0]?.content?.parts;
+
+    return { text, calls, rawModelParts };
   }
 }
 function cleanFollowUpText(text: string): string {
@@ -246,13 +250,14 @@ export interface FollowUpOptions {
   systemInstruction: string;
   transcript: string;
   userMessage: string;
-  calls: Array<{ name: string; args: Record<string, unknown>; result?: any }>;
+  calls: Array<{ name: string; args: Record<string, unknown>; result?: any; originalGeminiCall?: any }>;
   executedActionSummaries: { name: string; summary: string; isSearch?: boolean }[];
   reasoningContent?: string;
+  rawModelParts?: any[];
 }
 
 export async function executeChatFollowUp(options: FollowUpOptions): Promise<string> {
-  const { provider, customConfigs, systemInstruction, transcript, userMessage, calls, executedActionSummaries, reasoningContent } = options;
+  const { provider, customConfigs, systemInstruction, transcript, userMessage, calls, executedActionSummaries, reasoningContent, rawModelParts } = options;
   const config = customConfigs?.[provider] || {};
   let apiKey = config.apiKey || "";
   let baseUrl = config.baseUrl || undefined;
@@ -353,7 +358,7 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
 
     const promptParts = [
       { role: "user", parts: [{ text: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}` }] },
-      { role: "model", parts: functionCalls },
+      { role: "model", parts: rawModelParts || functionCalls },
       { role: "user", parts: [...functionResponses, ...(promptInstruction ? [{ text: promptInstruction }] : [])] }
     ];
 

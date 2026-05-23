@@ -1,13 +1,16 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Send, X, PlusCircle, ChevronsUpDown, File as FileIcon } from "lucide-react";
+import { Send, X, PlusCircle, ChevronsUpDown, File as FileIcon, Calendar, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../../convex/_generated/dataModel";
+import { Scope } from "./types";
 
 interface ChatInputProps {
   activeSessionId: Id<"chatSessions"> | null;
   isLargeViewport: boolean;
   keyboardOffset: number;
-  onSend: (text: string, files: File[]) => Promise<void>;
+  activeScope: Scope | null;
+  setActiveScope: (scope: Scope | null) => void;
+  onSend: (text: string, files: File[], scope?: Scope | null) => Promise<void>;
   onChatInputResize?: (offset: number) => void;
 }
 
@@ -15,6 +18,8 @@ export const ChatInput = React.memo(function ChatInput({
   activeSessionId,
   isLargeViewport,
   keyboardOffset,
+  activeScope,
+  setActiveScope,
   onSend,
   onChatInputResize,
 }: ChatInputProps) {
@@ -64,7 +69,7 @@ export const ChatInput = React.memo(function ChatInput({
     }
 
     try {
-      await onSend(userText, currentFiles);
+      await onSend(userText, currentFiles, activeScope);
     } catch (err) {
       console.error("Failed to send message:", err);
     } finally {
@@ -144,8 +149,36 @@ export const ChatInput = React.memo(function ChatInput({
         )}
       </AnimatePresence>
 
-      <form onSubmit={handleSubmit} className="relative group max-w-4xl mx-auto">
-        <div className="absolute inset-0 bg-[#d4a373]/5 blur-2xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
+      <form onSubmit={handleSubmit} className="relative group max-w-4xl mx-auto flex flex-col gap-2">
+        <AnimatePresence>
+          {activeScope && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className="flex items-center gap-2 self-start px-3 py-1.5 rounded-full bg-[#1a1814]/90 backdrop-blur-xl border border-[#d4a373]/30 shadow-lg relative ml-2 lg:ml-3"
+            >
+              {activeScope.type === "date" ? (
+                <Calendar className="w-3.5 h-3.5 text-[#d4a373]" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#d4a373]" />
+              )}
+              <span className="text-[11px] font-medium text-[#f2efeb] truncate max-w-[200px]">
+                {activeScope.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveScope(null)}
+                className="p-0.5 rounded-full hover:bg-[#d4a373]/20 text-[#a8a29e] hover:text-[#d4a373] transition-colors ml-1"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        <div className="relative">
+          <div className="absolute inset-0 bg-[#d4a373]/5 blur-2xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
         
         <input
           type="file"
@@ -203,6 +236,7 @@ export const ChatInput = React.memo(function ChatInput({
               <Send className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
             )}
           </button>
+        </div>
         </div>
       </form>
       <p className="mt-2 text-center text-[8px] lg:text-[9px] text-[#a8a29e]/20 uppercase tracking-[0.4em] font-bold">Dialogue Interface v1.0.4</p>
