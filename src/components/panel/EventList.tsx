@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
-import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, ChevronDown, ChevronUp, MessageSquarePlus } from "lucide-react";
+import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, ChevronDown, ChevronUp, MessageSquarePlus, Paperclip, MoreVertical } from "lucide-react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { EventDoc } from "./types";
 import { formatRecurrenceText } from "./utils";
+import { ResourceTray } from "./ResourceTray";
 
 interface EventListProps {
   events: Doc<"events">[] | undefined;
@@ -26,7 +27,23 @@ export function EventList({
   onReferEvent,
 }: EventListProps) {
   const [showPast, setShowPast] = useState(false);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [dropdownEventId, setDropdownEventId] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!dropdownEventId) return;
+    const handleClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-dropdown]")) {
+        setDropdownEventId(null);
+      }
+    };
+    const id = setTimeout(() => document.addEventListener("mousedown", handleClick), 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [dropdownEventId]);
   const sevenDaysAgo = useMemo(() => now - 7 * 24 * 60 * 60 * 1000, [now]);
 
   const { upcoming, past } = useMemo(() => {
@@ -60,10 +77,11 @@ export function EventList({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={isLargeViewport ? undefined : { duration: 0 }}
-        className="p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group"
+        className={`p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group cursor-pointer ${expandedEventId === event._id ? "ring-1 ring-[#d4a373]/30" : ""}`}
+        onClick={() => setExpandedEventId(expandedEventId === event._id ? null : event._id)}
       >
-        <div className="flex items-start justify-between gap-4 mb-2">
-          <div className="flex flex-col gap-1 flex-1">
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <div className="flex flex-col gap-1 flex-1 min-w-0 overflow-hidden">
             {!activeWorkspaceId && eventWorkspace && (
               <div className="flex items-center gap-1.5 mb-0.5">
                 <div
@@ -82,7 +100,7 @@ export function EventList({
                   backgroundColor: !activeWorkspaceId && eventWorkspace ? eventWorkspace.color : "#d4a373",
                 }}
               />
-              <span className="text-xs text-[#f2efeb] font-bold tracking-tight">{event.title}</span>
+              <span className="text-xs text-[#f2efeb] font-bold tracking-tight truncate">{event.title}</span>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -99,24 +117,49 @@ export function EventList({
                   <MessageSquarePlus className="w-3 h-3" />
                 </button>
               )}
+            </div>
+            <div
+              className="relative transition-all"
+              style={dropdownEventId === event._id ? { opacity: 1 } : undefined}
+            >
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEditEvent({ id: event._id, event: event as EventDoc, timestamp: event.startTime });
+                  setDropdownEventId(dropdownEventId === event._id ? null : event._id);
                 }}
-                className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                className={`p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all ${dropdownEventId !== event._id ? "opacity-100 lg:opacity-0 lg:group-hover:opacity-100" : ""}`}
               >
-                <Edit3 className="w-3 h-3" />
+                <MoreVertical className="w-3.5 h-3.5" />
               </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteEvent(event as EventDoc);
-                }}
-                className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
+              {dropdownEventId === event._id && (
+                <div
+                  className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-xl bg-[#1a1815] border border-[#2a2723] shadow-xl py-1 overflow-hidden"
+                  data-dropdown
+                >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDropdownEventId(null);
+                      onEditEvent({ id: event._id, event: event as EventDoc, timestamp: event.startTime });
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDropdownEventId(null);
+                      onDeleteEvent(event as EventDoc);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#f2efeb] hover:bg-red-500/10 hover:text-red-400 transition-colors text-left"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1">
               {(event.eventType === "point" || !event.endTime) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
@@ -158,10 +201,22 @@ export function EventList({
               <span>{event.location}</span>
             </div>
           )}
+          {event.resources && event.resources.length > 0 && (
+            <div className="flex items-center gap-1 text-[#a8a29e]/50">
+              <Paperclip className="w-3 h-3" />
+              <span className="text-[9px] font-bold">{event.resources.length}</span>
+            </div>
+          )}
         </div>
 
         {event.description && (
           <p className="mt-2 text-[10px] text-[#a8a29e]/40 italic leading-relaxed">{event.description}</p>
+        )}
+
+        {expandedEventId === event._id && event.resources && event.resources.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-[#2a2723]">
+            <ResourceTray resources={event.resources} />
+          </div>
         )}
       </motion.div>
     );

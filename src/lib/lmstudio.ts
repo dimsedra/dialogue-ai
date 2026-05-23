@@ -27,7 +27,7 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "addTask",
-        description: "CRITICAL MANDATE: DO NOT call this tool on the first turn when a user requests to add a task. You MUST ask the user to clarify and confirm the exact details (priority, category, due date) first in conversational text. Only call this tool AFTER the user explicitly says the plan is perfect.",
+        description: "Ask ONE field per turn (priority, category, due date, notes). Call this tool immediately after the last field is answered. No final confirmation needed.",
         parameters: {
           type: "object",
           properties: {
@@ -125,7 +125,7 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "addEvent",
-        description: "CRITICAL MANDATE: DO NOT call this tool on the first turn when a user requests to schedule an event. You MUST ask the user to clarify and confirm all details (start time, event type, recurrence) first in conversational text. Only call this tool AFTER the user explicitly confirms the plan.",
+        description: "Ask ONE field per turn (event type, start/end time, location, recurrence). Call this tool immediately after the last field is answered. No final confirmation needed.",
         parameters: {
           type: "object",
           properties: {
@@ -335,7 +335,7 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "batchAddTasks",
-        description: "Creates multiple tasks in a single operation. Use when the user provides a list of tasks to add (e.g., 'Add groceries, laundry, and call the dentist'). Smart Grouping: if multiple items are from the same errand category (groceries, hardware, pharmacy), group them into ONE task with items listed in notes. Only create separate tasks for genuinely distinct categories. Do NOT call addTask repeatedly — use this one tool instead.",
+        description: "Creates multiple tasks in a single operation. Use when the user provides a list of tasks to add (e.g., 'Add groceries, laundry, and call the dentist'). Exempt from step-by-step Q&A — create all tasks immediately. Smart Grouping: if multiple items are from the same errand category (groceries, hardware, pharmacy), group them into ONE task with items listed in notes. Only create separate tasks for genuinely distinct categories. Do NOT call addTask repeatedly — use this one tool instead.",
         parameters: {
           type: "object",
           properties: {
@@ -370,6 +370,48 @@ export async function processLocalLLMRequest({
             taskId: { type: "string", description: "The ID of the task to retrieve notes for" },
           },
           required: ["taskId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "fetchUrl",
+        description: "YOU MUST call this whenever the user shares a URL or asks about content behind a link. Fetches and reads the content of a URL shared by the user — use this to read web pages, articles, or documents at a specific URL. NEVER describe or summarize what's behind a link without fetching it first. Do not guess what's behind a link — fetch it.",
+        parameters: {
+          type: "object",
+          properties: {
+            url: { type: "string", description: "The full URL to fetch and read" },
+          },
+          required: ["url"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "getTaskResources",
+        description: "Retrieves the linked resources (URLs and files) for a specific task. Use when the user asks what resources are linked to a task, or wants to view files/URLs attached to a task.",
+        parameters: {
+          type: "object",
+          properties: {
+            taskId: { type: "string", description: "The ID of the task to retrieve resources for" },
+          },
+          required: ["taskId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "getEventResources",
+        description: "Retrieves the linked resources (URLs and files) for a specific event. Use when the user asks what resources are linked to an event, or wants to view files/URLs attached to an event.",
+        parameters: {
+          type: "object",
+          properties: {
+            eventId: { type: "string", description: "The ID of the event to retrieve resources for" },
+          },
+          required: ["eventId"],
         },
       },
     },
@@ -434,6 +476,9 @@ export async function processLocalLLMRequest({
       }
 
       const searchCalls = rawToolCalls.filter((c: LMToolCall) => c.function.name === "searchWeb");
+      const fetchUrlCalls = rawToolCalls.filter((c: LMToolCall) => c.function.name === "fetchUrl");
+
+      const toolResults: Array<{ role: string; tool_call_id: string; name: string; content: string }> = [];
 
       if (searchCalls.length > 0) {
         const tavilyKey = process.env.NEXT_PUBLIC_TAVILY_API_KEY;
@@ -462,13 +507,71 @@ export async function processLocalLLMRequest({
             }
           }
           return {
-            role: "tool",
+            role: "tool" as const,
             tool_call_id: call.id,
             name: "searchWeb",
             content
           };
         }));
+        toolResults.push(...searchResults);
+      }
 
+      if (fetchUrlCalls.length > 0) {
+        const fetchResults = await Promise.all(fetchUrlCalls.map(async (call: LMToolCall) => {
+          const callArgs = JSON.parse(call.function.arguments);
+          const url: string = callArgs.url || "";
+          let content = "";
+          try {
+            let fetchUrl = url;
+            const gdocMatch = url.match(/docs\.google\.com\/document\/d\/([a-zA-Z0-9_-]+)/);
+            if (gdocMatch) {
+              fetchUrl = `https://docs.google.com/document/d/${gdocMatch[1]}/export?format=txt`;
+            }
+            const gsheetMatch = url.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+            if (gsheetMatch) {
+              fetchUrl = `https://docs.google.com/spreadsheets/d/${gsheetMatch[1]}/export?format=tsv`;
+            }
+            const gslideMatch = url.match(/docs\.google\.com\/presentation\/d\/([a-zA-Z0-9_-]+)/);
+            if (gslideMatch) {
+              fetchUrl = `https://docs.google.com/presentation/d/${gslideMatch[1]}/export?format=txt`;
+            }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const res = await fetch(fetchUrl, {
+              headers: { "User-Agent": "Dialogue/1.0" },
+              signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            if (!res.ok) {
+              content = `Failed to fetch URL: HTTP ${res.status}`;
+            } else {
+              const text = await res.text();
+              const stripped = text
+                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/&[a-z]+;/g, " ")
+                .replace(/&amp;/g, "&")
+                .replace(/\s+/g, " ")
+                .trim();
+              content = stripped.length > 10000
+                ? stripped.slice(0, 10000) + "... [truncated]"
+                : stripped;
+            }
+          } catch (err: unknown) {
+            content = `Failed to fetch URL: ${err instanceof Error ? err.message : "Unknown error"}`;
+          }
+          return {
+            role: "tool" as const,
+            tool_call_id: call.id,
+            name: "fetchUrl",
+            content: content || "I couldn't read that page"
+          };
+        }));
+        toolResults.push(...fetchResults);
+      }
+
+      if (toolResults.length > 0) {
         const feedbackRes = await fetch("http://127.0.0.1:1234/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -480,7 +583,7 @@ export async function processLocalLLMRequest({
             messages: [
               ...messages,
               message,
-              ...searchResults
+              ...toolResults
             ],
             temperature: 0.7,
           }),

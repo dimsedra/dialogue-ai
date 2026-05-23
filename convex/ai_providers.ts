@@ -3,6 +3,13 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI, Part } from "@google/generative-ai";
 
+export const PROVIDER_CAPABILITIES: Record<string, { multimodal: boolean }> = {
+  gemini: { multimodal: true },
+  openai: { multimodal: false },
+  anthropic: { multimodal: false },
+  lmstudio: { multimodal: false },
+};
+
 export interface ChatEngineOptions {
   provider: string;
   customConfigs: any;

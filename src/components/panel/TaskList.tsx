@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive, Paperclip, MessageSquarePlus } from "lucide-react";
+import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive, Paperclip, MessageSquarePlus, MoreVertical } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { TaskDoc } from "./types";
@@ -32,7 +32,22 @@ export function TaskList({
   onReferTask,
 }: TaskListProps) {
   const [showCompleted, setShowCompleted] = useState(false);
+  const [dropdownTaskId, setDropdownTaskId] = useState<Id<"tasks"> | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!dropdownTaskId) return;
+    const handleClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-dropdown]")) {
+        setDropdownTaskId(null);
+      }
+    };
+    const id = setTimeout(() => document.addEventListener("mousedown", handleClick), 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [dropdownTaskId]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -99,7 +114,7 @@ export function TaskList({
             </button>
             <div className="flex-1 space-y-3">
               <div className="flex items-start justify-between gap-2">
-                <div className="flex flex-col gap-1 flex-1">
+                <div className="flex flex-col gap-1 flex-1 min-w-0 overflow-hidden">
                   {!activeWorkspaceId && taskWorkspace && (
                     <div className="flex items-center gap-1.5 mb-1">
                       <div
@@ -112,7 +127,7 @@ export function TaskList({
                     </div>
                   )}
                   <p
-                    className={`text-sm font-medium leading-[1.5] transition-all ${
+                    className={`text-sm font-medium leading-[1.5] transition-all truncate ${
                       task.completed ? "text-[#a8a29e]/40 line-through" : "text-[#f2efeb]"
                     }`}
                   >
@@ -133,24 +148,49 @@ export function TaskList({
                         <MessageSquarePlus className="w-3.5 h-3.5" />
                       </button>
                     )}
+                  </div>
+                  <div
+                    className="relative transition-all"
+                    style={dropdownTaskId === task._id ? { opacity: 1 } : undefined}
+                  >
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onEditTask(task as TaskDoc);
+                        setDropdownTaskId(dropdownTaskId === task._id ? null : task._id);
                       }}
-                      className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                      className={`p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all ${dropdownTaskId !== task._id ? "opacity-100 lg:opacity-0 lg:group-hover:opacity-100" : ""}`}
                     >
-                      <Edit3 className="w-3.5 h-3.5" />
+                      <MoreVertical className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteTask(task._id);
-                      }}
-                      className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-red-400 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {dropdownTaskId === task._id && (
+                      <div
+                        className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-xl bg-[#1a1815] border border-[#2a2723] shadow-xl py-1 overflow-hidden"
+                        data-dropdown
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDropdownTaskId(null);
+                            onEditTask(task as TaskDoc);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDropdownTaskId(null);
+                            onDeleteTask(task._id);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#f2efeb] hover:bg-red-500/10 hover:text-red-400 transition-colors text-left"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                   {expandedTaskId === task._id ? (
                     <ChevronUp className="w-3.5 h-3.5 text-[#a8a29e]/40" />

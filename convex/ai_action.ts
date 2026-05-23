@@ -5,7 +5,11 @@ import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { GoogleGenerativeAI, SchemaType, Tool, Part } from "@google/generative-ai";
 import mammoth from "mammoth";
-import { runChatEngine, executeChatFollowUp } from "./ai_providers";
+import { runChatEngine, executeChatFollowUp, PROVIDER_CAPABILITIES } from "./ai_providers";
+
+function isMultimodalProvider(provider: string): boolean {
+  return PROVIDER_CAPABILITIES[provider]?.multimodal ?? false;
+}
 
 async function getEmbedding(genAI: GoogleGenerativeAI, text: string): Promise<number[]> {
   const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
@@ -132,12 +136,15 @@ You must dynamically read the room and adjust your behavior based on what the us
 - **Workspace Awareness**: You always operate within a specific Workspace (Work, Personal, Side Project). Align all task suggestions and advice with the active workspace's specific goal.
 
 # 3. VERIFICATION & EXECUTION PROTOCOL
-- **Verification & Perfection Policy**: NEVER call task or event mutation tools ('addTask', 'updateTask', 'addEvent', 'deleteTask') on the first turn. You must ensure the information gathered is perfect before execution.
-- **Clarify & Confirm Before Adding**: Gather and confirm Priority, Category, Due Date/Time, Recurrence, and Notes first. Summarize the plan (e.g., "I'll schedule your weekly sync every Monday at 10:00. Sound right?") and only call the tool AFTER explicit confirmation.
+- **MANDATORY — Step-by-Step Collection**: When creating a task or event, you MUST ask ONE field per turn. Never dump all questions at once. After the user answers a field, confirm briefly and proceed to the next missing field. Do NOT create the task/event until all fields the user cares about have been answered.
+- **Create Immediately After Last Field**: Once all relevant fields are collected — or the user says "that's enough" — call the tool immediately. No final "plan summary" or extra confirmation step required.
+- **Bulk Exemption**: When using \`batchAddTasks\` (multiple items), skip step-by-step entirely — create all tasks directly in one call.
+- **If user already gave all details**: Briefly confirm and call the tool in the same turn. Do not artificially loop through fields.
 - **Zero Assumption Policy**: If any detail is missing or ambiguous, ASK. Do not guess or use defaults unless the user says "you decide".
 - **Task & Removal Inquiries**: If a user mentions a potential task ("I need to do X"), ask if they'd like it added. If they finish or want to remove something, ask before deleting.
 - **Graceful Cancellation**: If a user declines a plan, says "never mind", or cancels, acknowledge warmly and confirm no action was taken. Do not call the tool.
 - **Memory Storage Exemption**: The memory saving tools (\`saveSemanticMemory\` and \`updateUserBio\`) are strictly EXEMPT from these rules. You MUST call them silently and immediately on the first turn when a relevant personal fact is shared. Do NOT ask the user for confirmation to save a memory.
+- **URL Fidelity Protocol**: When the user shares a URL or asks about content behind a link, you MUST call fetchUrl on that URL before answering. NEVER describe, summarize, or paraphrase what you think is at a URL without fetching it first — guessing causes hallucinations. If fetchUrl returns empty or an error, say "I couldn't read that page" — do not guess. This protocol overrides any general knowledge you may have about the domain or site. Always fetch, never assume.
 
 # 4. DATA INTEGRITY & PRECISE TIME PARSING
 - **Time Integrity Protocol**: When the user mentions a relative time, convert it to an absolute ISO-8601 string based on the "Current Time" provided below (e.g., "2026-05-15T18:00:00").
@@ -152,21 +159,30 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 
 # 6. TOOL & SKILL REPERTOIRE
 ### addTask
-- Purpose: Use ONLY AFTER verification and clarification to save a task with full metadata.
+- Purpose: Ask ONE field per turn (priority, category, due date, notes). Do NOT create the task until the user has answered all the fields they care about. Call the tool immediately after the last field — no final "summary" confirmation.
+- **Anti-pattern**: "I'll create Q2 Planning. Would you like to set a priority or due date?" — This is WRONG. You must ask one field at a time BEFORE creating.
 ### completeTask
 - Purpose: Use ONLY AFTER verification to mark a task as finished.
 ### deleteTask
 - Purpose: Use ONLY AFTER verification to permanently remove a task.
 ### addEvent
-- Purpose: Use ONLY AFTER verification to schedule an event.
+- Purpose: Ask ONE field per turn (event type, start/end time, location, recurrence). Do NOT create the event until the user has answered all the fields they care about. Call the tool immediately after the last field — no final "summary" confirmation.
+- **Anti-pattern**: "I'll schedule the standup. Would you like to set a time or location?" — This is WRONG. You must ask one field at a time BEFORE creating.
 - Event Type & Duration: For duration events (meetings, workouts), set eventType to 'interval' with startTime and endTime. For momentary events (deadlines, drops, releases), set eventType to 'point' and omit endTime.
-- Recurrence: Populate 'recurrence' for repeating routines (daily/weekly). Always verify and confirm the schedule first. Set base startTime to the first occurrence.
+- Recurrence: Populate 'recurrence' for repeating routines (daily/weekly). Set base startTime to the first occurrence.
 ### deleteEvent
 - Purpose: Use ONLY AFTER verification to remove a scheduled event.
 ### updateEvent
 - Purpose: Use ONLY AFTER verification to modify an existing standalone event or update ALL occurrences of an entire recurring series. Provide only the fields that need modification.
 ### updateEventOccurrence
 - Purpose: Use ONLY AFTER verification to modify or reschedule a single day/occurrence of a recurring series (e.g., 'move Tuesday gym to 8am'). Provide seriesId and originalStartTime. Explain clearly during confirmation that ONLY this specific date was modified.
+### fetchUrl
+- Purpose: Fetch and read the content of a URL shared by the user. Use this to read web pages, articles, or documents at a specific URL.
+- THE URL FIDELITY PROTOCOL:
+  1. When the user shares a URL or asks about content behind a link, you MUST call fetchUrl on that URL before answering.
+  2. NEVER describe, summarize, or paraphrase what you think is at a URL without fetching it first. Guessing causes hallucinations.
+  3. If fetchUrl returns empty, a fetch error, or "Failed to fetch URL", say "I couldn't read that page" — do not guess what it might contain.
+  4. This protocol overrides any general knowledge you may have about the domain or site. Always fetch, never assume.
 ### searchWeb
 - Purpose: Use to search the web for real-time info, facts, documentation, or background context.
 - THE DIALOGUE VERIFICATION PRINCIPLE:
@@ -195,11 +211,20 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Purpose: Create multiple tasks in a single operation. Use whenever the user lists multiple items to add (e.g., "Add buy milk, do laundry, and call dentist"). DO NOT call addTask sequentially for each item.
 - Parameters: tasks (array of { text, priority?, category?, dueDate?, notes? }).
 - Behavior: Returns generated IDs for all created tasks.
+- **Exempt from step-by-step Q&A**: Use immediately when user lists multiple items — do not ask for per-task priority/category/dueDate unless explicitly requested.
 - **Smart Grouping Rule**: If multiple items belong to the same errand category (e.g., groceries, hardware store supplies, pharmacy items), group them into ONE task with a descriptive title and a checklist in the notes field. For example, "buy milk, eggs, bread, butter" → one task titled "Buy groceries" with notes containing the checklist. Only create separate tasks for genuinely distinct categories (e.g., "buy milk, call plumber, finish report" → three separate tasks).
 ### getTaskNotes
 - Purpose: Retrieve the full chronological journal for a specific task. The system briefing only shows the current statusHook and metadata — full notes are loaded on demand with this tool.
 - Parameters: taskId.
 - When to use: When the user asks "What's the history of X?", "Show me the notes for Y", or wants detailed progress context beyond the status hook.
+### getTaskResources
+- Purpose: Retrieve the linked resources (URLs and files) for a specific task. The system briefing shows resource count but not full details — full resources are loaded on demand with this tool.
+- Parameters: taskId.
+- When to use: When the user asks "What's linked to X?", "Show me the files/URLs attached to Y", or wants to view or re-access linked resources.
+### getEventResources
+- Purpose: Retrieve the linked resources (URLs and files) for a specific event.
+- Parameters: eventId.
+- When to use: When the user asks what resources are linked to an event, or wants to view files/URLs attached to an event.
 ### listWorkspaces
 - Purpose: List the user's workspace names, IDs, and colors for context switching and categorization.
 - Parameters: none.
@@ -249,6 +274,12 @@ resources: [{ type: "url", title: "Figma Specs Workspace", url: "https://figma.c
 
 For file attachments that were uploaded in chat, you know their content because you've seen it. Include a concise summary:
 resources: [{ type: "document", title: "budget_draft.pdf", url: "storage:STORAGE_ID", summary: "Q2 budget breakdown, total $2.4M across 3 regions" }]
+
+To view resources linked to an existing task or event, use getTaskResources or getEventResources.
+These tools return the full resources array including titles, URLs, summaries, and types.
+
+When a user shares a URL in chat and expects you to read its content, use fetchUrl to retrieve the page content. The system can extract text from HTML pages and PDF documents automatically.
+When a user uploads PDF files, the system extracts their text content so you can read and discuss them even if you are a text-only model.
 
 Rules:
 - Include a summary only if you know the content from the conversation (don't make it up).
@@ -495,7 +526,7 @@ export const chat = internalAction({
         functionDeclarations: [
           {
             name: "addTask",
-            description: "CRITICAL MANDATE: DO NOT call this tool on the first turn when a user requests to add a task. You MUST ask the user to clarify and confirm the exact details (priority, category, due date) first in conversational text. Only call this tool AFTER the user explicitly says the plan is perfect.",
+            description: "Ask ONE field per turn (priority, category, due date, notes). Call this tool immediately after the last field is answered. No final confirmation needed.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -578,7 +609,7 @@ export const chat = internalAction({
           },
           {
             name: "addEvent",
-            description: "CRITICAL MANDATE: DO NOT call this tool on the first turn when a user requests to schedule an event. You MUST ask the user to clarify and confirm all details (start time, event type, recurrence) first in conversational text. Only call this tool AFTER the user explicitly confirms the plan.",
+            description: "Ask ONE field per turn (event type, start/end time, location, recurrence). Call this tool immediately after the last field is answered. No final confirmation needed.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -760,7 +791,7 @@ export const chat = internalAction({
           },
           {
             name: "batchAddTasks",
-            description: "Creates multiple tasks in a single operation. Use when the user provides a list of tasks to add (e.g., 'Add groceries, laundry, and call the dentist'). Smart Grouping: if multiple items are from the same errand category (groceries, hardware, pharmacy), group them into ONE task with items listed in notes. Only create separate tasks for genuinely distinct categories. Do NOT call addTask repeatedly — use this one tool instead.",
+            description: "Creates multiple tasks in a single operation. Use when the user provides a list of tasks to add (e.g., 'Add groceries, laundry, and call the dentist'). Exempt from step-by-step Q&A — create all tasks immediately. Smart Grouping: if multiple items are from the same errand category (groceries, hardware, pharmacy), group them into ONE task with items listed in notes. Only create separate tasks for genuinely distinct categories. Do NOT call addTask repeatedly — use this one tool instead.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -791,6 +822,39 @@ export const chat = internalAction({
                 taskId: { type: SchemaType.STRING, description: "The ID of the task to retrieve notes for" },
               },
               required: ["taskId"],
+            },
+          },
+          {
+            name: "fetchUrl",
+            description: "YOU MUST call this whenever the user shares a URL or asks about content behind a link. Fetches and reads the content of a URL shared by the user — use this to read web pages, articles, or documents at a specific URL. NEVER describe or summarize what's behind a link without fetching it first. Do not guess what's behind a link — fetch it.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                url: { type: SchemaType.STRING, description: "The full URL to fetch and read" },
+              },
+              required: ["url"],
+            },
+          },
+          {
+            name: "getTaskResources",
+            description: "Retrieves the linked resources (URLs and files) for a specific task. Use when the user asks what resources are linked to a task, or wants to view files/URLs attached to a task.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                taskId: { type: SchemaType.STRING, description: "The ID of the task to retrieve resources for" },
+              },
+              required: ["taskId"],
+            },
+          },
+          {
+            name: "getEventResources",
+            description: "Retrieves the linked resources (URLs and files) for a specific event. Use when the user asks what resources are linked to an event, or wants to view files/URLs attached to an event.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                eventId: { type: SchemaType.STRING, description: "The ID of the event to retrieve resources for" },
+              },
+              required: ["eventId"],
             },
           },
           {
@@ -841,7 +905,7 @@ export const chat = internalAction({
       User's New Message: ${args.text}
       `;
 
-      const mediaParts: Part[] = [];
+      let mediaParts: Part[] = [];
       const extractedTexts: string[] = [];
       const attachmentsToProcess = args.attachments || [];
       // Handle legacy single storageId
@@ -898,6 +962,27 @@ export const chat = internalAction({
                 mimeType: mimeType,
               },
             });
+          }
+
+          if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
+            try {
+              const { extractText } = await import("unpdf");
+              const arrayBuffer = await fileBytes.arrayBuffer();
+              const { text: pdfText } = await extractText(new Uint8Array(arrayBuffer), { mergePages: true });
+              const extractedValue = pdfText.trim();
+              if (extractedValue) {
+                extractedTexts.push(`[CONTENT OF PDF: ${fileName}]\n${extractedValue}`);
+                if (args.messageId) {
+                  await ctx.runMutation(internal.messages_internal.saveExtractedText, {
+                    messageId: args.messageId,
+                    storageId,
+                    text: extractedValue
+                  });
+                }
+              }
+            } catch (err) {
+              console.error(`Error extracting text from PDF ${fileName}:`, err);
+            }
           } else if (isDocx) {
             try {
               const arrayBuffer = await fileBytes.arrayBuffer();
@@ -932,6 +1017,33 @@ export const chat = internalAction({
             console.warn(`Unsupported MIME type for Gemini: ${mimeType}. Skipping attachment ${storageId}`);
           }
         }
+      }
+
+      // Image OCR fallback for text-only providers
+      if (!isMultimodalProvider(providerStr) && mediaParts.length > 0) {
+        const imageParts = mediaParts.filter(p => p.inlineData?.mimeType?.startsWith("image/"));
+        if (imageParts.length > 0 && genAI) {
+          const geminiModelId = customConfigs.gemini?.modelId || "gemini-3.1-flash-lite-preview";
+          const ocrModel = genAI.getGenerativeModel({ model: geminiModelId });
+          for (const part of imageParts) {
+            try {
+              const ocrResult = await ocrModel.generateContent([
+              { text: "Extract all visible text from this image verbatim. If there is no readable text, describe what you see in 1-2 sentences." },
+                part
+              ]);
+              const ocrText = ocrResult.response.text().trim();
+              if (ocrText) {
+                extractedTexts.push(`[IMAGE CONTENT]\n${ocrText}`);
+              }
+            } catch (err) {
+              console.error("Error OCR-ing image:", err);
+            }
+          }
+        } else if (imageParts.length > 0) {
+          // No Gemini key available — add descriptive stubs
+          extractedTexts.push(`[User attached ${imageParts.length} image(s) — OCR unavailable]`);
+        }
+        mediaParts = [];
       }
 
       let engineResult;
@@ -1498,6 +1610,14 @@ export const chat = internalAction({
             });
           } else if (call.name === "getTaskNotes") {
             const { taskId } = call.args as { taskId: string };
+            if (!taskId) {
+              activeToolCalls.push({
+                name: "getTaskNotes",
+                args: call.args as Record<string, unknown>,
+                result: { status: "error", error: "taskId is required" }
+              });
+              continue;
+            }
             const task = await ctx.runQuery(api.tasks.get, { id: taskId as Id<"tasks">, userId: args.userId });
 
             executedActionSummaries.push({
@@ -1514,6 +1634,143 @@ export const chat = internalAction({
                 notes: task?.notes || null,
                 hasNotes: !!task?.notes,
               }
+            });
+          } else if (call.name === "getTaskResources") {
+            const { taskId } = call.args as { taskId: string };
+            if (!taskId) {
+              activeToolCalls.push({
+                name: "getTaskResources",
+                args: call.args as Record<string, unknown>,
+                result: { status: "error", error: "taskId is required" }
+              });
+              continue;
+            }
+            const task = await ctx.runQuery(api.tasks.get, { id: taskId as Id<"tasks">, userId: args.userId });
+
+            executedActionSummaries.push({
+              name: "getTaskResources",
+              summary: task?.resources ? `Retrieved ${task.resources.length} resource(s) for task '${task.text}'` : `No resources found for task '${task?.text}'`
+            });
+            activeToolCalls.push({
+              name: "getTaskResources",
+              args: call.args as Record<string, unknown>,
+              result: {
+                status: "success",
+                taskId,
+                titleHint: task?.text,
+                resources: task?.resources || [],
+                count: task?.resources?.length || 0,
+              }
+            });
+          } else if (call.name === "getEventResources") {
+            const { eventId } = call.args as { eventId: string };
+            if (!eventId) {
+              activeToolCalls.push({
+                name: "getEventResources",
+                args: call.args as Record<string, unknown>,
+                result: { status: "error", error: "eventId is required" }
+              });
+              continue;
+            }
+            const event = await ctx.runQuery(api.events.get, { id: eventId as Id<"events">, userId: args.userId });
+
+            executedActionSummaries.push({
+              name: "getEventResources",
+              summary: event?.resources ? `Retrieved ${event.resources.length} resource(s) for event '${event.title}'` : `No resources found for event '${event?.title}'`
+            });
+            activeToolCalls.push({
+              name: "getEventResources",
+              args: call.args as Record<string, unknown>,
+              result: {
+                status: "success",
+                eventId,
+                titleHint: event?.title,
+                resources: event?.resources || [],
+                count: event?.resources?.length || 0,
+              }
+            });
+          } else if (call.name === "fetchUrl") {
+            const { url } = call.args as { url: string };
+            let title = "";
+            let content = "";
+            let contentType = "unknown";
+            let truncated = false;
+            try {
+              let fetchUrl = url;
+
+              // Detect Google Docs URLs and redirect to plain-text export endpoint
+              const gdocMatch = url.match(/docs\.google\.com\/document\/d\/([a-zA-Z0-9_-]+)/);
+              if (gdocMatch) {
+                fetchUrl = `https://docs.google.com/document/d/${gdocMatch[1]}/export?format=txt`;
+                contentType = "html";
+              }
+
+              // Detect Google Sheets URLs and redirect to TSV export endpoint
+              const gsheetMatch = url.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+              if (gsheetMatch) {
+                fetchUrl = `https://docs.google.com/spreadsheets/d/${gsheetMatch[1]}/export?format=tsv`;
+                contentType = "html";
+              }
+
+              // Detect Google Slides URLs and redirect to plain-text export endpoint
+              const gslideMatch = url.match(/docs\.google\.com\/presentation\/d\/([a-zA-Z0-9_-]+)/);
+              if (gslideMatch) {
+                fetchUrl = `https://docs.google.com/presentation/d/${gslideMatch[1]}/export?format=txt`;
+                contentType = "html";
+              }
+
+              const res = await fetch(fetchUrl, {
+                headers: { "User-Agent": "Dialogue/1.0" },
+                signal: AbortSignal.timeout(15000),
+              });
+              const mimeType = res.headers.get("content-type") || "";
+              const isPdf = mimeType.includes("pdf") || url.match(/\.pdf$/i);
+              const isHtml = mimeType.includes("text/html") || mimeType.includes("text/plain");
+
+              if (isPdf) {
+                contentType = "pdf";
+                const buffer = await res.arrayBuffer();
+                const { extractText } = await import("unpdf");
+                const { text: pdfText } = await extractText(new Uint8Array(buffer), { mergePages: true });
+                content = pdfText.trim();
+              } else if (isHtml) {
+                contentType = "html";
+                const html = await res.text();
+                const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+                title = titleMatch ? titleMatch[1].trim() : "";
+                content = html
+                  .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+                  .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+                  .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "")
+                  .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
+                  .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
+                  .replace(/<[^>]+>/g, " ")
+                  .replace(/&[a-z]+;/g, " ")
+                  .replace(/&amp;/g, "&")
+                  .replace(/\s+/g, " ")
+                  .trim();
+              } else {
+                contentType = "text";
+                content = await res.text();
+              }
+              if (content.length > 10000) {
+                content = content.slice(0, 10000) + "... [truncated]";
+                truncated = true;
+              }
+            } catch (err: any) {
+              content = `Failed to fetch URL: ${err?.message || "Unknown error"}`;
+            }
+
+            executedActionSummaries.push({
+              name: "fetchUrl",
+              summary: content.startsWith("Failed to fetch")
+                ? content
+                : `URL: ${url}\nTitle: ${title || "(no title)"}\n\n${content}`
+            });
+            activeToolCalls.push({
+              name: "fetchUrl",
+              args: call.args as Record<string, unknown>,
+              result: { url, title, content, contentType, truncated }
             });
           } else if (call.name === "listWorkspaces") {
             const workspaces = await ctx.runQuery(api.workspaces.list, { userId: args.userId });
