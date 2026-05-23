@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { auth } from "./auth";
+import { encrypt, decrypt } from "./encryption";
 
 const SKILLS_INSTRUCTION = `
 ## Agent Skills Reference
@@ -319,14 +320,33 @@ export const saveMemory = mutation({
 });
 
 export const getProfile = query({
-  args: { userId: v.optional(v.id("users")) },
+  args: { userId: v.optional(v.id("users")), revealKeys: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) return null;
-    return await ctx.db
+    const profile = await ctx.db
       .query("userProfile")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
+      
+    if (profile && profile.preferences) {
+      const prefs = profile.preferences as Record<string, any>;
+      if (prefs.customConfigs) {
+        const safeConfigs = JSON.parse(JSON.stringify(prefs.customConfigs));
+        for (const p of Object.keys(safeConfigs)) {
+          if (safeConfigs[p]?.apiKey) {
+            try {
+              safeConfigs[p].apiKey = await decrypt(safeConfigs[p].apiKey);
+            } catch (e: any) {
+              console.error("Decryption failed for profile query:", e);
+              safeConfigs[p].apiKey = `ERROR: ${e.message}`; // Surface error to UI
+            }
+          }
+        }
+        prefs.customConfigs = safeConfigs;
+      }
+    }
+    return profile;
   },
 });
 
@@ -356,8 +376,9 @@ export const updateProfile = mutation({
 
 export const updatePreferences = mutation({
   args: { 
-    provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"))),
+    provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"), v.literal("openai"), v.literal("anthropic"))),
     searchProvider: v.optional(v.union(v.literal("tavily"), v.literal("serper"))),
+    customConfigs: v.optional(v.any()),
     userId: v.optional(v.id("users"))
   },
   handler: async (ctx, args) => {
@@ -369,13 +390,32 @@ export const updatePreferences = mutation({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
 
+    const preferences = profile ? ((profile.preferences as Record<string, unknown>) || {}) : {};
+    const existingConfigs = (preferences.customConfigs as Record<string, any>) || {};
+
+    let processedConfigs = args.customConfigs;
+    if (processedConfigs) {
+      for (const p of Object.keys(processedConfigs)) {
+        if (processedConfigs[p]?.apiKey) {
+          try {
+            processedConfigs[p].apiKey = await encrypt(processedConfigs[p].apiKey);
+          } catch (e: any) {
+            console.error("Encryption failed:", e);
+            throw new Error("Failed to encrypt API key. Ensure ENCRYPTION_KEY is set in Convex dashboard.");
+          }
+        }
+      }
+    }
+
     if (profile) {
-      const preferences = (profile.preferences as Record<string, unknown>) || {};
+      const newConfigs = processedConfigs ? { ...existingConfigs, ...processedConfigs } : existingConfigs;
+
       await ctx.db.patch(profile._id, {
         preferences: { 
           ...preferences, 
           ...(args.provider ? { provider: args.provider } : {}),
-          ...(args.searchProvider ? { searchProvider: args.searchProvider } : {})
+          ...(args.searchProvider ? { searchProvider: args.searchProvider } : {}),
+          customConfigs: newConfigs
         }
       });
     } else {
@@ -384,7 +424,8 @@ export const updatePreferences = mutation({
         bio: "",
         preferences: { 
           ...(args.provider ? { provider: args.provider } : { provider: "gemini" }),
-          ...(args.searchProvider ? { searchProvider: args.searchProvider } : { searchProvider: "tavily" })
+          ...(args.searchProvider ? { searchProvider: args.searchProvider } : { searchProvider: "tavily" }),
+          ...(processedConfigs ? { customConfigs: processedConfigs } : {})
         }
       });
     }
@@ -425,6 +466,7 @@ export const deleteMemory = mutation({
     await ctx.db.delete(args.id);
   },
 });
+
 
 export const addTask = mutation({
   args: {

@@ -47,7 +47,7 @@ export function SignInForm() {
           <p className="text-zinc-500 text-sm font-medium tracking-wide">Productivity reimagined through conversation.</p>
         </div>
 
-        <div className="bg-[#1a1814] border border-[#2a2723] rounded-[32px] p-8 shadow-2xl shadow-black/50">
+        <div className="bg-[#1a1814] border border-[#2a2723] rounded-4xl p-8 shadow-2xl shadow-black/50">
           <div className="flex gap-1 bg-[#0f0e0c] p-1 rounded-2xl mb-8 border border-[#2a2723]">
             <button
               onClick={() => setStep("signIn")}

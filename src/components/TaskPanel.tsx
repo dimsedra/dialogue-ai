@@ -103,7 +103,7 @@ export function TaskPanel({
 
   const eventDates = useMemo(() => {
     if (!events) return [];
-    return events.map((e) => new Date(e.startTime));
+    return events.map((e: any) => new Date(e.startTime));
   }, [events]);
 
   const displayEvents = useMemo(() => {
@@ -138,7 +138,7 @@ export function TaskPanel({
 
   const eventsOnSelectedDate = useMemo(() => {
     if (!events || !selectedDate) return [];
-    return events.filter((e) => isSameDay(new Date(e.startTime), selectedDate));
+    return events.filter((e: any) => isSameDay(new Date(e.startTime), selectedDate));
   }, [events, selectedDate]);
 
   useEffect(() => {

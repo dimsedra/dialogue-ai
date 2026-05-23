@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "@auth0/auth0-react": "^2.16.2",
     "@convex-dev/auth": "^0.0.92",
     "@google/generative-ai": "^0.24.1",

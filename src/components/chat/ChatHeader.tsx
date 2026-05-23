@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, Tag, X, Check, Zap, Cpu, Menu, LogOut } from "lucide-react";
+import { Sparkles, Tag, X, Check, Zap, Cpu, Menu, LogOut, Brain } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -11,9 +11,10 @@ interface ChatHeaderProps {
   activeWorkspaceId: Id<"workspaces"> | undefined;
   workspaces: Doc<"workspaces">[] | undefined;
   messageCount: number;
-  provider: "gemini" | "lmstudio";
+  provider: "gemini" | "lmstudio" | "openai" | "anthropic";
+  activeModelName: string;
   isLargeViewport?: boolean;
-  onProviderChange: (p: "gemini" | "lmstudio") => void;
+  onProviderChange: (p: "gemini" | "lmstudio" | "openai" | "anthropic") => void;
   onSignOut: () => void;
   onShowHistory: () => void;
 }
@@ -25,6 +26,7 @@ export function ChatHeader({
   workspaces,
   messageCount,
   provider,
+  activeModelName,
   onProviderChange,
   onSignOut,
   onShowHistory,
@@ -71,7 +73,7 @@ export function ChatHeader({
                       : "#d4a373",
                   }}
                 />
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#a8a29e] max-w-[60px] truncate">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#a8a29e] max-w-15 truncate">
                   {activeWorkspaceId ? workspaces?.find((w) => w._id === activeWorkspaceId)?.name : "Universal"}
                 </span>
               </div>
@@ -79,7 +81,7 @@ export function ChatHeader({
 
             <div className="hidden lg:block space-y-1">
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold text-[#f2efeb] tracking-tight truncate max-w-[200px] lg:max-w-md">
+                <h1 className="text-xl font-bold text-[#f2efeb] tracking-tight truncate max-w-50 lg:max-w-md">
                   {activeSessionTitle || "New Session"}
                 </h1>
 
@@ -90,9 +92,12 @@ export function ChatHeader({
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#d4a373] hover:border-[#d4a373]/40 transition-all shadow-lg shadow-black/20 group"
                     title="Change AI Provider"
                   >
-                    {provider === "gemini" ? <Zap className="w-3.5 h-3.5" /> : <Cpu className="w-3.5 h-3.5" />}
+                    {provider === "gemini" && <Zap className="w-3.5 h-3.5" />}
+                    {provider === "openai" && <Sparkles className="w-3.5 h-3.5" />}
+                    {provider === "anthropic" && <Brain className="w-3.5 h-3.5" />}
+                    {provider === "lmstudio" && <Cpu className="w-3.5 h-3.5" />}
                     <span className="text-[10px] font-black uppercase tracking-widest text-[#a8a29e] group-hover:text-[#d4a373] transition-colors">
-                      {provider === "gemini" ? "Gemini" : "Local"}
+                      {activeModelName}
                     </span>
                   </button>
 
@@ -104,13 +109,13 @@ export function ChatHeader({
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
                           onClick={() => setShowSettings(false)}
-                          className="fixed inset-0 bg-[#000]/60 backdrop-blur-sm z-[60]"
+                          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-60"
                         />
                         <motion.div
                           initial={{ opacity: 0, y: 10, scale: 0.95 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                          className="absolute top-full left-0 mt-3 w-[250px] bg-[#1a1814] border border-[#2a2723] rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[70] space-y-4"
+                          className="absolute top-full left-0 mt-3 w-62.5 bg-[#1a1814] border border-[#2a2723] rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-70 space-y-4"
                         >
                           <div className="flex items-center justify-between">
                             <div className="space-y-1">
@@ -127,31 +132,27 @@ export function ChatHeader({
                             </button>
                           </div>
 
-                          <div className="space-y-2">
-                            <button
-                              onClick={() => onProviderChange("gemini")}
-                              className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
-                                provider === "gemini"
-                                  ? "bg-[#d4a373]/10 border-[#d4a373]/30 text-[#d4a373]"
-                                  : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:border-[#3a3733]"
-                              }`}
-                            >
-                              <span className="text-xs font-bold">Google Gemini</span>
-                              {provider === "gemini" && <Check className="w-3.5 h-3.5" />}
-                            </button>
-
-                            <button
-                              onClick={() => onProviderChange("lmstudio")}
-                              className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
-                                provider === "lmstudio"
-                                  ? "bg-[#d4a373]/10 border-[#d4a373]/30 text-[#d4a373]"
-                                  : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:border-[#3a3733]"
-                              }`}
-                            >
-                              <span className="text-xs font-bold">Local LLM (LM Studio)</span>
-                              {provider === "lmstudio" && <Check className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
+                          <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                             {( [
+                               { id: "gemini", name: "Google Gemini" },
+                               { id: "openai", name: "OpenAI" },
+                               { id: "anthropic", name: "Anthropic" },
+                               { id: "lmstudio", name: "Local LLM (LM Studio)" }
+                             ] as const).map((p) => (
+                               <button
+                                 key={p.id}
+                                 onClick={() => onProviderChange(p.id)}
+                                 className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all text-left ${
+                                   provider === p.id
+                                     ? "bg-[#d4a373]/10 border-[#d4a373]/30 text-[#d4a373]"
+                                     : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:border-[#3a3733]"
+                                 }`}
+                               >
+                                 <span className="text-xs font-bold">{p.name}</span>
+                                 {provider === p.id && <Check className="w-3.5 h-3.5" />}
+                               </button>
+                             ))}
+                           </div>
 
                           <div className="pt-2 border-t border-[#2a2723]">
                             <button
@@ -207,13 +208,13 @@ export function ChatHeader({
                               animate={{ opacity: 1 }}
                               exit={{ opacity: 0 }}
                               onClick={() => setIsEditingWorkspaceContext(false)}
-                              className="fixed inset-0 bg-[#000]/60 backdrop-blur-sm z-[60]"
+                              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-60"
                             />
                             <motion.div
                               initial={{ opacity: 0, y: 10, scale: 0.95 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                              className="absolute top-full left-0 mt-3 w-[400px] bg-[#1a1814] border border-[#d4a373]/30 rounded-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[70] space-y-4"
+                              className="absolute top-full left-0 mt-3 w-100 bg-[#1a1814] border border-[#d4a373]/30 rounded-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-70 space-y-4"
                             >
                               <div className="space-y-1">
                                 <h3 className="text-xs font-bold uppercase tracking-widest text-[#d4a373]">
@@ -239,7 +240,7 @@ export function ChatHeader({
                                   }
                                 }}
                                 placeholder="Type instructions here..."
-                                className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-xl p-4 text-xs text-[#f2efeb] placeholder:text-[#a8a29e]/20 min-h-[160px] resize-none outline-none focus:border-[#d4a373]/40 transition-all scrollbar-hide"
+                                className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-xl p-4 text-xs text-[#f2efeb] placeholder:text-[#a8a29e]/20 min-h-40 resize-none outline-none focus:border-[#d4a373]/40 transition-all scrollbar-hide"
                               />
                               <div className="flex items-center justify-end gap-3 pt-2">
                                 <button

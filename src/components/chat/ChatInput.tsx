@@ -94,7 +94,7 @@ export const ChatInput = React.memo(function ChatInput({
       style={{ 
         bottom: isLargeViewport ? 0 : `${keyboardOffset}px`,
       }}
-      className="absolute left-0 right-0 px-3 py-4 lg:p-8 bg-gradient-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40 transition-none"
+      className="absolute left-0 right-0 px-3 py-4 lg:p-8 bg-linear-to-t from-[#0f0e0c] via-[#0f0e0c]/95 to-transparent z-40 transition-none"
     >
       {/* Attachment Tray */}
       <AnimatePresence>
@@ -134,7 +134,7 @@ export const ChatInput = React.memo(function ChatInput({
                 </div>
                 
                 {/* Filename Tag (Floating) */}
-                <div className="absolute top-0 left-full ml-3 px-3 py-2 bg-[#1a1814]/90 backdrop-blur-xl rounded-xl border border-[#2a2723] shadow-xl pointer-events-none opacity-0 group-hover/thumb:opacity-100 transition-all -translate-x-2 group-hover/thumb:translate-x-0 hidden lg:block whitespace-nowrap z-[70]">
+                <div className="absolute top-0 left-full ml-3 px-3 py-2 bg-[#1a1814]/90 backdrop-blur-xl rounded-xl border border-[#2a2723] shadow-xl pointer-events-none opacity-0 group-hover/thumb:opacity-100 transition-all -translate-x-2 group-hover/thumb:translate-x-0 hidden lg:block whitespace-nowrap z-70">
                   <p className="text-[10px] font-bold text-[#f2efeb]">{file.name}</p>
                   <p className="text-[8px] text-[#a8a29e] uppercase tracking-widest font-medium">{(file.size / 1024).toFixed(1)} KB</p>
                 </div>
@@ -162,7 +162,7 @@ export const ChatInput = React.memo(function ChatInput({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="absolute left-2 lg:left-3 top-[28px] -translate-y-1/2 p-2 rounded-lg text-[#a8a29e] hover:text-[#d4a373] hover:bg-[#d4a373]/10 transition-all z-10"
+          className="absolute left-2 lg:left-3 top-7 -translate-y-1/2 p-2 rounded-lg text-[#a8a29e] hover:text-[#d4a373] hover:bg-[#d4a373]/10 transition-all z-10"
           disabled={isUploading || !activeSessionId}
         >
           <PlusCircle className={`w-5 h-5 ${isUploading ? 'animate-spin' : ''}`} />
@@ -185,10 +185,10 @@ export const ChatInput = React.memo(function ChatInput({
           placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Ask Dialogue..."}
           disabled={!activeSessionId || isUploading}
           style={{ minHeight: "56px" }}
-          className="relative w-full bg-[#1a1814]/90 backdrop-blur-xl border border-[#2a2723] text-[#f2efeb] pl-12 lg:pl-14 pr-16 lg:pr-20 py-4 rounded-[2rem] focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-shadow duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl resize-none leading-relaxed outline-none scrollbar-none [&::-webkit-scrollbar]:hidden"
+          className="relative w-full bg-[#1a1814]/90 backdrop-blur-xl border border-[#2a2723] text-[#f2efeb] pl-12 lg:pl-14 pr-16 lg:pr-20 py-4 rounded-4xl focus:outline-none focus:border-[#d4a373]/40 focus:ring-1 focus:ring-[#d4a373]/20 transition-shadow duration-300 placeholder:text-[#a8a29e]/30 text-sm lg:text-[15px] shadow-2xl resize-none leading-relaxed outline-none scrollbar-none [&::-webkit-scrollbar]:hidden"
         />
         
-        <div className="absolute right-2 lg:right-2.5 top-[28px] -translate-y-1/2 flex items-center gap-1 z-10">
+        <div className="absolute right-2 lg:right-2.5 top-7 -translate-y-1/2 flex items-center gap-1 z-10">
           {isScrollable && (
             <ChevronsUpDown className="w-4 h-4 text-[#a8a29e]/50 animate-pulse hidden sm:block" />
           )}

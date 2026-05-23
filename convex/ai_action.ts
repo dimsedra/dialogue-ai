@@ -5,6 +5,7 @@ import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { GoogleGenerativeAI, SchemaType, Tool, Part } from "@google/generative-ai";
 import mammoth from "mammoth";
+import { runChatEngine, executeChatFollowUp } from "./ai_providers";
 
 async function getEmbedding(genAI: GoogleGenerativeAI, text: string): Promise<number[]> {
   const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
@@ -243,51 +244,78 @@ export const chat = internalAction({
     }))),
   },
   handler: async (ctx, args) => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("GEMINI_API_KEY is not set in environment variables.");
+    const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId, userId: args.userId });
+    const workspaceId = session?.workspaceId;
+
+    // 1. Fetch user profile and relevant memories via Vector Search
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
+    
+    // Get custom configs and selected provider
+    const customConfigs = (profile?.preferences as any)?.customConfigs || {};
+    const providerStr = (profile?.preferences as any)?.provider || "gemini";
+
+    // Validate active provider API Key
+    let activeKey = "";
+    if (providerStr === "gemini") {
+      activeKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY || "";
+    } else if (providerStr === "openai") {
+      activeKey = customConfigs.openai?.apiKey || process.env.OPENAI_API_KEY || "";
+    } else if (providerStr === "anthropic") {
+      activeKey = customConfigs.anthropic?.apiKey || process.env.ANTHROPIC_API_KEY || "";
+    } else if (providerStr === "lmstudio") {
+      activeKey = "lm-studio"; // Local execution
+    }
+
+    if (!activeKey) {
+      console.error(`API Key for provider "${providerStr}" is not set in environment variables or custom config.`);
+      const providerLabel = providerStr === "gemini" ? "Google Gemini" : providerStr === "openai" ? "OpenAI" : providerStr === "anthropic" ? "Anthropic" : providerStr;
       await ctx.runMutation(internal.messages.internalSend, {
         sessionId: args.sessionId,
-        text: "I'm sorry, I can't process your request right now because my API key is missing.",
+        text: `I'm sorry, I can't process your request right now because the API key for ${providerLabel} is missing. Please add it in Settings.`,
         author: "AI",
       });
       return;
     }
 
-    const session = await ctx.runQuery(api.messages.getSession, { id: args.sessionId, userId: args.userId });
-    const workspaceId = session?.workspaceId;
-
-    // 1. Fetch user profile and relevant memories via Vector Search
-    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
-    const genAI = new GoogleGenerativeAI(apiKey);
+    // Get Gemini key for embedding/vector search fallback if available
+    const geminiApiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
+    const genAI = geminiApiKey ? new GoogleGenerativeAI(geminiApiKey) : null;
 
     let personalityFragments = "No specific patterns learned yet.";
-    try {
-      const queryEmbedding = await getEmbedding(genAI, args.text);
+    if (genAI) {
+      try {
+        const queryEmbedding = await getEmbedding(genAI, args.text);
 
-      const searchResults = await ctx.vectorSearch("memories", "by_embedding", {
-        vector: queryEmbedding,
-        limit: 5,
-        filter: (q) => q.eq("userId", args.userId),
-      });
+        const searchResults = await ctx.vectorSearch("memories", "by_embedding", {
+          vector: queryEmbedding,
+          limit: 5,
+          filter: (q) => q.eq("userId", args.userId),
+        });
 
-      if (searchResults.length > 0) {
-        const matchedMemories = await Promise.all(
-          searchResults.map(async (res) => {
-            const doc = await ctx.runQuery(api.ai.getMemoryById, { id: res._id });
-            return doc?.text;
-          })
-        );
-        const filteredMatched = matchedMemories.filter(Boolean);
-        if (filteredMatched.length > 0) {
-          personalityFragments = filteredMatched.join("\n- ");
+        if (searchResults.length > 0) {
+          const matchedMemories = await Promise.all(
+            searchResults.map(async (res) => {
+              const doc = await ctx.runQuery(api.ai.getMemoryById, { id: res._id });
+              return doc?.text;
+            })
+          );
+          const filteredMatched = matchedMemories.filter(Boolean);
+          if (filteredMatched.length > 0) {
+            personalityFragments = filteredMatched.join("\n- ");
+          }
+        }
+      } catch (err) {
+        console.error("Vector search failed, falling back to chronological memories:", err);
+        const memories = await ctx.runQuery(api.ai.getLatestMemories, { userId: args.userId });
+        if (memories.length > 0) {
+          personalityFragments = memories.map((m: any) => m.text).join("\n- ");
         }
       }
-    } catch (err) {
-      console.error("Vector search failed, falling back to chronological memories:", err);
+    } else {
+      console.warn("GEMINI_API_KEY is not available. Skipping vector memory search, falling back to chronological memories.");
       const memories = await ctx.runQuery(api.ai.getLatestMemories, { userId: args.userId });
       if (memories.length > 0) {
-        personalityFragments = memories.map(m => m.text).join("\n- ");
+        personalityFragments = memories.map((m: any) => m.text).join("\n- ");
       }
     }
 
@@ -314,8 +342,8 @@ export const chat = internalAction({
 
     const briefing = await ctx.runQuery(api.tasks.getDailyBriefing, { workspaceId, userId: args.userId });
     const priorityWeight: Record<string, number> = { high: 1, medium: 2, low: 3 };
-    const pendingTasks = briefing.tasks.filter((t) => !t.completed);
-    const completedTasks = briefing.tasks.filter((t) => t.completed);
+    const pendingTasks = briefing.tasks.filter((t: any) => !t.completed);
+    const completedTasks = briefing.tasks.filter((t: any) => t.completed);
 
     const sortedTasks = [...pendingTasks].sort((a, b) => {
       const pA = priorityWeight[a.priority || "medium"] ?? 2;
@@ -352,14 +380,14 @@ export const chat = internalAction({
 
     const upcomingEvents = await ctx.runQuery(api.events.list, { workspaceId, userId: args.userId });
     const sortedEvents = upcomingEvents
-      .filter(e => e.startTime > Date.now() - 3600000)
-      .sort((a, b) => {
+      .filter((e: any) => e.startTime > Date.now() - 3600000)
+      .sort((a: any, b: any) => {
         if (a.eventType === "point" && b.eventType !== "point") return -1;
         if (b.eventType === "point" && a.eventType !== "point") return 1;
         return a.startTime - b.startTime;
       });
     const upcomingEventsContext = sortedEvents
-      .map(e => {
+      .map((e: any) => {
         const eventDate = args.timezoneOffset !== undefined
           ? new Date(e.startTime - (args.timezoneOffset * 60000))
           : new Date(e.startTime);
@@ -627,11 +655,11 @@ export const chat = internalAction({
         userId: args.userId
       });
       const transcript = recentMessages
-        .filter(m => m._id !== args.messageId)
+        .filter((m: any) => m._id !== args.messageId)
         .slice(-20)
-        .map((msg) => {
+        .map((msg: any) => {
           const attachmentContext = (msg.attachments || [])
-            .map(a => `[File: ${a.fileName}${a.extractedText ? ` (Content: ${a.extractedText.substring(0, 500)}...)` : ""}]`)
+            .map((a: any) => `[File: ${a.fileName}${a.extractedText ? ` (Content: ${a.extractedText.substring(0, 500)}...)` : ""}]`)
             .join(" ");
           return `${msg.author}: ${attachmentContext ? attachmentContext + " " : ""}${msg.text}`;
         })
@@ -644,12 +672,10 @@ export const chat = internalAction({
         args: Record<string, unknown>;
         result?: Record<string, unknown>;
       }> = [];
+      const executedActionSummaries: Array<{ name: string; summary: string; isSearch?: boolean }> = [];
 
-      const model = genAI.getGenerativeModel({
-        model: "gemini-3.1-flash-lite-preview",
-        systemInstruction,
-        tools,
-      });
+      const providerStr = (profile?.preferences as any)?.provider || "gemini";
+      const customConfigs = (profile?.preferences as any)?.customConfigs || {};
 
       const prompt = `
       Conversation History:
@@ -751,18 +777,21 @@ export const chat = internalAction({
         }
       }
 
-      const promptParts: (string | Part)[] = [
-        prompt,
-        ...mediaParts,
-        ...(extractedTexts.length > 0 ? [`\n\nADDITIONAL ATTACHED FILE CONTENTS:\n${extractedTexts.join("\n\n---\n\n")}`] : [])
-      ];
-      let result;
+      let engineResult;
       try {
-        result = await model.generateContent(promptParts);
-      } catch (err) {
-        const error = err as { status?: number; message?: string };
-        if (error?.status === 429 || error?.message?.includes("429")) {
-          console.error("Gemini Rate Limit Hit:", err);
+        engineResult = await runChatEngine({
+          provider: providerStr,
+          customConfigs,
+          systemInstruction,
+          transcript,
+          userMessage: args.text,
+          mediaParts,
+          extractedTexts,
+          tools
+        });
+      } catch (err: any) {
+        if (err?.status === 429 || err?.message?.includes("429") || err?.message?.includes("Rate Limit")) {
+          console.error("Rate Limit Hit:", err);
           await ctx.runMutation(internal.messages.internalSend, {
             sessionId: args.sessionId,
             text: "Waduh, sepertinya saya sedang menerima terlalu banyak permintaan (Rate Limit). Coba lagi dalam beberapa saat ya! 🙏",
@@ -772,9 +801,11 @@ export const chat = internalAction({
         }
         throw err;
       }
-      const response = result.response;
 
-      const calls = response.functionCalls();
+      const calls = engineResult.calls;
+      const reasoningContent = engineResult.reasoningContent;
+      aiText = engineResult.text; // Use initial text if there are no tools
+
       if (calls && calls.length > 0) {
         const searchCalls = calls.filter(c => c.name === "searchWeb");
         const otherCalls = calls.filter(c => c.name !== "searchWeb");
@@ -794,7 +825,7 @@ export const chat = internalAction({
           return new Date(s).getTime();
         };
 
-        const executedActionSummaries: { name: string; summary: string }[] = [];
+
 
         for (const call of otherCalls) {
           // --- Task Tool Handlers ---
@@ -1025,7 +1056,7 @@ export const chat = internalAction({
             });
           } else if (call.name === "updateUserBio") {
             const updates = call.args as { bio: string };
-            const oldProfile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
+            const oldProfile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
             await ctx.runMutation(api.ai.updateProfile, { ...updates, userId: args.userId });
             executedActionSummaries.push({
               name: "updateUserBio",
@@ -1041,12 +1072,20 @@ export const chat = internalAction({
             });
           } else if (call.name === "saveSemanticMemory") {
             const { text } = call.args as { text: string };
-            const realEmbedding = await getEmbedding(genAI, text);
-            await ctx.runMutation(api.ai.saveMemory, { text, embedding: realEmbedding, userId: args.userId });
-            executedActionSummaries.push({
-              name: "saveSemanticMemory",
-              summary: `Saved a new granular semantic memory: "${text}"`
-            });
+            if (!genAI) {
+              console.warn("Skipping saveSemanticMemory because Gemini API key is not available.");
+              executedActionSummaries.push({
+                name: "saveSemanticMemory",
+                summary: `Skipped saving memory because Google Gemini API key is not configured.`
+              });
+            } else {
+              const realEmbedding = await getEmbedding(genAI, text);
+              await ctx.runMutation(api.ai.saveMemory, { text, embedding: realEmbedding, userId: args.userId });
+              executedActionSummaries.push({
+                name: "saveSemanticMemory",
+                summary: `Saved a new granular semantic memory: "${text}"`
+              });
+            }
             activeToolCalls.push({
               name: "saveSemanticMemory",
               args: call.args as Record<string, unknown>,
@@ -1079,6 +1118,15 @@ export const chat = internalAction({
             });
 
             if (stats) {
+              if (!genAI) {
+                console.error("Cannot generate reflection summary: Gemini API key is missing.");
+                await ctx.runMutation(internal.messages.internalSend, {
+                  sessionId: args.sessionId,
+                  text: "I'm sorry, I can't generate a reflection summary because the Google Gemini API key is not configured in Settings.",
+                  author: "AI",
+                });
+                return;
+              }
               const summaryModel = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
               const statsText = `
                 Type: ${type}
@@ -1162,9 +1210,9 @@ export const chat = internalAction({
         }
 
         if (searchCalls.length > 0) {
-          const tavilyKey = process.env.TAVILY_API_KEY;
-          const serperKey = process.env.SERPER_API_KEY;
           const searchProvider = (profile?.preferences as { searchProvider?: string })?.searchProvider || "tavily";
+          const tavilyKey = customConfigs.tavily?.apiKey || process.env.TAVILY_API_KEY;
+          const serperKey = customConfigs.serper?.apiKey || process.env.SERPER_API_KEY;
 
           const searchResults = await Promise.all(searchCalls.map(async (call) => {
             const { query } = call.args as { query: string };
@@ -1215,43 +1263,26 @@ export const chat = internalAction({
             activeToolCalls.push({ name: "multiSearch", args: { count: searchCalls.length, queries: searchCalls.map(c => (c.args as any).query) }, result: { status: "success" } });
           }
 
-          const modelParts = (response.candidates?.[0]?.content?.parts || []).filter(p => p.functionCall);
-
-          const feedbackPrompt = {
-            contents: [
-              { role: "user", parts: [{ text: prompt }] },
-              { role: "model", parts: modelParts },
-              { role: "user", parts: searchResults.map(res => ({ functionResponse: res })) }
-            ]
-          };
-          const finalResult = await model.generateContent(feedbackPrompt);
-          aiText = finalResult.response.text();
+          searchResults.forEach((res, i) => {
+             executedActionSummaries.push({
+               name: searchCalls[i].name,
+               summary: res.response.result,
+               isSearch: true
+             });
+          });
         }
 
-        // 3. Ensure we have an accurate, natural text response reflecting actual database execution
         if (executedActionSummaries.length > 0) {
-          const modelParts = (response.candidates?.[0]?.content?.parts || []).filter(p => p.functionCall);
-
-          const confirmationPrompt = {
-            contents: [
-              { role: "user", parts: [{ text: prompt }] },
-              { role: "model", parts: modelParts },
-              {
-                role: "user",
-                parts: [
-                  ...executedActionSummaries.map(s => ({
-                    functionResponse: {
-                      name: s.name,
-                      response: { status: "success", executionDetails: s.summary }
-                    }
-                  })),
-                  { text: "The requested actions were successfully executed in the database. Now, output ONLY your natural, conversational confirmation addressed directly to the user, using the EXACT same language the user used in their query. CRITICAL: Do NOT repeat or output any internal prompt instructions, scratchpad notes, or thought processes. If you modified a single occurrence of a recurring event (updateEventOccurrence), clearly state that ONLY that specific day's event was modified/rescheduled, while the rest of the routine schedule remains exactly the same." }
-                ]
-              }
-            ]
-          };
-          const confirmResult = await model.generateContent(confirmationPrompt);
-          aiText = confirmResult.response.text();
+          aiText = await executeChatFollowUp({
+            provider: providerStr,
+            customConfigs,
+            systemInstruction,
+            transcript,
+            userMessage: args.text,
+            calls,
+            executedActionSummaries,
+            reasoningContent
+          });
         }
 
         if (reflectionSummaryText) {
@@ -1259,23 +1290,16 @@ export const chat = internalAction({
         }
 
         if (!aiText) {
-          try {
-            aiText = response.text();
-          } catch {
-            // Ultimate fallback - but make it dynamic
-            const variations = [
-              "All set! I've taken care of that for you.",
-              "Done. Everything's updated as we discussed.",
-              "Handled! Your workspace is synced up now.",
-              "Got it sorted. You're all set to go."
-            ];
-            aiText = variations[Math.floor(Math.random() * variations.length)];
-          }
+          // Ultimate fallback - but make it dynamic
+          const variations = [
+            "All set! I've taken care of that for you.",
+            "Done. Everything's updated as we discussed.",
+            "Handled! Your workspace is synced up now.",
+            "Got it sorted. You're all set to go."
+          ];
+          aiText = variations[Math.floor(Math.random() * variations.length)];
         }
-      } else {
-        aiText = response.text();
       }
-
       if (aiText) {
         aiText = aiText
           .replace(/^(?:DO NOT|CRITICAL|NOTE|IMPORTANT|INSTRUCTION|RULE|SYSTEM|MANDATORY):?.*\n+/gi, "")
@@ -1327,14 +1351,19 @@ export const chat = internalAction({
 export const generateSessionTitle = internalAction({
   args: { sessionId: v.id("chatSessions"), userId: v.id("users") },
   handler: async (ctx, args) => {
-    const apiKey = process.env.GEMINI_API_KEY!;
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
+    const customConfigs = (profile?.preferences as any)?.customConfigs || {};
+    const apiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
+    
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
     const messages = await ctx.runQuery(api.messages.list, { sessionId: args.sessionId, userId: args.userId });
     if (!messages || messages.length === 0) return;
 
-    const transcript = messages.map(m => `${m.author}: ${m.text}`).join("\n");
+    const transcript = messages.map((m: any) => `${m.author}: ${m.text}`).join("\n");
 
     const prompt = `Based on the following conversation transcript, detect the primary language used and generate a very short, creative, and descriptive title in that exact same language (maximum 3-4 words). Output ONLY the title without any introductory text.
     Do not use quotes, punctuation, or special characters.
@@ -1353,9 +1382,13 @@ export const parseDate = action({
   args: {
     text: v.string(),
     timezoneOffset: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
   },
-  handler: async (ctx, args) => {
-    const apiKey = process.env.GEMINI_API_KEY;
+  handler: async (ctx, args): Promise<string | null> => {
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
+    const customConfigs = (profile?.preferences as any)?.customConfigs || {};
+    const apiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
+    
     if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -1383,7 +1416,9 @@ Respond ONLY with the ISO-8601 string or "null" if invalid.`;
 export const saveSemanticMemoryAction = action({
   args: { text: v.string(), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
+    const customConfigs = (profile?.preferences as any)?.customConfigs || {};
+    const apiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
     const genAI = new GoogleGenerativeAI(apiKey);
     const embedding = await getEmbedding(genAI, args.text);
@@ -1398,21 +1433,23 @@ export const generateCronReflection = internalAction({
     type: v.union(v.literal("weekly"), v.literal("monthly")),
   },
   handler: async (ctx, args) => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
+    const customConfigs = (profile?.preferences as any)?.customConfigs || {};
+    const apiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
+
     if (!apiKey) {
       console.error("GEMINI_API_KEY is not set.");
       return;
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId });
     
     const recentMessages = await ctx.runQuery(api.messages.list, {
       sessionId: args.sessionId,
       userId: args.userId
     });
-    const lastUserText = recentMessages.slice().reverse().find(m => m.author === "User")?.text || "Hello";
-    const lastMsgWithTz = recentMessages.slice().reverse().find(m => m.timezoneOffset !== undefined);
+    const lastUserText = recentMessages.slice().reverse().find((m: any) => m.author === "User")?.text || "Hello";
+    const lastMsgWithTz = recentMessages.slice().reverse().find((m: any) => m.timezoneOffset !== undefined);
     const timezoneOffset = lastMsgWithTz?.timezoneOffset ?? 0;
 
     const offset = args.type === "monthly" ? 1 : 0;

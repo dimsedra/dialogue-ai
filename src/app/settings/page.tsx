@@ -18,9 +18,11 @@ import {
   Globe,
   LogOut,
   Edit3,
-  X
+  X,
+  Eye,
+  EyeOff
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -35,11 +37,24 @@ export default function SettingsPage() {
   const updatePreferences = useMutation(api.ai.updatePreferences);
   const { signOut } = useAuthActions();
 
+  useEffect(() => {
+    document.documentElement.classList.add("allow-scroll");
+    document.body.classList.add("allow-scroll");
+    return () => {
+      document.documentElement.classList.remove("allow-scroll");
+      document.body.classList.remove("allow-scroll");
+    };
+  }, []);
+
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
-  const [provider, setProvider] = useState<"gemini" | "lmstudio">("gemini");
+  type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic";
+  const [provider, setProvider] = useState<AIProvider>("gemini");
+  const [customConfigs, setCustomConfigs] = useState<Record<string, { apiKey?: string, baseUrl?: string, modelId?: string }>>({});
   const [searchProvider, setSearchProvider] = useState<"tavily" | "serper">("tavily");
   const [prevProfileId, setPrevProfileId] = useState<Id<"userProfile"> | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showSearchApiKey, setShowSearchApiKey] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"profile" | "ai" | "memory">("profile");
   const [isSaving, setIsSaving] = useState(false);
@@ -53,7 +68,10 @@ export default function SettingsPage() {
     setName(profile.name || "");
     setBio(profile.bio || "");
     if (profile.preferences?.provider) {
-      setProvider(profile.preferences.provider as "gemini" | "lmstudio");
+      setProvider(profile.preferences.provider as AIProvider);
+    }
+    if (profile.preferences?.customConfigs) {
+      setCustomConfigs(profile.preferences.customConfigs);
     }
     if (profile.preferences?.searchProvider) {
       setSearchProvider(profile.preferences.searchProvider as "tavily" | "serper");
@@ -64,7 +82,7 @@ export default function SettingsPage() {
     setIsSaving(true);
     try {
       await updateProfile({ name, bio });
-      await updatePreferences({ provider, searchProvider });
+      await updatePreferences({ provider, searchProvider, customConfigs });
     } catch (error) {
       console.error(error);
     } finally {
@@ -85,7 +103,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen overflow-y-auto bg-[#0f0e0c] text-[#f2efeb] selection:bg-[#d4a373]/30 custom-scrollbar">
+    <div className="settings-container bg-[#0f0e0c] text-[#f2efeb] selection:bg-[#d4a373]/30 custom-scrollbar">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 pb-32 md:pb-12">
         {/* Header */}
         <div className="flex flex-col items-start gap-1 mb-8">
@@ -217,11 +235,13 @@ export default function SettingsPage() {
                     <div className="grid grid-cols-1 gap-2">
                       {( [
                         { id: "gemini", name: "Google Gemini", desc: "Cloud-based reasoning and large context.", icon: Zap },
+                        { id: "openai", name: "OpenAI", desc: "GPT-4 and compatible endpoints.", icon: Sparkles },
+                        { id: "anthropic", name: "Anthropic", desc: "Claude 3.5 Sonnet and Opus.", icon: Brain },
                         { id: "lmstudio", name: "LM Studio", desc: "Local execution for maximum privacy.", icon: Bot }
                       ] as const).map((p) => (
                         <button 
                           key={p.id}
-                          onClick={() => setProvider(p.id)}
+                          onClick={() => { setProvider(p.id); setShowApiKey(false); }}
                           className={`p-3 rounded-lg border transition-all text-left flex items-center justify-between group ${
                             provider === p.id 
                               ? "bg-[#0f0e0c] border-[#d4a373]/40" 
@@ -244,6 +264,60 @@ export default function SettingsPage() {
                       ))}
                     </div>
 
+                    <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
+                      <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">Custom {provider} Config</h3>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                          {provider === "lmstudio" ? "API Key (Ignored for local LLM)" : "API Key (Overrides Env Var)"}
+                        </label>
+                        <div className="relative flex items-center">
+                          <input 
+                            type={showApiKey ? "text" : "password"}
+                            value={customConfigs[provider]?.apiKey || ""}
+                            onChange={(e) => setCustomConfigs(prev => ({ ...prev, [provider]: { ...prev[provider], apiKey: e.target.value } }))}
+                            onCopy={(e) => !showApiKey && e.preventDefault()}
+                            onCut={(e) => !showApiKey && e.preventDefault()}
+                            placeholder={provider === "lmstudio" ? (showApiKey ? "lm-studio" : "••••••••••••") : (showApiKey ? "sk-..." : "••••••••••••")}
+                            className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg pl-3 pr-9 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-2.5 text-[#a8a29e] hover:text-[#f2efeb] focus:outline-none transition-colors"
+                            title={showApiKey ? "Hide API Key" : "Show API Key"}
+                          >
+                            {showApiKey ? (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            ) : (
+                              <Eye className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                          {provider === "lmstudio" ? "Base URL (Defaults to http://localhost:1234/v1)" : "Base URL (Optional)"}
+                        </label>
+                        <input 
+                          type="text"
+                          value={customConfigs[provider]?.baseUrl || ""}
+                          onChange={(e) => setCustomConfigs(prev => ({ ...prev, [provider]: { ...prev[provider], baseUrl: e.target.value } }))}
+                          placeholder={provider === "openai" ? "https://api.openai.com/v1" : provider === "lmstudio" ? "http://localhost:1234/v1" : ""}
+                          className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">Model ID (Optional)</label>
+                        <input 
+                          type="text"
+                          value={customConfigs[provider]?.modelId || ""}
+                          onChange={(e) => setCustomConfigs(prev => ({ ...prev, [provider]: { ...prev[provider], modelId: e.target.value } }))}
+                          placeholder={provider === "openai" ? "gpt-4o" : provider === "anthropic" ? "claude-3-5-sonnet-latest" : provider === "lmstudio" ? "e.g. llama-3.2-3b-instruct" : "gemini-1.5-pro"}
+                          className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                        />
+                      </div>
+                    </div>
+
                     <div className="mt-6 pt-5 border-t border-[#2a2723]">
                       <div className="flex items-center gap-2.5 mb-4">
                         <Search className="w-4 h-4 text-[#d4a373]" />
@@ -257,7 +331,7 @@ export default function SettingsPage() {
                         ] as const).map((s) => (
                           <button 
                             key={s.id}
-                            onClick={() => setSearchProvider(s.id)}
+                            onClick={() => { setSearchProvider(s.id); setShowSearchApiKey(false); }}
                             className={`p-3 rounded-lg border transition-all text-left group ${
                               searchProvider === s.id 
                                 ? "bg-[#0f0e0c] border-[#d4a373]/40" 
@@ -276,6 +350,37 @@ export default function SettingsPage() {
                             <p className="text-[10px] text-[#a8a29e] leading-tight">{s.desc}</p>
                           </button>
                         ))}
+                      </div>
+
+                      {/* Custom Search Config */}
+                      <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
+                        <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">Custom {searchProvider} Config</h3>
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">API Key (Overrides Env Var)</label>
+                          <div className="relative flex items-center">
+                            <input 
+                              type={showSearchApiKey ? "text" : "password"}
+                              value={customConfigs[searchProvider]?.apiKey || ""}
+                              onChange={(e) => setCustomConfigs(prev => ({ ...prev, [searchProvider]: { ...prev[searchProvider], apiKey: e.target.value } }))}
+                              onCopy={(e) => !showSearchApiKey && e.preventDefault()}
+                              onCut={(e) => !showSearchApiKey && e.preventDefault()}
+                              placeholder={showSearchApiKey ? (searchProvider === "tavily" ? "tvly-..." : "api_key") : "••••••••••••"}
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg pl-3 pr-9 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSearchApiKey(!showSearchApiKey)}
+                              className="absolute right-2.5 text-[#a8a29e] hover:text-[#f2efeb] focus:outline-none transition-colors"
+                              title={showSearchApiKey ? "Hide API Key" : "Show API Key"}
+                            >
+                              {showSearchApiKey ? (
+                                <EyeOff className="w-3.5 h-3.5" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </section>
@@ -323,7 +428,7 @@ export default function SettingsPage() {
                           <p className="text-[#a8a29e] text-[10px] italic">No memories stored.</p>
                         </div>
                       )}
-                      {memories?.map((memory) => (
+                      {memories?.map((memory: any) => (
                         <div 
                           key={memory._id}
                           className="group p-2.5 rounded-lg bg-[#0f0e0c] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all"
@@ -386,6 +491,9 @@ export default function SettingsPage() {
       </div>
 
       <style jsx global>{`
+        .settings-container {
+          min-height: 100dvh;
+        }
         .custom-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #2a2723; border-radius: 10px; }

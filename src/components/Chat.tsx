@@ -68,6 +68,7 @@ export function Chat({
   const updateUserBio = useMutation(api.ai.updateProfile);
   const saveSemanticMemory = useAction(api.ai_action.saveSemanticMemoryAction);
   const saveReflection = useMutation(api.reflections.saveReflection);
+  const updatePreferences = useMutation(api.ai.updatePreferences);
 
   const convex = useConvex();
 
@@ -76,9 +77,11 @@ export function Chat({
   const [isTyping, setIsTyping] = useState(false);
   const isSyncing = !!(activeSessionId && messages === undefined);
 
-  const [provider, setProvider] = useState<"gemini" | "lmstudio">(() => {
+  type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic";
+
+  const [provider, setProvider] = useState<AIProvider>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("dialogue_provider") as "gemini" | "lmstudio") || "gemini";
+      return (localStorage.getItem("dialogue_provider") as AIProvider) || "gemini";
     }
     return "gemini";
   });
@@ -89,13 +92,38 @@ export function Chat({
   if (profile && profile._id !== lastSyncedProfileId) {
     setLastSyncedProfileId(profile._id);
     if (profile.preferences?.provider && profile.preferences.provider !== provider) {
-      setProvider(profile.preferences.provider);
+      setProvider(profile.preferences.provider as AIProvider);
     }
   }
 
-  const handleProviderChange = (p: "gemini" | "lmstudio") => {
+  const handleProviderChange = async (p: AIProvider) => {
     setProvider(p);
     localStorage.setItem("dialogue_provider", p);
+    try {
+      await updatePreferences({ provider: p });
+    } catch (err) {
+      console.error("Failed to update active provider in DB preferences:", err);
+    }
+  };
+
+  const getActiveModelName = (): string => {
+    const customConfigs = profile?.preferences?.customConfigs as Record<string, { apiKey?: string, baseUrl?: string, modelId?: string }> | undefined;
+    const config = customConfigs?.[provider];
+    if (config?.modelId) {
+      return config.modelId;
+    }
+    switch (provider) {
+      case "gemini":
+        return "gemini-3.1-flash";
+      case "openai":
+        return "gpt-5.5";
+      case "anthropic":
+        return "claude-sonnet";
+      case "lmstudio":
+        return "local";
+      default:
+        return "ai";
+    }
   };
   
   useEffect(() => {
@@ -456,7 +484,7 @@ export function Chat({
 
     if (provider === "lmstudio") {
       try {
-        await runLocalLLMForSession(sessionId, syncText, { brief: true });
+        await runLocalLLMForSession(sessionId as Id<"chatSessions">, syncText, { brief: true });
       } finally {
         setIsTyping(false);
       }
@@ -541,11 +569,11 @@ export function Chat({
     setIsCreatingWorkspace(false);
   };
 
-  const currentWorkspace = workspaces?.find(w => w._id === activeWorkspaceId);
+  const currentWorkspace = workspaces?.find((w: any) => w._id === activeWorkspaceId);
 
   const handleDeleteChat = async (id: Id<"chatSessions">, e: React.MouseEvent) => {
     e.stopPropagation();
-    const session = sessions?.find(s => s._id === id);
+    const session = sessions?.find((s: any) => s._id === id);
     if (session) {
       setConfirmDeleteSession({ id, title: session.title || "Untitled Session" });
     }
@@ -599,12 +627,13 @@ export function Chat({
         className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
       >
         <ChatHeader
-          activeSessionTitle={activeSessionId ? sessions?.find(s => s._id === activeSessionId)?.title : undefined}
+          activeSessionTitle={activeSessionId ? sessions?.find((s: any) => s._id === activeSessionId)?.title : undefined}
           currentWorkspace={currentWorkspace}
           activeWorkspaceId={activeWorkspaceId}
           workspaces={workspaces}
           messageCount={messages?.length || 0}
           provider={provider}
+          activeModelName={getActiveModelName()}
           isLargeViewport={isLargeViewport}
           onProviderChange={handleProviderChange}
           onSignOut={() => signOut()}

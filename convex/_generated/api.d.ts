@@ -10,8 +10,10 @@
 
 import type * as ai from "../ai.js";
 import type * as ai_action from "../ai_action.js";
+import type * as ai_providers from "../ai_providers.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
+import type * as encryption from "../encryption.js";
 import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as messages from "../messages.js";
@@ -30,8 +32,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   ai_action: typeof ai_action;
+  ai_providers: typeof ai_providers;
   auth: typeof auth;
   crons: typeof crons;
+  encryption: typeof encryption;
   events: typeof events;
   http: typeof http;
   messages: typeof messages;

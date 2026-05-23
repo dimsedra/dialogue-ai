@@ -128,7 +128,7 @@ const sendArgs = {
   author: v.string(), 
   timezoneOffset: v.optional(v.number()),
   brief: v.optional(v.boolean()),
-  provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"))),
+  provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"), v.literal("openai"), v.literal("anthropic"))),
   toolCall: v.optional(v.object({
     name: v.string(),
     args: v.any(),
