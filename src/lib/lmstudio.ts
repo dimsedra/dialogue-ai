@@ -257,6 +257,78 @@ export async function processLocalLLMRequest({
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "searchHistoricalEntities",
+        description: "Searches completed tasks and past calendar events within a date range. Use when the user asks about what they've done, finished, or attended in the past (e.g., 'What did I complete last week?', 'Show me events from March').",
+        parameters: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["tasks", "events", "all"], description: "What to search: 'tasks' for completed tasks, 'events' for past events, 'all' for both" },
+            query: { type: "string", description: "Optional keyword to filter results (e.g. 'PR review', 'meeting')" },
+            startTime: { type: "number", description: "Optional start of date range in UTC milliseconds" },
+            endTime: { type: "number", description: "Optional end of date range in UTC milliseconds" },
+            limit: { type: "number", description: "Optional max results to return (default 20)" },
+          },
+          required: ["type"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "batchAddTasks",
+        description: "Creates multiple tasks in a single operation. Use when the user provides a list of tasks to add (e.g., 'Add groceries, laundry, and call the dentist'). Smart Grouping: if multiple items are from the same errand category (groceries, hardware, pharmacy), group them into ONE task with items listed in notes. Only create separate tasks for genuinely distinct categories. Do NOT call addTask repeatedly — use this one tool instead.",
+        parameters: {
+          type: "object",
+          properties: {
+            tasks: {
+              type: "array",
+              description: "Array of task objects to create",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string", description: "The task description" },
+                  priority: { type: "string", enum: ["low", "medium", "high"], description: "Optional priority" },
+                  category: { type: "string", description: "Optional category" },
+                  dueDate: { type: "string", description: "Optional ISO-8601 due date (24-hour, e.g. '2026-05-15T14:00:00')." },
+                  notes: { type: "string", description: "Optional extra notes" },
+                },
+                required: ["text"],
+              },
+            },
+          },
+          required: ["tasks"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "getTaskNotes",
+        description: "Retrieves the full chronological notes/journal for a specific task. Use when the user asks about the history, progress log, or detailed context of a task (e.g., 'Show me the notes for my CCNA lab task').",
+        parameters: {
+          type: "object",
+          properties: {
+            taskId: { type: "string", description: "The ID of the task to retrieve notes for" },
+          },
+          required: ["taskId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "listWorkspaces",
+        description: "Lists all workspaces the user has created. Use when the user asks about their workspaces, wants to switch context, or you need to know available workspaces for categorization.",
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
+      },
+    },
   ];
 
   const messages = [

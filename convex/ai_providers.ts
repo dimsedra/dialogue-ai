@@ -20,20 +20,20 @@ export interface ChatEngineResult {
   reasoningContent?: string;
 }
 
-function parseDsmlToolCalls(text: string): Array<{ name: string; args: Record<string, unknown> }> {
+function parseXmlToolCalls(text: string): Array<{ name: string; args: Record<string, unknown> }> {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
-  // Use character class [|｜] to handle standard pipes and full-width vertical bars
-  const toolCallsRegex = /<[|｜][|｜]DSML[|｜][|｜]tool_calls>([\s\S]*?)<\/[|｜][|｜]DSML[|｜][|｜]tool_calls>/g;
+  // Match both plain <tool_calls> and <||DSML||tool_calls> variants
+  const toolCallsRegex = /<(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>([\s\S]*?)<\/(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>/g;
   let match;
   while ((match = toolCallsRegex.exec(text)) !== null) {
     const blockContent = match[1];
-    const invokeRegex = /<[|｜][|｜]DSML[|｜][|｜]invoke name="([^"]+)">([\s\S]*?)<\/[|｜][|｜]DSML[|｜][|｜]invoke>/g;
+    const invokeRegex = /<(?:[|｜][|｜]DSML[|｜][|｜])?invoke\s+name="([^"]+)"(?:[^>]*)?>([\s\S]*?)<\/(?:[|｜][|｜]DSML[|｜][|｜])?invoke>/g;
     let invokeMatch;
     while ((invokeMatch = invokeRegex.exec(blockContent)) !== null) {
       const toolName = invokeMatch[1];
       const invokeContent = invokeMatch[2];
       const args: Record<string, unknown> = {};
-      const paramRegex = /<[|｜][|｜]DSML[|｜][|｜]parameter name="([^"]+)"(?:\s+[^>]+)?>([\s\S]*?)<\/[|｜][|｜]DSML[|｜][|｜]parameter>/g;
+      const paramRegex = /<(?:[|｜][|｜]DSML[|｜][|｜])?parameter\s+name="([^"]+)"(?:[^>]*)?>([\s\S]*?)<\/(?:[|｜][|｜]DSML[|｜][|｜])?parameter>/g;
       let paramMatch;
       while ((paramMatch = paramRegex.exec(invokeContent)) !== null) {
         const paramName = paramMatch[1];
@@ -128,10 +128,10 @@ export async function runChatEngine(options: ChatEngineOptions): Promise<ChatEng
       return null;
     }).filter(Boolean) || [];
 
-    const dsmlCalls = parseDsmlToolCalls(text);
-    if (dsmlCalls.length > 0) {
-      calls.push(...dsmlCalls);
-      text = text.replace(/<[|｜][|｜]DSML[|｜][|｜]tool_calls>[\s\S]*?<\/[|｜][|｜]DSML[|｜][|｜]tool_calls>/g, "").trim();
+    const xmlCalls = parseXmlToolCalls(text);
+    if (xmlCalls.length > 0) {
+      calls.push(...xmlCalls);
+      text = text.replace(/<(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>[\s\S]*?<\/(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>/g, "").trim();
     }
 
     const reasoningContent = (msg as any).reasoning_content || (msg as any).thinking || undefined;

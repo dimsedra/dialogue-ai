@@ -183,3 +183,74 @@ export const getDailyBriefing = query({
     return { tasks, profile };
   },
 });
+
+export const searchHistory = query({
+  args: {
+    query: v.optional(v.string()),
+    startTime: v.optional(v.number()),
+    endTime: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) return [];
+
+    let results = await ctx.db
+      .query("tasks")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("completed"), true))
+      .collect();
+
+    if (args.startTime !== undefined) {
+      results = results.filter((t) => (t.completedAt ?? t.createdAt) >= args.startTime!);
+    }
+    if (args.endTime !== undefined) {
+      results = results.filter((t) => (t.completedAt ?? t.createdAt) <= args.endTime!);
+    }
+    if (args.query) {
+      const lower = args.query.toLowerCase();
+      results = results.filter((t) => t.text.toLowerCase().includes(lower));
+    }
+    results.sort((a, b) => (b.completedAt ?? b.createdAt) - (a.completedAt ?? a.createdAt));
+    if (args.limit !== undefined) {
+      results = results.slice(0, args.limit);
+    }
+    return results;
+  },
+});
+
+export const batchAdd = mutation({
+  args: {
+    tasks: v.array(v.object({
+      text: v.string(),
+      priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
+      category: v.optional(v.string()),
+      dueDate: v.optional(v.number()),
+      notes: v.optional(v.string()),
+    })),
+    workspaceId: v.optional(v.id("workspaces")),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+
+    const ids: string[] = [];
+    for (const task of args.tasks) {
+      const id = await ctx.db.insert("tasks", {
+        userId,
+        text: task.text,
+        workspaceId: args.workspaceId,
+        completed: false,
+        dueDate: task.dueDate,
+        priority: task.priority || "medium",
+        category: task.category || "General",
+        notes: task.notes,
+        createdAt: Date.now(),
+      });
+      ids.push(id);
+    }
+    return ids;
+  },
+});

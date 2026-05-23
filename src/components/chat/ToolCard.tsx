@@ -1,4 +1,4 @@
-import { CheckCircle2, Tag, Clock, Edit3, Check, Trash2, Zap, CalendarDays, MapPin, Search, Sparkles, RefreshCw, Flame, Award } from "lucide-react";
+import { CheckCircle2, Tag, Clock, Edit3, Check, Trash2, Zap, CalendarDays, MapPin, Search, Sparkles, RefreshCw, Flame, Award, List, FileText, Layers } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { motion } from "framer-motion";
 import { ToolCall, TaskToolArgs, EventToolArgs } from "./types";
@@ -426,6 +426,115 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
                 </span>
               ))}
             </div>
+          </div>
+        )}
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "searchHistoricalEntities") {
+    const result = toolCall.result as { count?: number; results?: Array<{ type: string; text?: string; title?: string }> } | undefined;
+    const count = result?.count ?? 0;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-[#3b82f6]/5 border border-[#3b82f6]/10 space-y-2 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center gap-2 text-[#3b82f6]">
+          <Search className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Historical Search</span>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-[#3b82f6]/10 text-[#3b82f6]/80 font-bold">{count} found</span>
+        </div>
+        {result?.results && result.results.length > 0 && (
+          <div className="space-y-1 max-h-[120px] overflow-y-auto">
+            {result.results.slice(0, 5).map((item, i) => (
+              <div key={i} className="flex items-center gap-2 text-[11px] text-[#a8a29e]">
+                <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase ${item.type === "task" ? "bg-emerald-500/10 text-emerald-400" : "bg-[#8b5cf6]/10 text-[#8b5cf6]"}`}>
+                  {item.type}
+                </span>
+                <span className="truncate">{item.text || item.title}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "batchAddTasks") {
+    const result = toolCall.result as { count?: number; ids?: string[] } | undefined;
+    const args = toolCall.args as { tasks?: Array<{ text: string }> } | undefined;
+    const count = result?.count ?? args?.tasks?.length ?? 0;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center gap-2 text-[#d4a373]">
+          <List className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Tasks Added</span>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-[#d4a373]/10 text-[#d4a373]/80 font-bold">{count}</span>
+        </div>
+        {args?.tasks && args.tasks.length > 0 && (
+          <ul className="space-y-0.5">
+            {args.tasks.map((t, i) => (
+              <li key={i} className="flex items-center gap-1.5 text-[11px] text-[#a8a29e]">
+                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                <span className="truncate">{t.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "getTaskNotes") {
+    const result = toolCall.result as { titleHint?: string; hasNotes?: boolean; notes?: string | null } | undefined;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-cyan-500/5 border border-cyan-500/10 space-y-2 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center gap-2 text-cyan-400">
+          <FileText className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Task Notes</span>
+        </div>
+        <p className="text-[12px] text-[#f2efeb] font-semibold truncate">{result?.titleHint || "Task"}</p>
+        {result?.hasNotes ? (
+          <p className="text-[11px] text-[#a8a29e] italic leading-relaxed line-clamp-4 whitespace-pre-wrap">{result.notes}</p>
+        ) : (
+          <p className="text-[11px] text-[#a8a29e]/60 italic">No notes recorded yet.</p>
+        )}
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "listWorkspaces") {
+    const result = toolCall.result as { workspaces?: Array<{ name: string; color?: string; _id: string }> } | undefined;
+    const workspaces = result?.workspaces ?? [];
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2 shadow-lg shadow-black/10 max-w-[400px]"
+      >
+        <div className="flex items-center gap-2 text-indigo-400">
+          <Layers className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Workspaces</span>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400/80 font-bold">{workspaces.length}</span>
+        </div>
+        {workspaces.length > 0 && (
+          <div className="space-y-1">
+            {workspaces.map((w) => (
+              <div key={w._id} className="flex items-center gap-2 text-[11px] text-[#a8a29e]">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: w.color || "#d4a373" }} />
+                <span>{w.name}</span>
+              </div>
+            ))}
           </div>
         )}
       </motion.div>

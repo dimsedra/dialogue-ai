@@ -307,3 +307,43 @@ export const updateOccurrence = mutation({
     });
   },
 });
+
+export const searchHistory = query({
+  args: {
+    query: v.optional(v.string()),
+    startTime: v.optional(v.number()),
+    endTime: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) return [];
+
+    let results = await ctx.db
+      .query("events")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .filter((q) => q.lt(q.field("startTime"), Date.now()))
+      .collect();
+
+    if (args.startTime !== undefined) {
+      results = results.filter((e) => e.startTime >= args.startTime!);
+    }
+    if (args.endTime !== undefined) {
+      results = results.filter((e) => e.startTime <= args.endTime!);
+    }
+    if (args.query) {
+      const lower = args.query.toLowerCase();
+      results = results.filter(
+        (e) =>
+          e.title.toLowerCase().includes(lower) ||
+          (e.description && e.description.toLowerCase().includes(lower))
+      );
+    }
+    results.sort((a, b) => b.startTime - a.startTime);
+    if (args.limit !== undefined) {
+      results = results.slice(0, args.limit);
+    }
+    return results;
+  },
+});

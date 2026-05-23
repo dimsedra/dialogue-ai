@@ -425,6 +425,85 @@ export function Chat({
               }
             }
           }
+          else if (name === "searchHistoricalEntities") {
+            const histArgs = args as {
+              type: "tasks" | "events" | "all";
+              query?: string;
+              startTime?: number;
+              endTime?: number;
+              limit?: number;
+            };
+
+            let results: unknown[] = [];
+            const limit = histArgs.limit ?? 20;
+
+            if (histArgs.type === "tasks" || histArgs.type === "all") {
+              const tasks = await convex.query(api.tasks.searchHistory, {
+                query: histArgs.query,
+                startTime: histArgs.startTime,
+                endTime: histArgs.endTime,
+                limit,
+              });
+              results = results.concat(tasks.map((t) => ({
+                type: "task" as const,
+                id: t._id,
+                text: t.text,
+                completedAt: t.completedAt,
+                category: t.category,
+                priority: t.priority,
+              })));
+            }
+
+            if (histArgs.type === "events" || histArgs.type === "all") {
+              const events = await convex.query(api.events.searchHistory, {
+                query: histArgs.query,
+                startTime: histArgs.startTime,
+                endTime: histArgs.endTime,
+                limit,
+              });
+              results = results.concat(events.map((e) => ({
+                type: "event",
+                id: e._id,
+                title: e.title,
+                startTime: e.startTime,
+                location: e.location,
+              })));
+            }
+
+            results = results.slice(0, limit);
+            enrichedArgs.count = results.length;
+            enrichedArgs.results = results;
+          }
+          else if (name === "batchAddTasks") {
+            const batchArgs = args as {
+              tasks: Array<{ text: string; priority?: string; category?: string; dueDate?: string; notes?: string }>;
+            };
+
+            const parsedTasks = batchArgs.tasks.map((t) => ({
+              text: t.text,
+              priority: t.priority as "low" | "medium" | "high" | undefined,
+              category: t.category,
+              dueDate: t.dueDate ? parseLocal(t.dueDate) : undefined,
+              notes: t.notes,
+            }));
+
+            const ids = await convex.mutation(api.tasks.batchAdd, {
+              tasks: parsedTasks,
+              workspaceId: promptCtx.workspaceId ?? undefined,
+            });
+            enrichedArgs.ids = ids;
+            enrichedArgs.count = ids.length;
+          }
+          else if (name === "getTaskNotes") {
+            const task = await convex.query(api.tasks.get, { id: args.taskId as Id<"tasks"> });
+            enrichedArgs.notes = task?.notes || null;
+            enrichedArgs.hasNotes = !!task?.notes;
+            enrichedArgs.titleHint = task?.text;
+          }
+          else if (name === "listWorkspaces") {
+            const workspaces = await convex.query(api.workspaces.list, {});
+            enrichedArgs.workspaces = workspaces;
+          }
 
           const isOnlyContext = (name === "updateTask" && Object.keys(args).every(k => ["taskId", "notes", "progress", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "progress", "statusHook"].includes(k))) ||
             (name === "updateEvent" && Object.keys(args).every(k => ["eventId", "notes", "outcome", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "outcome", "statusHook"].includes(k)));

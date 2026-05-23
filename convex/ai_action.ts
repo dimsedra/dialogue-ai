@@ -186,6 +186,24 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Parameters:
   * type: "weekly", "monthly", or "yearly".
   * offsetWeeks, offsetMonths, offsetYears: number (optional, default 0 for current week/month/year. Use positive numbers to look back in history).
+### searchHistoricalEntities
+- Purpose: Search the user's completed tasks and past events on demand. Use when the user asks retrospective questions about what they've done, finished, or attended.
+- Parameters: type ("tasks", "events", or "all"), optional query (keyword filter), optional startTime/endTime (date range in UTC ms), optional limit (max results).
+- Behavior: Returns a combined list of completed tasks and/or past events within the specified range.
+- Auto-Search Pattern: You may proactively call this tool before answering historical questions. Do NOT say you don't know about past activity — use this tool.
+### batchAddTasks
+- Purpose: Create multiple tasks in a single operation. Use whenever the user lists multiple items to add (e.g., "Add buy milk, do laundry, and call dentist"). DO NOT call addTask sequentially for each item.
+- Parameters: tasks (array of { text, priority?, category?, dueDate?, notes? }).
+- Behavior: Returns generated IDs for all created tasks.
+- **Smart Grouping Rule**: If multiple items belong to the same errand category (e.g., groceries, hardware store supplies, pharmacy items), group them into ONE task with a descriptive title and a checklist in the notes field. For example, "buy milk, eggs, bread, butter" → one task titled "Buy groceries" with notes containing the checklist. Only create separate tasks for genuinely distinct categories (e.g., "buy milk, call plumber, finish report" → three separate tasks).
+### getTaskNotes
+- Purpose: Retrieve the full chronological journal for a specific task. The system briefing only shows the current statusHook and metadata — full notes are loaded on demand with this tool.
+- Parameters: taskId.
+- When to use: When the user asks "What's the history of X?", "Show me the notes for Y", or wants detailed progress context beyond the status hook.
+### listWorkspaces
+- Purpose: List the user's workspace names, IDs, and colors for context switching and categorization.
+- Parameters: none.
+- When to use: When the user asks about their workspaces, wants to move items between them, or you need workspace context.
 
 # 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
 You maintain a "living chronological journal" on every task and event inside the 'notes' field.
@@ -643,6 +661,65 @@ export const chat = internalAction({
                 query: { type: SchemaType.STRING, description: "The search query to look up" },
               },
               required: ["query"],
+            },
+          },
+          {
+            name: "searchHistoricalEntities",
+            description: "Searches completed tasks and past calendar events within a date range. Use when the user asks about what they've done, finished, or attended in the past (e.g., 'What did I complete last week?', 'Show me events from March').",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                type: { type: SchemaType.STRING, description: "What to search: 'tasks', 'events', or 'all'. 'tasks' for completed tasks, 'events' for past events, 'all' for both" },
+                query: { type: SchemaType.STRING, description: "Optional keyword to filter results (e.g. 'PR review', 'meeting')" },
+                startTime: { type: SchemaType.NUMBER, description: "Optional start of date range in UTC milliseconds" },
+                endTime: { type: SchemaType.NUMBER, description: "Optional end of date range in UTC milliseconds" },
+                limit: { type: SchemaType.NUMBER, description: "Optional max results to return (default 20)" },
+              },
+              required: ["type"],
+            },
+          },
+          {
+            name: "batchAddTasks",
+            description: "Creates multiple tasks in a single operation. Use when the user provides a list of tasks to add (e.g., 'Add groceries, laundry, and call the dentist'). Smart Grouping: if multiple items are from the same errand category (groceries, hardware, pharmacy), group them into ONE task with items listed in notes. Only create separate tasks for genuinely distinct categories. Do NOT call addTask repeatedly — use this one tool instead.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                tasks: {
+                  type: SchemaType.ARRAY,
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      text: { type: SchemaType.STRING, description: "The task description" },
+                      priority: { type: SchemaType.STRING, description: "Optional priority: 'low', 'medium', or 'high'" },
+                      category: { type: SchemaType.STRING, description: "Optional category" },
+                      dueDate: { type: SchemaType.STRING, description: "Optional ISO-8601 due date (24-hour, e.g. '2026-05-15T14:00:00'). DO NOT append 'Z'." },
+                      notes: { type: SchemaType.STRING, description: "Optional extra notes" },
+                    },
+                    required: ["text"],
+                  },
+                },
+              },
+              required: ["tasks"],
+            },
+          },
+          {
+            name: "getTaskNotes",
+            description: "Retrieves the full chronological notes/journal for a specific task. Use when the user asks about the history, progress log, or detailed context of a task (e.g., 'Show me the notes for my CCNA lab task').",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                taskId: { type: SchemaType.STRING, description: "The ID of the task to retrieve notes for" },
+              },
+              required: ["taskId"],
+            },
+          },
+          {
+            name: "listWorkspaces",
+            description: "Lists all workspaces the user has created. Use when the user asks about their workspaces, wants to switch context, or you need to know available workspaces for categorization.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {},
+              required: [],
             },
           },
         ],
@@ -1206,6 +1283,123 @@ export const chat = internalAction({
                 }
               });
             }
+          } else if (call.name === "searchHistoricalEntities") {
+            const histArgs = call.args as {
+              type: "tasks" | "events" | "all";
+              query?: string;
+              startTime?: number;
+              endTime?: number;
+              limit?: number;
+            };
+
+            let results: unknown[] = [];
+            const limit = histArgs.limit ?? 20;
+
+            if (histArgs.type === "tasks" || histArgs.type === "all") {
+              const tasks = await ctx.runQuery(api.tasks.searchHistory, {
+                query: histArgs.query,
+                startTime: histArgs.startTime,
+                endTime: histArgs.endTime,
+                limit,
+                userId: args.userId,
+              });
+              results = results.concat(tasks.map((t) => ({
+                type: "task" as const,
+                id: t._id,
+                text: t.text,
+                completedAt: t.completedAt,
+                category: t.category,
+                priority: t.priority,
+              })));
+            }
+
+            if (histArgs.type === "events" || histArgs.type === "all") {
+              const events = await ctx.runQuery(api.events.searchHistory, {
+                query: histArgs.query,
+                startTime: histArgs.startTime,
+                endTime: histArgs.endTime,
+                limit,
+                userId: args.userId,
+              });
+              results = results.concat(events.map((e) => ({
+                type: "event",
+                id: e._id,
+                title: e.title,
+                startTime: e.startTime,
+                location: e.location,
+              })));
+            }
+
+            results = results.slice(0, limit);
+
+            executedActionSummaries.push({
+              name: "searchHistoricalEntities",
+              summary: `Found ${results.length} historical ${histArgs.type === "all" ? "items" : histArgs.type}`
+            });
+            activeToolCalls.push({
+              name: "searchHistoricalEntities",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success", count: results.length, results }
+            });
+          } else if (call.name === "batchAddTasks") {
+            const batchArgs = call.args as {
+              tasks: Array<{ text: string; priority?: string; category?: string; dueDate?: string; notes?: string }>;
+            };
+
+            const parsedTasks = batchArgs.tasks.map((t) => ({
+              text: t.text,
+              priority: t.priority as "low" | "medium" | "high" | undefined,
+              category: t.category,
+              dueDate: t.dueDate ? parseLocal(t.dueDate) : undefined,
+              notes: t.notes,
+            }));
+
+            const ids = await ctx.runMutation(api.tasks.batchAdd, {
+              tasks: parsedTasks,
+              workspaceId,
+              userId: args.userId,
+            });
+
+            executedActionSummaries.push({
+              name: "batchAddTasks",
+              summary: `Created ${ids.length} tasks in batch: ${batchArgs.tasks.map(t => `'${t.text}'`).join(", ")}`
+            });
+            activeToolCalls.push({
+              name: "batchAddTasks",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success", ids, count: ids.length }
+            });
+          } else if (call.name === "getTaskNotes") {
+            const { taskId } = call.args as { taskId: string };
+            const task = await ctx.runQuery(api.tasks.get, { id: taskId as Id<"tasks">, userId: args.userId });
+
+            executedActionSummaries.push({
+              name: "getTaskNotes",
+              summary: task?.notes ? `Retrieved notes for task '${task.text}' (${task.notes.length} chars)` : `No notes found for task '${task?.text}'`
+            });
+            activeToolCalls.push({
+              name: "getTaskNotes",
+              args: call.args as Record<string, unknown>,
+              result: {
+                status: "success",
+                taskId,
+                titleHint: task?.text,
+                notes: task?.notes || null,
+                hasNotes: !!task?.notes,
+              }
+            });
+          } else if (call.name === "listWorkspaces") {
+            const workspaces = await ctx.runQuery(api.workspaces.list, { userId: args.userId });
+
+            executedActionSummaries.push({
+              name: "listWorkspaces",
+              summary: `Listed ${workspaces.length} workspace(s)`
+            });
+            activeToolCalls.push({
+              name: "listWorkspaces",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success", workspaces }
+            });
           }
         }
 
