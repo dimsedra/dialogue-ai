@@ -90,6 +90,14 @@ export const updateTask = mutation({
     notes: v.optional(v.string()),
     progress: v.optional(v.number()),
     statusHook: v.optional(v.string()),
+    resources: v.optional(v.array(v.object({
+      type: v.union(v.literal("url"), v.literal("document")),
+      title: v.string(),
+      url: v.string(),
+      storageId: v.optional(v.id("_storage")),
+      summary: v.optional(v.string()),
+      linkedAt: v.number(),
+    }))),
     userId: v.optional(v.id("users")),
     timezoneOffset: v.optional(v.number()),
   },
@@ -108,7 +116,7 @@ export const updateTask = mutation({
 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
-      if (value !== undefined && key !== "id" && key !== "userId" && key !== "notes" && key !== "timezoneOffset") {
+      if (value !== undefined && key !== "id" && key !== "userId" && key !== "notes" && key !== "timezoneOffset" && key !== "resources") {
         updates[key] = value;
       }
     }
@@ -128,6 +136,13 @@ export const updateTask = mutation({
         const timestamp = `[${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}]`;
         const newEntry = `${timestamp} ${incomingNote}`;
         updates.notes = existingNotes ? `${existingNotes}\n${newEntry}` : newEntry;
+      }
+    }
+    if (args.resources !== undefined) {
+      const existingUrls = new Set((task.resources ?? []).map((r) => r.url));
+      const newResources = args.resources.filter((r) => !existingUrls.has(r.url));
+      if (newResources.length > 0) {
+        updates.resources = [...(task.resources ?? []), ...newResources];
       }
     }
     if (args.notes !== undefined || args.progress !== undefined || args.statusHook !== undefined) {

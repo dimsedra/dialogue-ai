@@ -38,6 +38,20 @@ export async function processLocalLLMRequest({
             notes: { type: "string", description: "Optional extra notes or context" },
             progress: { type: "number", description: "Initial progress (0-100)" },
             statusHook: { type: "string", description: "A single punchy sentence summarizing current state" },
+            resources: {
+              type: "array",
+              description: "Optional resources (URLs or file attachments) to link to this task",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["url", "document"], description: "'url' for web links, 'document' for uploaded files" },
+                  title: { type: "string", description: "Display title for the resource" },
+                  url: { type: "string", description: "The URL or 'storage:STORAGE_ID' for documents" },
+                  summary: { type: "string", description: "Optional concise summary of the resource content" },
+                },
+                required: ["type", "title", "url"],
+              },
+            },
           },
           required: ["text"],
         },
@@ -88,6 +102,20 @@ export async function processLocalLLMRequest({
             notes: { type: "string", description: "Chronological journal of this task's history. When updating, NEVER overwrite previous entries. Always APPEND your new update on a new line starting with today's date and time in brackets [YYYY-MM-DD HH:mm]." },
             progress: { type: "number", description: "Estimated progress 0-100. Infer naturally from conversation — do NOT ask the user 'what percentage is completed?'" },
             statusHook: { type: "string", description: "A single punchy sentence summarizing the latest current state. Used directly for quick UI glances and notifications." },
+            resources: {
+              type: "array",
+              description: "Optional resources (URLs or file attachments) to link to this task. New resources are merged with existing ones.",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["url", "document"], description: "'url' for web links, 'document' for uploaded files" },
+                  title: { type: "string", description: "Display title for the resource" },
+                  url: { type: "string", description: "The URL or 'storage:STORAGE_ID' for documents" },
+                  summary: { type: "string", description: "Optional concise summary of the resource content" },
+                },
+                required: ["type", "title", "url"],
+              },
+            },
           },
           required: ["taskId"],
         },
@@ -124,7 +152,21 @@ export async function processLocalLLMRequest({
                 until: { type: "string", description: "Optional ISO-8601 end date for the recurrence series." }
               },
               required: ["frequency", "interval"]
-            }
+            },
+            resources: {
+              type: "array",
+              description: "Optional resources (URLs or file attachments) to link to this event",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["url", "document"], description: "'url' for web links, 'document' for uploaded files" },
+                  title: { type: "string", description: "Display title for the resource" },
+                  url: { type: "string", description: "The URL or 'storage:STORAGE_ID' for documents" },
+                  summary: { type: "string", description: "Optional concise summary of the resource content" },
+                },
+                required: ["type", "title", "url"],
+              },
+            },
           },
           required: ["title", "startTime", "eventType"],
         },
@@ -172,7 +214,21 @@ export async function processLocalLLMRequest({
                 until: { type: "string" }
               },
               required: ["frequency", "interval"]
-            }
+            },
+            resources: {
+              type: "array",
+              description: "Optional resources (URLs or file attachments) to link to this event. New resources are merged with existing ones.",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["url", "document"], description: "'url' for web links, 'document' for uploaded files" },
+                  title: { type: "string", description: "Display title for the resource" },
+                  url: { type: "string", description: "The URL or 'storage:STORAGE_ID' for documents" },
+                  summary: { type: "string", description: "Optional concise summary of the resource content" },
+                },
+                required: ["type", "title", "url"],
+              },
+            },
           },
           required: ["eventId"],
         },

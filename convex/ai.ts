@@ -140,6 +140,20 @@ Infer naturally from conversation. NEVER ask "what percentage is completed?"
 "Just putting final touches" -> progress: 90
 "Just started initial research" -> progress: 10
 "Halfway through the tasks" -> progress: 50
+
+# 8. RESOURCE LINKING (Task & Event Assets)
+You can link URLs and file attachments to tasks and events using the structured 'resources' field on addTask/updateTask.
+When a user shares a URL or file and asks to associate it with a task (e.g., "Link this Figma to the Q2 Planning task"):
+
+resources: [{ type: "url", title: "Figma Specs Workspace", url: "https://figma.com/file/xxx", summary: "Optional one-line summary of the content" }]
+
+For file attachments that were uploaded in chat, you know their content because you've seen it. Include a concise summary:
+resources: [{ type: "document", title: "budget_draft.pdf", url: "storage:STORAGE_ID", summary: "Q2 budget breakdown, total $2.4M across 3 regions" }]
+
+Rules:
+- Include a summary only if you know the content from the conversation (don't make it up).
+- The backend automatically merges new resources with existing ones (deduped by URL).
+- Only link resources when the user explicitly asks to associate them with a task or event.
 `;
 
 export const getPromptContext = query({
@@ -496,6 +510,14 @@ export const addTask = mutation({
     notes: v.optional(v.string()),
     progress: v.optional(v.number()),
     statusHook: v.optional(v.string()),
+    resources: v.optional(v.array(v.object({
+      type: v.union(v.literal("url"), v.literal("document")),
+      title: v.string(),
+      url: v.string(),
+      storageId: v.optional(v.id("_storage")),
+      summary: v.optional(v.string()),
+      linkedAt: v.number(),
+    }))),
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -513,6 +535,7 @@ export const addTask = mutation({
       notes: args.notes,
       progress: args.progress,
       statusHook: args.statusHook,
+      resources: args.resources,
       contextUpdatedAt: (args.notes || args.progress !== undefined || args.statusHook) ? Date.now() : undefined,
       createdAt: Date.now(),
     });

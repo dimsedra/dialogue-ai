@@ -127,6 +127,14 @@ export const add = mutation({
     outcome: v.optional(v.string()),
     statusHook: v.optional(v.string()),
     recurrence: recurrenceValidator,
+    resources: v.optional(v.array(v.object({
+      type: v.union(v.literal("url"), v.literal("document")),
+      title: v.string(),
+      url: v.string(),
+      storageId: v.optional(v.id("_storage")),
+      summary: v.optional(v.string()),
+      linkedAt: v.number(),
+    }))),
     workspaceId: v.optional(v.id("workspaces")),
     userId: v.optional(v.id("users")),
   },
@@ -146,6 +154,7 @@ export const add = mutation({
       statusHook: args.statusHook,
       contextUpdatedAt: (args.notes !== undefined || args.outcome !== undefined || args.statusHook !== undefined) ? Date.now() : undefined,
       recurrence: args.recurrence ?? undefined,
+      resources: args.resources,
       workspaceId: args.workspaceId,
       userId,
       createdAt: Date.now(),
@@ -185,6 +194,14 @@ export const update = mutation({
     outcome: v.optional(v.string()),
     statusHook: v.optional(v.string()),
     recurrence: recurrenceValidator,
+    resources: v.optional(v.array(v.object({
+      type: v.union(v.literal("url"), v.literal("document")),
+      title: v.string(),
+      url: v.string(),
+      storageId: v.optional(v.id("_storage")),
+      summary: v.optional(v.string()),
+      linkedAt: v.number(),
+    }))),
     userId: v.optional(v.id("users")),
     timezoneOffset: v.optional(v.number()),
   },
@@ -195,7 +212,7 @@ export const update = mutation({
 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
-      if (value !== undefined && key !== "id" && key !== "userId" && key !== "notes" && key !== "timezoneOffset") {
+      if (value !== undefined && key !== "id" && key !== "userId" && key !== "notes" && key !== "timezoneOffset" && key !== "resources") {
         if (value === null) {
           updates[key] = undefined;
         } else {
@@ -219,6 +236,13 @@ export const update = mutation({
         const timestamp = `[${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}]`;
         const newEntry = `${timestamp} ${incomingNote}`;
         updates.notes = existingNotes ? `${existingNotes}\n${newEntry}` : newEntry;
+      }
+    }
+    if (args.resources !== undefined) {
+      const existingUrls = new Set((event.resources ?? []).map((r) => r.url));
+      const newResources = args.resources.filter((r) => !existingUrls.has(r.url));
+      if (newResources.length > 0) {
+        updates.resources = [...(event.resources ?? []), ...newResources];
       }
     }
     if (args.notes !== undefined || args.outcome !== undefined || args.statusHook !== undefined) {

@@ -9,3 +9,4 @@ export * from "./RecurringEditModal";
 export * from "./TaskList";
 export * from "./EventList";
 export * from "./CalendarView";
+export * from "./ResourceTray";

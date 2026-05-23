@@ -2,6 +2,15 @@ import { defineSchema, defineTable } from "convex/server";
 import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
+const resourceValidator = v.object({
+  type: v.union(v.literal("url"), v.literal("document")),
+  title: v.string(),
+  url: v.string(),
+  storageId: v.optional(v.id("_storage")),
+  summary: v.optional(v.string()),
+  linkedAt: v.number(),
+});
+
 export default defineSchema({
   ...authTables,
 
@@ -65,6 +74,7 @@ export default defineSchema({
     contextUpdatedAt: v.optional(v.number()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
+    resources: v.optional(v.array(resourceValidator)),
   }).index("by_user", ["userId"])
     .index("by_workspace", ["workspaceId"]),
 
@@ -108,6 +118,7 @@ export default defineSchema({
     })),
     createdAt: v.number(),
     seriesId: v.optional(v.id("events")),
+    resources: v.optional(v.array(resourceValidator)),
   }).index("by_user", ["userId"])
     .index("by_workspace", ["workspaceId"])
     .index("by_series", ["seriesId"]),

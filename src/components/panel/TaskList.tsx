@@ -1,9 +1,10 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive } from "lucide-react";
+import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive, Paperclip } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { TaskDoc } from "./types";
 import { formatDateLabel } from "./utils";
+import { ResourceTray } from "./ResourceTray";
 
 interface TaskListProps {
   tasks: Doc<"tasks">[] | undefined;
@@ -157,6 +158,12 @@ export function TaskList({
                     High
                   </span>
                 )}
+                {task.resources && task.resources.length > 0 && (
+                  <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/30">
+                    <Paperclip className="w-2.5 h-2.5" />
+                    <span>{task.resources.length}</span>
+                  </div>
+                )}
               </div>
 
               {expandedTaskId === task._id && (
@@ -205,6 +212,10 @@ export function TaskList({
                       </span>
                     </div>
                   </div>
+
+                  {task.resources && task.resources.length > 0 && (
+                    <ResourceTray resources={task.resources} />
+                  )}
 
                   <div className="pt-2">
                     <span className="text-[9px] text-[#a8a29e]/30 italic">

@@ -240,6 +240,20 @@ Infer naturally from conversation. NEVER ask "what percentage is completed?"
 "Just putting final touches" -> progress: 90
 "Just started initial research" -> progress: 10
 "Halfway through the tasks" -> progress: 50
+
+# 8. RESOURCE LINKING (Task & Event Assets)
+You can link URLs and file attachments to tasks and events using the structured 'resources' field on addTask/updateTask.
+When a user shares a URL or file and asks to associate it with a task (e.g., "Link this Figma to the Q2 Planning task"):
+
+resources: [{ type: "url", title: "Figma Specs Workspace", url: "https://figma.com/file/xxx", summary: "Optional one-line summary of the content" }]
+
+For file attachments that were uploaded in chat, you know their content because you've seen it. Include a concise summary:
+resources: [{ type: "document", title: "budget_draft.pdf", url: "storage:STORAGE_ID", summary: "Q2 budget breakdown, total $2.4M across 3 regions" }]
+
+Rules:
+- Include a summary only if you know the content from the conversation (don't make it up).
+- The backend automatically merges new resources with existing ones (deduped by URL).
+- Only link resources when the user explicitly asks to associate them with a task or event.
 `;
 
 export const chat = internalAction({
@@ -482,6 +496,20 @@ export const chat = internalAction({
                 notes: { type: SchemaType.STRING, description: "Optional extra notes" },
                 progress: { type: SchemaType.NUMBER, description: "Initial progress (0-100)" },
                 statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing current state" },
+                resources: {
+                  type: SchemaType.ARRAY,
+                  description: "Optional resources (URLs or file attachments) to link to this task",
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      type: { type: SchemaType.STRING, description: "'url' for web links, 'document' for uploaded files" },
+                      title: { type: SchemaType.STRING, description: "Display title for the resource" },
+                      url: { type: SchemaType.STRING, description: "The URL or 'storage:STORAGE_ID' for documents" },
+                      summary: { type: SchemaType.STRING, description: "Optional concise summary of the resource content" },
+                    },
+                    required: ["type", "title", "url"],
+                  },
+                },
               },
               required: ["text"],
             },
@@ -500,6 +528,20 @@ export const chat = internalAction({
                 notes: { type: SchemaType.STRING, description: "Chronological journal of this task's history. When updating, NEVER overwrite previous entries. Always APPEND your new update on a new line starting with today's date and time in brackets [YYYY-MM-DD HH:mm]." },
                 progress: { type: SchemaType.NUMBER, description: "Estimated progress 0-100. Infer naturally from conversation — do NOT ask the user 'what percentage is completed?'" },
                 statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing the latest current state. Used directly for quick UI glances and notifications." },
+                resources: {
+                  type: SchemaType.ARRAY,
+                  description: "Optional resources (URLs or file attachments) to link to this task. New resources are merged with existing ones — duplicates by URL are skipped.",
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      type: { type: SchemaType.STRING, description: "'url' for web links, 'document' for uploaded files" },
+                      title: { type: SchemaType.STRING, description: "Display title for the resource" },
+                      url: { type: SchemaType.STRING, description: "The URL or 'storage:STORAGE_ID' for documents" },
+                      summary: { type: SchemaType.STRING, description: "Optional concise summary of the resource content" },
+                    },
+                    required: ["type", "title", "url"],
+                  },
+                },
               },
               required: ["taskId"],
             },
@@ -553,7 +595,21 @@ export const chat = internalAction({
                     until: { type: SchemaType.STRING, description: "Optional ISO-8601 end date for the recurrence series." }
                   },
                   required: ["frequency", "interval"]
-                }
+                },
+                resources: {
+                  type: SchemaType.ARRAY,
+                  description: "Optional resources (URLs or file attachments) to link to this event",
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      type: { type: SchemaType.STRING, description: "'url' for web links, 'document' for uploaded files" },
+                      title: { type: SchemaType.STRING, description: "Display title for the resource" },
+                      url: { type: SchemaType.STRING, description: "The URL or 'storage:STORAGE_ID' for documents" },
+                      summary: { type: SchemaType.STRING, description: "Optional concise summary of the resource content" },
+                    },
+                    required: ["type", "title", "url"],
+                  },
+                },
               },
               required: ["title", "startTime", "eventType"],
             },
@@ -583,7 +639,21 @@ export const chat = internalAction({
                     until: { type: SchemaType.STRING }
                   },
                   required: ["frequency", "interval"]
-                }
+                },
+                resources: {
+                  type: SchemaType.ARRAY,
+                  description: "Optional resources (URLs or file attachments) to link to this event. New resources are merged with existing ones — duplicates by URL are skipped.",
+                  items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      type: { type: SchemaType.STRING, description: "'url' for web links, 'document' for uploaded files" },
+                      title: { type: SchemaType.STRING, description: "Display title for the resource" },
+                      url: { type: SchemaType.STRING, description: "The URL or 'storage:STORAGE_ID' for documents" },
+                      summary: { type: SchemaType.STRING, description: "Optional concise summary of the resource content" },
+                    },
+                    required: ["type", "title", "url"],
+                  },
+                },
               },
               required: ["eventId"],
             },
@@ -917,9 +987,23 @@ export const chat = internalAction({
               notes?: string;
               progress?: number;
               statusHook?: string;
+              resources?: Array<{
+                type: "url" | "document";
+                title: string;
+                url: string;
+                summary?: string;
+              }>;
             };
 
             if (call.name === "addTask") {
+              const resources = taskArgs.resources?.map((r) => ({
+                type: r.type as "url" | "document",
+                title: r.title,
+                url: r.url,
+                summary: r.summary,
+                linkedAt: Date.now(),
+              }));
+
               await ctx.runMutation(api.ai.addTask, {
                 text: taskArgs.text!,
                 priority: taskArgs.priority,
@@ -928,6 +1012,7 @@ export const chat = internalAction({
                 progress: taskArgs.progress,
                 statusHook: taskArgs.statusHook,
                 dueDate: taskArgs.dueDate ? parseLocal(taskArgs.dueDate) : undefined,
+                resources,
                 workspaceId,
                 userId: args.userId
               });
@@ -939,7 +1024,7 @@ export const chat = internalAction({
             } else {
               const oldTask = await ctx.runQuery(api.tasks.get, { id: taskArgs.taskId as Id<"tasks">, userId: args.userId });
 
-              const taskUpdates: Record<string, string | boolean | number | undefined> = {};
+              const taskUpdates: Record<string, unknown> = {};
               if (taskArgs.text) taskUpdates.text = taskArgs.text;
               if (taskArgs.completed !== undefined) taskUpdates.completed = taskArgs.completed;
               if (taskArgs.priority) taskUpdates.priority = taskArgs.priority;
@@ -948,6 +1033,15 @@ export const chat = internalAction({
               if (taskArgs.progress !== undefined) taskUpdates.progress = taskArgs.progress;
               if (taskArgs.statusHook !== undefined) taskUpdates.statusHook = taskArgs.statusHook;
               if (taskArgs.dueDate) taskUpdates.dueDate = parseLocal(taskArgs.dueDate);
+              if (taskArgs.resources) {
+                taskUpdates.resources = taskArgs.resources.map((r) => ({
+                  type: r.type as "url" | "document",
+                  title: r.title,
+                  url: r.url,
+                  summary: r.summary,
+                  linkedAt: Date.now(),
+                }));
+              }
 
               await ctx.runMutation(api.tasks.updateTask, {
                 id: taskArgs.taskId! as Id<"tasks">,
@@ -1017,6 +1111,12 @@ export const chat = internalAction({
                 daysOfWeek?: number[];
                 until?: string;
               };
+              resources?: Array<{
+                type: "url" | "document";
+                title: string;
+                url: string;
+                summary?: string;
+              }>;
             };
 
             if (call.name === "addEvent") {
@@ -1027,6 +1127,13 @@ export const chat = internalAction({
                 until: eventArgs.recurrence.until ? parseLocal(eventArgs.recurrence.until) : undefined,
               } : undefined;
 
+              const eventResources = eventArgs.resources?.map((r) => ({
+                type: r.type as "url" | "document",
+                title: r.title,
+                url: r.url,
+                summary: r.summary,
+                linkedAt: Date.now(),
+              }));
               await ctx.runMutation(api.events.add, {
                 title: eventArgs.title!,
                 location: eventArgs.location,
@@ -1037,6 +1144,7 @@ export const chat = internalAction({
                 endTime: eventArgs.endTime ? parseLocal(eventArgs.endTime) : undefined,
                 eventType: eventArgs.eventType || (eventArgs.endTime ? "interval" : "point"),
                 recurrence,
+                resources: eventResources,
                 workspaceId,
                 userId: args.userId
               });
@@ -1064,6 +1172,15 @@ export const chat = internalAction({
                   daysOfWeek: eventArgs.recurrence.daysOfWeek,
                   until: eventArgs.recurrence.until ? parseLocal(eventArgs.recurrence.until) : undefined,
                 };
+              }
+              if (eventArgs.resources) {
+                updates.resources = eventArgs.resources.map((r) => ({
+                  type: r.type as "url" | "document",
+                  title: r.title,
+                  url: r.url,
+                  summary: r.summary,
+                  linkedAt: Date.now(),
+                }));
               }
 
               await ctx.runMutation(api.events.update, {
