@@ -46,3 +46,6 @@ export const clearAllData = internalMutation({
     console.log("All data cleared successfully.");
   },
 });
+
+
+

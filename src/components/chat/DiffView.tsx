@@ -21,9 +21,9 @@ export const DiffView = ({ label, oldVal, newVal, type = "text" }: DiffViewProps
     <div className="flex items-center gap-2 text-[10px] py-1">
       <span className="text-[#a8a29e] font-medium uppercase tracking-wider w-16">{label}:</span>
       <div className="flex items-center gap-1.5 overflow-hidden">
-        <span className="text-[#a8a29e]/50 line-through truncate max-w-[80px]">{formatValue(oldVal)}</span>
+        <span className="text-[#a8a29e]/50 line-through truncate max-w-20">{formatValue(oldVal)}</span>
         <ArrowDown className="w-2.5 h-2.5 -rotate-90 text-[#d4a373]/40" />
-        <span className={`font-bold truncate max-w-[100px] ${
+        <span className={`font-bold truncate max-w-25 ${
           type === "priority" ? (
             newVal === "high" ? "text-red-400" :
             newVal === "medium" ? "text-orange-400" :

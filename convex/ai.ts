@@ -383,7 +383,7 @@ export const getProfile = query({
 });
 
 export const updateProfile = mutation({
-  args: { name: v.optional(v.string()), bio: v.string(), userId: v.optional(v.id("users")) },
+  args: { name: v.optional(v.string()), bio: v.optional(v.string()), preferences: v.optional(v.any()), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) throw new Error("Unauthorized");
@@ -394,13 +394,20 @@ export const updateProfile = mutation({
       .first();
 
     if (profile) {
-      await ctx.db.patch(profile._id, { name: args.name, bio: args.bio });
+      const patch: Record<string, unknown> = {};
+      if (args.name !== undefined) patch.name = args.name;
+      if (args.bio !== undefined) patch.bio = args.bio;
+      if (args.preferences !== undefined) {
+        const existingPrefs = (profile.preferences as Record<string, unknown>) || {};
+        patch.preferences = { ...existingPrefs, ...args.preferences };
+      }
+      await ctx.db.patch(profile._id, patch);
     } else {
       await ctx.db.insert("userProfile", { 
         userId, 
         name: args.name, 
-        bio: args.bio, 
-        preferences: {} 
+        bio: args.bio || "", 
+        preferences: args.preferences || {} 
       });
     }
   },

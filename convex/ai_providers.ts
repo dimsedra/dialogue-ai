@@ -236,6 +236,9 @@ export async function runChatEngine(options: ChatEngineOptions): Promise<ChatEng
     return { text, calls };
   }
 }
+function cleanFollowUpText(text: string): string {
+  return text.replace(/<(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>[\s\S]*?<\/(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>/g, "").trim();
+}
 
 export interface FollowUpOptions {
   provider: string;
@@ -302,7 +305,7 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
       messages
     });
 
-    return response.choices[0].message.content || "";
+    return cleanFollowUpText(response.choices[0].message.content || "");
 
   } else if (provider === "anthropic") {
     if (!apiKey) apiKey = process.env.ANTHROPIC_API_KEY || "";
@@ -334,7 +337,8 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
       messages
     });
 
-    return response.content.filter(c => c.type === "text").map((c: any) => c.text).join("") || "";
+    const rawText = response.content.filter(c => c.type === "text").map((c: any) => c.text).join("") || "";
+    return cleanFollowUpText(rawText);
 
   } else {
     if (!apiKey) apiKey = process.env.GEMINI_API_KEY || "";
@@ -354,6 +358,7 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
     ];
 
     const response = await model.generateContent({ contents: promptParts as any });
-    return response.response.text() || "";
+    const rawText = response.response.text() || "";
+    return cleanFollowUpText(rawText);
   }
 }
