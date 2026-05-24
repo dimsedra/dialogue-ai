@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { motion } from "framer-motion";
-import { Bot, Sparkles, Plus, Pin, Calendar, CheckCircle2, ArrowRight, Brush, Menu, Grid2x2, ChevronDown } from "lucide-react";
+import { Bot, Sparkles, Plus, Pin, Calendar, CheckCircle2, ArrowRight, Brush, Menu, ClipboardList, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { DashboardBgEditor, DashboardBgSettings } from "./DashboardEditor";
 
@@ -35,6 +35,7 @@ export function Dashboard({
   const [showBgEditor, setShowBgEditor] = useState(false);
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
   const [selectedWsId, setSelectedWsId] = useState<Id<"workspaces"> | undefined>(undefined);
+  const [wsWarning, setWsWarning] = useState(false);
   const updateProfile = useMutation(api.ai.updateProfile);
 
   const storedBg = ((profile as any)?.preferences?.dashboardBg || {}) as Partial<DashboardBgSettings>;
@@ -137,14 +138,14 @@ export function Dashboard({
       )}
       <div className="relative z-10 flex flex-col items-center w-full min-h-0 flex-1">
         {/* Push greeting to vertical center */}
-        <div className="hidden lg:flex lg:flex-1 lg:min-h-12" />
+        <div className="flex-1 min-h-12" />
 
         {/* Hero Greeting — centered x and y */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="text-center space-y-1.5 lg:space-y-3 relative px-4 pt-8 lg:pt-0 mb-6 lg:mb-0"
+          className="text-center space-y-3 relative px-4"
         >
           {bgSettings.vfxEnabled && (
             <div
@@ -156,28 +157,28 @@ export function Dashboard({
               }}
             />
           )}
-          <h1 className="text-2xl lg:text-4xl font-bold tracking-tight relative"
+          <h1 className="text-4xl font-bold tracking-tight relative"
               style={{ color: bgSettings.primaryText }}>
             Good {timeOfDay}, {userName}.
           </h1>
-          <p className="text-sm lg:text-base font-medium relative"
+          <p className="text-base font-medium relative"
              style={{ color: bgSettings.secondaryText }}>{dayName}, {dateStr}</p>
         </motion.div>
 
         {/* Push content below */}
-        <div className="hidden lg:flex lg:flex-1 lg:min-h-8" />
+        <div className="flex-1 min-h-8" />
 
         {/* Content sections */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
-          className="max-w-lg w-full space-y-4 lg:space-y-8 pb-6 lg:pb-16 px-4"
+          className="max-w-lg w-full space-y-8 pb-16 px-4"
         >
 
         {/* Today's Snapshot */}
         <div
-          className="rounded-xl border p-3 lg:p-5 space-y-2.5 lg:space-y-3"
+          className="rounded-xl border p-5 space-y-3"
           style={cardBgStyle}
         >
           <div className="flex items-center gap-2">
@@ -209,7 +210,15 @@ export function Dashboard({
         <div className="flex justify-center">
           <div className="relative flex items-center">
             <button
-              onClick={() => onNewChat(selectedWsId)}
+              onClick={() => {
+                if (!selectedWsId && workspaces && workspaces.length > 0) {
+                  setWsDropdownOpen(true);
+                  setWsWarning(true);
+                  setTimeout(() => setWsWarning(false), 2000);
+                  return;
+                }
+                onNewChat(selectedWsId);
+              }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-l-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg active:scale-[0.98]"
               style={{
                 ...cardBgStyle,
@@ -217,7 +226,7 @@ export function Dashboard({
               }}
             >
               <Plus className="w-3.5 h-3.5" />
-              New Chat
+              New Session
             </button>
             <button
               onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
@@ -232,6 +241,12 @@ export function Dashboard({
                 : "A"}
               <ChevronDown className="w-3 h-3" />
             </button>
+
+            {wsWarning && (
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-red-400 font-bold uppercase tracking-wider whitespace-nowrap">
+                Select a workspace
+              </div>
+            )}
 
             {wsDropdownOpen && workspaces && workspaces.length > 0 && (
               <>
@@ -349,7 +364,7 @@ export function Dashboard({
           className="fixed top-6 right-6 z-50 w-9 h-9 lg:w-11 lg:h-11 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all flex items-center justify-center shadow-lg"
           title="Planner"
         >
-          <Grid2x2 className="w-4 h-4 lg:w-5 lg:h-5" />
+          <ClipboardList className="w-4 h-4 lg:w-5 lg:h-5" />
         </button>
       )}
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, X, Check, Zap, Cpu, Menu, LogOut, Brain, Grid2x2 } from "lucide-react";
+import { Sparkles, X, Check, Zap, Cpu, Menu, LogOut, Brain, ClipboardList } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
@@ -186,7 +186,7 @@ export function ChatHeader({
               className="p-2 lg:p-2.5 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all flex items-center justify-center shadow-lg shrink-0"
               title="Planner"
             >
-              <Grid2x2 className="w-4 h-4 lg:w-5 lg:h-5" />
+              <ClipboardList className="w-4 h-4 lg:w-5 lg:h-5" />
             </button>
           )}
         </div>

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard } from "lucide-react";
+import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -17,7 +17,7 @@ interface SessionSidebarProps {
   isLargeViewport: boolean;
   onSelectSession: (id: Id<"chatSessions">) => void;
   onSelectWorkspaceSession: (workspaceId: Id<"workspaces">, sessionId: Id<"chatSessions">) => void;
-  onNewChat: () => void;
+  onNewChat: (workspaceId?: Id<"workspaces">) => void;
   onDeleteChat: (id: Id<"chatSessions">, e: React.MouseEvent) => void;
   onSelectWorkspace: (id: Id<"workspaces"> | undefined) => void;
   onOpenCreateWorkspace: () => void;
@@ -42,6 +42,8 @@ export function SessionSidebar({
   // Own state — isolated from Chat.tsx to prevent cross-component re-renders
   const [editingSessionId, setEditingSessionId] = useState<Id<"chatSessions"> | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
+  const [selectedWsId, setSelectedWsId] = useState<Id<"workspaces"> | undefined>(undefined);
 
   const renameSession = useMutation(api.messages.renameSession);
   const togglePinSession = useMutation(api.messages.togglePinSession);
@@ -284,6 +286,54 @@ export function SessionSidebar({
                 </button>
               </div>
 
+              {!activeWorkspaceId ? (
+              <div className="relative flex items-center w-full">
+                <button 
+                  onClick={() => {
+                    if (!selectedWsId && workspaces && workspaces.length > 0) {
+                      setWsDropdownOpen(true);
+                      return;
+                    }
+                    onNewChat(selectedWsId);
+                  }}
+                  className="flex items-center justify-center gap-2 py-2 flex-1 rounded-l-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Session
+                </button>
+                <button
+                  onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
+                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-r-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300 border-l border-[#1a1814]"
+                >
+                  {workspaces?.find(w => w._id === selectedWsId)?.name
+                    ? workspaces.find(w => w._id === selectedWsId)!.name.substring(0, 2).toUpperCase()
+                    : "A"}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+
+                {wsDropdownOpen && workspaces && workspaces.length > 0 && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setWsDropdownOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 w-full rounded-xl border border-[#2a2723] bg-[#1a1814] shadow-2xl z-50 overflow-hidden">
+                      {workspaces.map((ws) => (
+                        <button
+                          key={ws._id}
+                          onClick={() => {
+                            setSelectedWsId(ws._id);
+                            setWsDropdownOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[11px] font-bold transition-all hover:bg-[#2a2723] text-left"
+                          style={{ color: selectedWsId === ws._id ? "#d4a373" : "#a8a29e" }}
+                        >
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ws.color }} />
+                          {ws.name}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              ) : (
               <button 
                 onClick={() => onNewChat()}
                 className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
@@ -291,6 +341,7 @@ export function SessionSidebar({
                 <Plus className="w-3.5 h-3.5" />
                 New Session
               </button>
+              )}
 
             {/* Workspace Settings Section */}
             {activeWorkspaceId && (() => {
