@@ -62,8 +62,8 @@ For multi-step, architectural, or multi-file implementations, you must strictly 
 * **Gatekeeper:** After delivering the code for a checkpoint, pause and ask the user to verify, test, or approve the output before moving to the next checkpoint.
 
 ### Phase 4: Walkthrough & Handoff
-* Once all implementations are verified and accepted by the user, provide a final, high-level structural handoff.
-* Summarize what was changed, how components interact, and provide explicit local verification commands (e.g., specific test invocations or curl commands).
+* Once all implementations are verified and accepted by the user, provide a concise summary scoped **only to the exact task the user gave** — what was changed and where. Do not recap prior sessions or unrelated context.
+* Include explicit local verification commands (e.g., specific test invocations or curl commands) if relevant.
 
 ---
 
