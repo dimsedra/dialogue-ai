@@ -117,14 +117,30 @@ export function TaskPanel({
         e.description?.toLowerCase().includes(searchQuery.toLowerCase())
     ).sort((a, b) => a.startTime - b.startTime);
 
-    const seenSeries = new Set<string>();
+    const now = Date.now();
+    const seriesBest = new Map<string, Doc<"events">>();
     const deduplicated: Doc<"events">[] = [];
 
     for (const event of filtered) {
       if (event.recurrence) {
-        if (seenSeries.has(event._id)) continue;
-        seenSeries.add(event._id);
+        const existing = seriesBest.get(event._id);
+        if (!existing) {
+          seriesBest.set(event._id, event);
+        } else if (existing.startTime < now && event.startTime >= now) {
+          // Upgrade: existing is past, current is upcoming
+          seriesBest.set(event._id, event);
+        } else if (existing.startTime < now && event.startTime < now && event.startTime > existing.startTime) {
+          // Both past — keep the most recent
+          seriesBest.set(event._id, event);
+        } else if (existing.startTime >= now && event.startTime >= now && event.startTime < existing.startTime) {
+          // Both upcoming — keep the sooner one
+          seriesBest.set(event._id, event);
+        }
+      } else {
+        deduplicated.push(event);
       }
+    }
+    for (const event of seriesBest.values()) {
       deduplicated.push(event);
     }
 
