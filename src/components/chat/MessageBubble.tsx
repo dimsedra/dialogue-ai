@@ -215,9 +215,9 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
 
         {/* Text Body */}
         {msg.author === "User" ? (
-          <p className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] whitespace-pre-wrap font-sans min-w-0">{msg.text}</p>
+          <p className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] whitespace-pre-wrap break-words font-sans min-w-0">{msg.text}</p>
         ) : (
-          <div className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] font-sans prose prose-invert prose-sm max-w-none w-full min-w-0">
+          <div className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] font-sans prose prose-invert prose-sm max-w-none break-words w-full min-w-0">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkMath]}
               rehypePlugins={[rehypeKatex]}

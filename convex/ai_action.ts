@@ -247,6 +247,9 @@ When updating notes via 'updateTask' or 'updateEvent', provide ONLY the raw cont
 DO NOT include any date, time, or bracket formatting in the note parameter. The backend server will automatically prepend the absolute system timestamp [YYYY-MM-DD HH:mm] and append it safely to the existing history.
 In addition, ALWAYS synthesize a single punchy sentence into 'statusHook' describing the most current entity state for notification banners and quick UI glances.
 
+- USER-DIRECTED CORRECTIONS:
+If the user explicitly asks you to remove, correct, or edit a specific note entry, you may surgically edit or remove that specific entry. Do NOT rewrite or overwrite the entire notes field — only modify what the user asked to change. This is the only exception to the append-only rule.
+
 Example Evolution:
 Day 1 (May 8): User says work is halfway done but router config is tough.
 You call updateTask with:
@@ -574,7 +577,7 @@ export const chat = internalAction({
                 dueDate: { type: SchemaType.STRING, description: "Updated ISO-8601 due date (24-hour, e.g. '2026-05-15T14:00:00'). DO NOT append 'Z'." },
                 priority: { type: SchemaType.STRING, description: "Updated priority: 'low', 'medium', or 'high'" },
                 category: { type: SchemaType.STRING },
-                notes: { type: SchemaType.STRING, description: "Chronological journal of this task's history. When updating, NEVER overwrite previous entries. Always APPEND your new update on a new line starting with today's date and time in brackets [YYYY-MM-DD HH:mm]." },
+                notes: { type: SchemaType.STRING, description: "Chronological journal of this task's history. When updating, NEVER overwrite previous entries unless the user explicitly asks you to remove or correct a specific entry. Always APPEND your new update on a new line starting with today's date and time in brackets [YYYY-MM-DD HH:mm]." },
                 progress: { type: SchemaType.NUMBER, description: "Estimated progress 0-100. Infer naturally from conversation — do NOT ask the user 'what percentage is completed?'" },
                 statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing the latest current state. Used directly for quick UI glances and notifications." },
                 resources: {
@@ -675,7 +678,7 @@ export const chat = internalAction({
                 endTime: { type: SchemaType.STRING, description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
                 eventType: { type: SchemaType.STRING, description: "'interval' or 'point'" },
                 location: { type: SchemaType.STRING, description: "Optional new location" },
-                notes: { type: SchemaType.STRING, description: "Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]." },
+                notes: { type: SchemaType.STRING, description: "Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]. If the user explicitly asks to remove or correct a specific entry, you may surgically edit it." },
                 outcome: { type: SchemaType.STRING, description: "Post-event summary: decisions made, action items, key takeaways. Updated after the event concludes." },
                 statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing the event status or prep state for quick UI glances and notifications." },
                 recurrence: {

@@ -99,7 +99,7 @@ export async function processLocalLLMRequest({
             dueDate: { type: "string", description: "Updated ISO-8601 due date/time (24-hour, e.g. '2026-05-15T14:00:00')." },
             priority: { type: "string", enum: ["low", "medium", "high"], description: "Updated priority" },
             category: { type: "string", description: "Updated category" },
-            notes: { type: "string", description: "Chronological journal of this task's history. When updating, NEVER overwrite previous entries. Always APPEND your new update on a new line starting with today's date and time in brackets [YYYY-MM-DD HH:mm]." },
+            notes: { type: "string", description: "Chronological journal of this task's history. When updating, NEVER overwrite previous entries unless the user explicitly asks you to remove or correct a specific entry. Always APPEND your new update on a new line starting with today's date and time in brackets [YYYY-MM-DD HH:mm]." },
             progress: { type: "number", description: "Estimated progress 0-100. Infer naturally from conversation — do NOT ask the user 'what percentage is completed?'" },
             statusHook: { type: "string", description: "A single punchy sentence summarizing the latest current state. Used directly for quick UI glances and notifications." },
             resources: {
@@ -201,7 +201,7 @@ export async function processLocalLLMRequest({
             endTime: { type: "string", description: "ISO-8601 end time (24-hour format, e.g. '2026-05-15T13:00:00')" },
             eventType: { type: "string", description: "'interval' or 'point'" },
             location: { type: "string", description: "Optional new location" },
-            notes: { type: "string", description: "Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]." },
+            notes: { type: "string", description: "Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]. If the user explicitly asks to remove or correct a specific entry, you may surgically edit it." },
             outcome: { type: "string", description: "Post-event summary: decisions made, action items, key takeaways. Updated after the event concludes." },
             statusHook: { type: "string", description: "A single punchy sentence summarizing the event status or prep state for quick UI glances and notifications." },
             recurrence: {

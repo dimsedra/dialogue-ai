@@ -143,6 +143,9 @@ When updating notes via 'updateTask' or 'updateEvent', provide ONLY the raw cont
 DO NOT include any date, time, or bracket formatting in the note parameter. The backend server will automatically prepend the absolute system timestamp [YYYY-MM-DD HH:mm] and append it safely to the existing history.
 In addition, ALWAYS synthesize a single punchy sentence into 'statusHook' describing the most current entity state for notification banners and quick UI glances.
 
+- USER-DIRECTED CORRECTIONS:
+If the user explicitly asks you to remove, correct, or edit a specific note entry, you may surgically edit or remove that specific entry. Do NOT rewrite or overwrite the entire notes field — only modify what the user asked to change. This is the only exception to the append-only rule.
+
 Example Evolution:
 Day 1 (May 8): User says work is halfway done but router config is tough.
 You call updateTask with:
