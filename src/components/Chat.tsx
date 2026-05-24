@@ -13,6 +13,7 @@ import { WorkspaceRail } from "./chat/WorkspaceRail";
 import { SessionSidebar } from "./chat/SessionSidebar";
 import { ChatHeader } from "./chat/ChatHeader";
 import { MessageStream } from "./chat/MessageStream";
+import { Dashboard } from "./chat/Dashboard";
 import { ChatInput } from "./chat/ChatInput";
 import { motion } from "framer-motion";
 
@@ -32,7 +33,8 @@ export function Chat({
   onSyncRef,
   isLargeViewport,
   keyboardOffset,
-  onChatInputResize
+  onChatInputResize,
+  onShowTasks,
 }: { 
   activeSessionId: Id<"chatSessions"> | null, 
   setActiveSessionId: (id: Id<"chatSessions"> | null) => void,
@@ -46,6 +48,7 @@ export function Chat({
   isLargeViewport: boolean,
   keyboardOffset: number,
   onChatInputResize?: (offset: number) => void
+  onShowTasks?: () => void,
 }) {
   const workspaces = useQuery(api.workspaces.list, {});
   const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
@@ -630,11 +633,15 @@ export function Chat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, provider, generateUploadUrl, sendMessage]);
 
-  const handleNewChat = async () => {
-    const id = await createSession({ 
+  const handleNewChat = async (workspaceOverride?: Id<"workspaces">) => {
+    const wsId = workspaceOverride || activeWorkspaceId || (workspaces && workspaces.length > 0 ? workspaces[0]._id : undefined);
+    const id = await createSession({
       title: `Chat ${new Date().toLocaleTimeString()}`,
-      workspaceId: activeWorkspaceId
+      workspaceId: wsId,
     });
+    if (wsId !== activeWorkspaceId && wsId) {
+      setActiveWorkspaceId(wsId);
+    }
     setActiveSessionId(id);
     if (!isLargeViewport) {
       setShowHistory(false);
@@ -676,6 +683,18 @@ export function Chat({
     setIsTyping(false);
   }, []);
 
+  // When selecting a session from the Dashboard, switch to its workspace if needed
+  const handleDashboardSelectSession = useCallback((id: Id<"chatSessions">) => {
+    const session = sessions?.find((s: any) => s._id === id);
+    if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
+      setActiveWorkspaceId(session.workspaceId);
+    }
+    setActiveSessionId(id);
+    if (!isLargeViewport) {
+      setShowHistory(false);
+    }
+  }, [sessions, activeWorkspaceId, setActiveWorkspaceId, setActiveSessionId, isLargeViewport, setShowHistory]);
+
   return (
     <div className="flex-1 flex overflow-hidden h-full relative">
       {/* Workspace Rail (The Focus) - Hidden on Mobile */}
@@ -706,44 +725,61 @@ export function Chat({
       />
 
 
-      {/* Main Chat Area */}
+      {/* Main Content Area */}
       <motion.div 
         layout
         className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
       >
-        <ChatHeader
-          activeSessionTitle={activeSessionId ? sessions?.find((s: any) => s._id === activeSessionId)?.title : undefined}
-          currentWorkspace={currentWorkspace}
-          activeWorkspaceId={activeWorkspaceId}
-          workspaces={workspaces}
-          messageCount={messages?.length || 0}
-          provider={provider}
-          activeModelName={getActiveModelName()}
-          isLargeViewport={isLargeViewport}
-          onProviderChange={handleProviderChange}
-          onSignOut={() => signOut()}
-          onShowHistory={() => setShowHistory(true)}
-        />
+        {!activeWorkspaceId ? (
+          <Dashboard
+            workspaces={workspaces}
+            sessions={sessions}
+            profile={profile}
+            isLargeViewport={isLargeViewport}
+            onNewChat={(wsId?: Id<"workspaces">) => handleNewChat(wsId)}
+            onSelectSession={handleDashboardSelectSession}
+            onShowHistory={() => setShowHistory(true)}
+            onShowTasks={onShowTasks}
+          />
+        ) : (
+          <>
+            <ChatHeader
+              activeSessionTitle={activeSessionId ? sessions?.find((s: any) => s._id === activeSessionId)?.title : undefined}
+              currentWorkspace={currentWorkspace}
+              activeWorkspaceId={activeWorkspaceId}
+              workspaces={workspaces}
+              messageCount={messages?.length || 0}
+              provider={provider}
+              activeModelName={getActiveModelName()}
+              isLargeViewport={isLargeViewport}
+              onProviderChange={handleProviderChange}
+              onSignOut={() => signOut()}
+              onShowHistory={() => setShowHistory(true)}
+              onShowTasks={onShowTasks}
+            />
 
-        <MessageStream
-          messages={messages}
-          activeSessionId={activeSessionId}
-          isTyping={isTyping}
-          isSyncing={isSyncing}
-          isLargeViewport={isLargeViewport}
-          keyboardOffset={keyboardOffset}
-          onTypingDone={handleTypingDone}
-        />
+            <MessageStream
+              messages={messages}
+              activeSessionId={activeSessionId}
+              isTyping={isTyping}
+              isSyncing={isSyncing}
+              isLargeViewport={isLargeViewport}
+              keyboardOffset={keyboardOffset}
+              onTypingDone={handleTypingDone}
+              agentName={currentWorkspace?.agentName}
+            />
 
-        <ChatInput
-          activeSessionId={activeSessionId}
-          isLargeViewport={isLargeViewport}
-          keyboardOffset={keyboardOffset}
-          activeScope={activeScope}
-          setActiveScope={setActiveScope}
-          onSend={handleSend}
-          onChatInputResize={onChatInputResize}
-        />
+            <ChatInput
+              activeSessionId={activeSessionId}
+              isLargeViewport={isLargeViewport}
+              keyboardOffset={keyboardOffset}
+              activeScope={activeScope}
+              setActiveScope={setActiveScope}
+              onSend={handleSend}
+              onChatInputResize={onChatInputResize}
+            />
+          </>
+        )}
       </motion.div>
 
       {/* Global Workspace Creation Modal */}

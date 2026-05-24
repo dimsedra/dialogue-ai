@@ -35,6 +35,7 @@ interface MessageStreamProps {
   isLargeViewport: boolean;
   keyboardOffset: number;
   onTypingDone: () => void;
+  agentName?: string;
 }
 
 export const MessageStream = React.memo(function MessageStream({
@@ -45,6 +46,7 @@ export const MessageStream = React.memo(function MessageStream({
   isLargeViewport,
   keyboardOffset,
   onTypingDone,
+  agentName,
 }: MessageStreamProps) {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const mainScrollRef = useRef<HTMLElement>(null);
@@ -225,6 +227,7 @@ export const MessageStream = React.memo(function MessageStream({
                       key={msg._id}
                       msg={msg}
                       isLargeViewport={isLargeViewport}
+                      agentName={agentName}
                     />
                   ))}
                   

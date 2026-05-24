@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Bot, Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2 } from "lucide-react";
+import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -68,6 +69,24 @@ export function SessionSidebar({
   const [sheetRenameMode, setSheetRenameMode] = useState(false);
   const [sheetRenameTitle, setSheetRenameTitle] = useState("");
 
+  const [dropdownAnchor, setDropdownAnchor] = useState<{ top: number; left: number } | null>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!actionMenuSessionId || !isLargeViewport) return;
+    const handleClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-session-dropdown]")) {
+        setActionMenuSessionId(null);
+        setDropdownAnchor(null);
+      }
+    };
+    const id = setTimeout(() => document.addEventListener("mousedown", handleClick), 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [actionMenuSessionId, isLargeViewport]);
+
   const pinnedSessions = useMemo(() => {
     if (!sessions) return [];
     return sessions
@@ -95,13 +114,13 @@ export function SessionSidebar({
           onCloseHistory();
         }
       }}
-      className={`group flex items-center justify-between p-2.5 lg:p-3.5 rounded-2xl cursor-pointer transition-all duration-300 ${
+      className={`group relative flex items-center justify-between p-2 lg:p-2.5 rounded-xl cursor-pointer transition-all duration-300 ${
         activeSessionId === session._id 
           ? "bg-[#2a2723] text-[#f2efeb]" 
           : "text-[#a8a29e] hover:bg-[#1f1d19] hover:text-[#f2efeb]"
       }`}
     >
-      <div className="flex-1 flex items-center gap-3 truncate mr-2">
+      <div className="flex-1 flex items-center gap-2.5 truncate mr-2">
         <div className={`w-1.5 h-1.5 rounded-full transition-all shrink-0 ${activeSessionId === session._id ? "bg-[#d4a373] scale-100" : "bg-transparent scale-0"}`} />
         {editingSessionId === session._id ? (
           <input
@@ -119,71 +138,53 @@ export function SessionSidebar({
             className="bg-transparent border-none outline-none text-sm font-medium w-full text-[#f2efeb]"
           />
         ) : (
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1.5">
-              {session.pinned && <span className="text-[10px] shrink-0">📌</span>}
-              <span className="text-sm font-medium truncate">{session.title}</span>
-            </div>
-
-            {!activeWorkspaceId && session.workspaceId && (
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <div 
-                  className="w-1 h-1 rounded-full" 
-                  style={{ backgroundColor: workspaces?.find(w => w._id === session.workspaceId)?.color }} 
-                />
-                <span className="text-[9px] font-bold uppercase tracking-wider text-[#a8a29e]/60 truncate">
-                  {workspaces?.find(w => w._id === session.workspaceId)?.name}
-                </span>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-medium truncate">{session.title}</span>
               </div>
-            )}
-          </div>
+
+              {!activeWorkspaceId && session.workspaceId && (
+                <div className="flex items-center gap-1.5">
+                  <div 
+                    className="w-1 h-1 rounded-full" 
+                    style={{ backgroundColor: workspaces?.find(w => w._id === session.workspaceId)?.color }} 
+                  />
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-[#a8a29e]/50 truncate">
+                    {workspaces?.find(w => w._id === session.workspaceId)?.name}
+                  </span>
+                </div>
+              )}
+            </div>
         )}
       </div>
 
-      {/* Actions: Mobile = ⋯ button, Desktop = inline hover buttons */}
+      {/* Actions: universal ⋯ button with dropdown */}
       {editingSessionId === session._id ? (
         <button 
           onClick={(e) => { e.stopPropagation(); handleRename(session._id); }}
-          className="p-2 text-[#d4a373] transition-all shrink-0"
+          className="p-1 text-[#d4a373] transition-all shrink-0"
         >
-          <Check className="w-4 h-4" />
+          <Check className="w-3.5 h-3.5" />
         </button>
       ) : (
-        <>
-          {/* Mobile: single ⋯ button */}
+        <div className="relative shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setActionMenuSessionId(session._id);
+              if (actionMenuSessionId === session._id) {
+                setActionMenuSessionId(null);
+                setDropdownAnchor(null);
+              } else {
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setDropdownAnchor({ top: rect.top - 4, left: rect.right + 8 });
+                setActionMenuSessionId(session._id);
+              }
             }}
-            className="lg:hidden p-2 text-[#a8a29e] active:text-[#d4a373] transition-all shrink-0"
+            className="p-1 text-[#a8a29e] hover:text-[#d4a373] transition-all"
           >
-            <MoreVertical className="w-4 h-4" />
+            <MoreVertical className="w-3.5 h-3.5" />
           </button>
-
-          {/* Desktop: inline hover buttons */}
-          <div className="hidden lg:flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-all">
-            <button 
-              onClick={(e) => handleTogglePin(session._id, e)}
-              className={`p-1 transition-all mr-1 ${session.pinned ? "text-[#d4a373]" : "hover:text-[#d4a373]"}`}
-              title={session.pinned ? "Unpin session" : "Pin session"}
-            >
-              {session.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-            </button>
-            <button 
-              onClick={(e) => startEditing(session._id, session.title || "", e)}
-              className="p-1 hover:text-[#d4a373] transition-all mr-1"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-            <button 
-              onClick={(e) => onDeleteChat(session._id, e)}
-              className="p-1 hover:text-red-400 transition-all shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -193,7 +194,7 @@ export function SessionSidebar({
     <motion.div
       initial={false}
       animate={{ 
-        width: isLargeViewport ? (showHistory ? 288 : 0) : (showHistory ? "min(288px, 85vw)" : 0),
+        width: isLargeViewport ? (showHistory ? 260 : 0) : (showHistory ? "min(320px, 88vw)" : 0),
         opacity: isLargeViewport ? (showHistory ? 1 : 0) : (showHistory ? 1 : 0),
         x: isLargeViewport ? 0 : (showHistory ? 0 : "-100%")
       }}
@@ -209,7 +210,7 @@ export function SessionSidebar({
               onClick={() => onSelectWorkspace(undefined)}
               className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${!activeWorkspaceId ? 'bg-[#d4a373] shadow-lg shadow-[#d4a373]/20' : 'bg-[#0f0e0c] border border-[#2a2723] text-[#a8a29e]'}`}
             >
-              <Bot className={`w-5 h-5 ${!activeWorkspaceId ? 'text-[#0f0e0c]' : ''}`} />
+              <LayoutDashboard className={`w-5 h-5 ${!activeWorkspaceId ? 'text-[#0f0e0c]' : ''}`} />
             </button>
             
             <div className="w-8 h-[1px] bg-[#2a2723]" />
@@ -257,32 +258,54 @@ export function SessionSidebar({
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            <header className="p-4 lg:p-6 shrink-0 space-y-4 lg:space-y-6">
+            <header className="p-3 lg:p-4 shrink-0 space-y-3">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-[#d4a373]" />
+                  <div
+                    className="w-2 h-2 rounded-full"
+                    style={{
+                      backgroundColor: activeWorkspaceId
+                        ? (workspaces?.find(w => w._id === activeWorkspaceId)?.color || "#d4a373")
+                        : "#d4a373"
+                    }}
+                  />
                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#f2efeb]">
                     {activeWorkspaceId 
                       ? workspaces?.find(w => w._id === activeWorkspaceId)?.name 
-                      : "Universal Chat"}
+                      : "Dashboard"}
                   </span>
                 </div>
                 <button
                   onClick={onCloseHistory}
-                  className="hidden lg:flex p-1.5 rounded-lg text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
+                  className="hidden lg:flex p-1 rounded-lg text-[#a8a29e] hover:text-[#f2efeb] hover:bg-[#2a2723] transition-all"
                   title="Hide History"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               <button 
-                onClick={onNewChat}
-                className="w-full flex items-center justify-center gap-2.5 py-3 lg:py-3.5 rounded-2xl bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] text-sm font-bold transition-all duration-300 shadow-lg shadow-[#d4a373]/10"
+                onClick={() => onNewChat()}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 New Session
               </button>
+
+            {/* Workspace Settings Section */}
+            {activeWorkspaceId && (() => {
+              const ws = workspaces?.find(w => w._id === activeWorkspaceId);
+              if (!ws) return null;
+              return (
+                <Link
+                  href={`/workspace/${ws._id}`}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  Workspace Settings
+                </Link>
+              );
+            })()}
             </header>
 
           
@@ -295,9 +318,9 @@ export function SessionSidebar({
           <div className="flex-1 overflow-y-auto px-3 py-2 lg:py-4 space-y-0.5 lg:space-y-1 custom-scrollbar">
             {pinnedSessions.length > 0 && (
               <div className="mb-4">
-                <div className="px-3 mb-2 sticky top-0 bg-[#1a1814] py-2 z-10 flex items-center gap-1.5">
-                  <Pin className="w-3 h-3 text-[#d4a373]" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#d4a373]">Pinned</span>
+                <div className="px-3 sticky top-0 bg-[#1a1814] py-1.5 z-10 flex items-center gap-1">
+                  <Pin className="w-2.5 h-2.5 text-[#d4a373]" />
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#d4a373]">Pinned</span>
                 </div>
                 <div className="space-y-0.5 lg:space-y-1">
                   {pinnedSessions.map(renderSessionItem)}
@@ -307,8 +330,8 @@ export function SessionSidebar({
 
             {historySessions.length > 0 && (
               <div>
-                <div className="px-3 mb-2 sticky top-0 bg-[#1a1814] py-2 z-10">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/50">History</span>
+                <div className="px-3 sticky top-0 bg-[#1a1814] py-1.5 z-10">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/50">History</span>
                 </div>
                 <div className="space-y-0.5 lg:space-y-1">
                   {historySessions.map(renderSessionItem)}
@@ -438,6 +461,44 @@ export function SessionSidebar({
         </div>
       );
     })()}
+
+      {/* Portal dropdown — opens rightward from action button */}
+      {actionMenuSessionId && dropdownAnchor && (() => {
+        const session = sessions?.find(s => s._id === actionMenuSessionId);
+        if (!session) return null;
+        return createPortal(
+          <div
+            data-session-dropdown
+            className="fixed z-[300] min-w-[160px] rounded-xl bg-[#1a1815] border border-[#2a2723] shadow-xl py-1.5 overflow-hidden"
+            style={{ top: dropdownAnchor.top, left: dropdownAnchor.left }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={(e) => { handleTogglePin(session._id, e); }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
+            >
+              {session.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+              {session.pinned ? "Unpin" : "Pin"}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); startEditing(session._id, session.title || "", e); setActionMenuSessionId(null); setDropdownAnchor(null); }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              Rename
+            </button>
+            <div className="border-t border-[#2a2723]/50 my-1" />
+            <button
+              onClick={(e) => { e.stopPropagation(); setActionMenuSessionId(null); setDropdownAnchor(null); onDeleteChat(session._id, e); }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-red-400 hover:bg-red-500/10 transition-colors text-left"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+          </div>,
+          document.body
+        );
+      })()}
     </>
   );
 }

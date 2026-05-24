@@ -46,6 +46,26 @@ export const get = query({
   },
 });
 
+export const updateSettings = mutation({
+  args: {
+    id: v.id("workspaces"),
+    context: v.optional(v.string()),
+    agentName: v.optional(v.string()),
+    color: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const workspace = await ctx.db.get(args.id);
+    if (!workspace || workspace.userId !== userId) throw new Error("Unauthorized");
+
+    const patch: Record<string, string> = {};
+    if (args.context !== undefined) patch.context = args.context;
+    if (args.agentName !== undefined) patch.agentName = args.agentName;
+    if (args.color !== undefined) patch.color = args.color;
+    await ctx.db.patch(args.id, patch);
+  },
+});
+
 export const updateContext = mutation({
   args: { id: v.id("workspaces"), context: v.string() },
   handler: async (ctx, args) => {

@@ -103,9 +103,10 @@ interface MessageBubbleProps {
     };
   };
   isLargeViewport: boolean;
+  agentName?: string;
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport, agentName }: MessageBubbleProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   return (
@@ -115,10 +116,13 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      className="flex flex-col space-y-3 py-6 lg:py-8 border-b border-[#2a2723]/15 last:border-b-0 w-full min-w-0"
+      className="flex flex-col py-6 lg:py-8 border-b border-[#2a2723]/15 last:border-b-0 w-full min-w-0"
     >
+      <div className={`flex flex-col space-y-3 w-fit max-w-[85%] ${
+        msg.author === "User" ? "ml-auto" : "mr-auto"
+      }`}>
       {/* Sender Header Row */}
-      <div className="flex items-center gap-2.5">
+      <div className={`flex items-center gap-2.5 ${msg.author === "User" ? "flex-row-reverse" : ""}`}>
         <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 shadow-sm border ${
           msg.author === "User" 
             ? "bg-[#1f1d19] border-[#2a2723]" 
@@ -132,7 +136,7 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
         <span className={`text-[10px] font-black uppercase tracking-[0.25em] ${
           msg.author === "User" ? "text-[#a8a29e]/60" : "text-[#d4a373]"
         }`}>
-          {msg.author === "User" ? "You" : "Dialogue"}
+          {msg.author === "User" ? "You" : (agentName || "Dialogue")}
         </span>
         <span className="text-[9px] text-[#a8a29e]/40 font-bold tracking-widest uppercase">
           {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -140,8 +144,10 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
       </div>
 
       {/* Message Content Area */}
-      <div className={`relative w-full ml-2.5 pl-6 min-w-0 ${
-        msg.author === "AI" ? "border-l border-[#d4a373]/15" : ""
+      <div className={`relative min-w-0 ${
+        msg.author === "User"
+          ? "mr-2.5 pr-6"
+          : "ml-2.5 pl-6 border-l border-[#d4a373]/15"
       }`}>
         {/* Scope Badge (if any) */}
         {msg.scope && (
@@ -330,6 +336,7 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
           return <ToolCallGroup calls={allToolCalls} isLargeViewport={isLargeViewport} msgId={msg._id} />;
         })() : null}
       </div>
+    </div>
     </motion.div>
   );
 });

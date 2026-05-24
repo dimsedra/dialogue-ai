@@ -77,7 +77,7 @@ export function EventList({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={isLargeViewport ? undefined : { duration: 0 }}
-        className={`p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group cursor-pointer ${expandedEventId === event._id ? "ring-1 ring-[#d4a373]/30" : ""}`}
+        className={`p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group cursor-pointer overflow-hidden ${expandedEventId === event._id ? "ring-1 ring-[#d4a373]/30" : ""}`}
         onClick={() => setExpandedEventId(expandedEventId === event._id ? null : event._id)}
       >
           <div className="flex items-start justify-between gap-4 mb-2">

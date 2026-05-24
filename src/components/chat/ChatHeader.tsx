@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Sparkles, Tag, X, Check, Zap, Cpu, Menu, LogOut, Brain } from "lucide-react";
+import { Sparkles, X, Check, Zap, Cpu, Menu, LogOut, Brain, Grid2x2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import Link from "next/link";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 
 interface ChatHeaderProps {
@@ -17,6 +16,7 @@ interface ChatHeaderProps {
   onProviderChange: (p: "gemini" | "lmstudio" | "openai" | "anthropic") => void;
   onSignOut: () => void;
   onShowHistory: () => void;
+  onShowTasks?: () => void;
 }
 
 export function ChatHeader({
@@ -30,23 +30,10 @@ export function ChatHeader({
   onProviderChange,
   onSignOut,
   onShowHistory,
+  onShowTasks,
 }: ChatHeaderProps) {
   // Own state — isolated from Chat.tsx
   const [showSettings, setShowSettings] = useState(false);
-  const [isEditingWorkspaceContext, setIsEditingWorkspaceContext] = useState(false);
-  const [tempContext, setTempContext] = useState("");
-
-  const updateWorkspaceContext = useMutation(api.workspaces.updateContext);
-
-  const handleUpdateWorkspaceContext = async () => {
-    if (activeWorkspaceId) {
-      await updateWorkspaceContext({
-        id: activeWorkspaceId,
-        context: tempContext,
-      });
-      setIsEditingWorkspaceContext(false);
-    }
-  };
 
   return (
     <>
@@ -170,9 +157,9 @@ export function ChatHeader({
                 </div>
 
                 {currentWorkspace && (
-                  <div className="flex items-center gap-2">
+                  <Link href={`/workspace/${currentWorkspace._id}`}>
                     <div
-                      className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border"
+                      className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter border cursor-pointer hover:opacity-80 transition-opacity"
                       style={{
                         backgroundColor: `${currentWorkspace.color}15`,
                         borderColor: `${currentWorkspace.color}40`,
@@ -181,103 +168,27 @@ export function ChatHeader({
                     >
                       {currentWorkspace.name}
                     </div>
-
-                    <div className="relative">
-                      <button
-                        onClick={() => {
-                          setTempContext(currentWorkspace.context || "");
-                          setIsEditingWorkspaceContext(true);
-                        }}
-                        className={`p-1.5 rounded-lg border transition-all flex items-center gap-1.5 group/tag ${
-                          currentWorkspace.context
-                            ? "bg-[#d4a373]/10 border-[#d4a373]/30 text-[#d4a373]"
-                            : "bg-[#1a1814] border-[#2a2723] text-[#a8a29e] hover:border-[#d4a373]/30 hover:text-[#d4a373]"
-                        }`}
-                      >
-                        <Tag className="w-3 h-3" />
-                        <span className="text-[9px] font-bold uppercase tracking-widest hidden group-hover/tag:inline-block">
-                          {currentWorkspace.context ? "Edit Context" : "Add Context"}
-                        </span>
-                      </button>
-
-                      <AnimatePresence>
-                        {isEditingWorkspaceContext && (
-                          <>
-                            <motion.div
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              onClick={() => setIsEditingWorkspaceContext(false)}
-                              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-60"
-                            />
-                            <motion.div
-                              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                              className="absolute top-full left-0 mt-3 w-100 bg-[#1a1814] border border-[#d4a373]/30 rounded-2xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-70 space-y-4"
-                            >
-                              <div className="space-y-1">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-[#d4a373]">
-                                  Workspace Context
-                                </h3>
-                                <p className="text-[10px] text-[#a8a29e]">
-                                  Define the goals and rules for the AI agent in this workspace.
-                                </p>
-                              </div>
-                              <textarea
-                                autoFocus
-                                name="chat-ws-context"
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="off"
-                                spellCheck={false}
-                                value={tempContext}
-                                onChange={(e) => setTempContext(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    handleUpdateWorkspaceContext();
-                                  }
-                                }}
-                                placeholder="Type instructions here..."
-                                className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-xl p-4 text-xs text-[#f2efeb] placeholder:text-[#a8a29e]/20 min-h-40 resize-none outline-none focus:border-[#d4a373]/40 transition-all scrollbar-hide"
-                              />
-                              <div className="flex items-center justify-end gap-3 pt-2">
-                                <button
-                                  onClick={() => setIsEditingWorkspaceContext(false)}
-                                  className="px-4 py-2 text-[10px] font-bold text-[#a8a29e] hover:text-[#f2efeb] uppercase tracking-widest"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  onClick={handleUpdateWorkspaceContext}
-                                  className="px-5 py-2 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/10"
-                                >
-                                  Save Instructions
-                                </button>
-                              </div>
-                            </motion.div>
-                          </>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
+                  </Link>
                 )}
               </div>
               <div className="flex items-center gap-2 text-[#a8a29e] text-[11px] font-medium">
                 <span className="flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-[#d4a373]" /> Dialogue Agent
+                  <Sparkles className="w-3 h-3 text-[#d4a373]" /> {currentWorkspace?.agentName || "Dialogue"}
                 </span>
                 <span>•</span>
                 <span>{messageCount} messages</span>
               </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1a1814] border border-[#2a2723]">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] text-[#a8a29e] font-bold uppercase tracking-wider">Live</span>
-          </div>
+          {onShowTasks && (
+            <button
+              onClick={onShowTasks}
+              className="p-2 lg:p-2.5 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all flex items-center justify-center shadow-lg shrink-0"
+              title="Planner"
+            >
+              <Grid2x2 className="w-4 h-4 lg:w-5 lg:h-5" />
+            </button>
+          )}
         </div>
       </header>
 

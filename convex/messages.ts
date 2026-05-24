@@ -272,3 +272,10 @@ export const togglePinSession = mutation({
     await ctx.db.patch(args.id, { pinned: !session.pinned });
   },
 });
+
+export const getStorageUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});

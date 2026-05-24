@@ -112,7 +112,7 @@ export function TaskList({
                 <Circle className="w-4 h-4 text-[#a8a29e]/40 group-hover:text-[#d4a373]" />
               )}
             </button>
-            <div className="flex-1 space-y-3">
+            <div className="flex-1 min-w-0 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex flex-col gap-1 flex-1 min-w-0 overflow-hidden">
                   {!activeWorkspaceId && taskWorkspace && (

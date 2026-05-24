@@ -100,6 +100,11 @@ html:not(.allow-scroll), body:not(.allow-scroll) {
   to { transform: rotate(360deg); }
 }
 
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
 .animate-spin-slow {
   animation: spin-slow 8s linear infinite;
 }

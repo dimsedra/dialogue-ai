@@ -20,6 +20,7 @@ export default defineSchema({
     icon: v.string(),
     color: v.string(),
     context: v.optional(v.string()),
+    agentName: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_user", ["userId"]),
 
@@ -147,4 +148,12 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_user_type", ["userId", "type"])
     .index("by_user_period", ["userId", "periodStart"]),
+
+  userImages: defineTable({
+    userId: v.id("users"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    fileType: v.string(),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
 });
