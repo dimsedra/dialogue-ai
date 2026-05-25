@@ -15,16 +15,16 @@ Dialogue inverts this entire paradigm. Here, the AI agent is the **core runtime 
 ### Core Productivity Pillars (Primary Engines)
 
 #### Living Chronological Journals
-Traditional to-do list apps are static black holes where history goes to die. Once a task is completed, the struggles, decisions, and micro-milestones that got you there are lost forever. Dialogue turns this on its head by capturing a timestamped stream of your active consciousness. Every struggle, shift in scope, or design choice is appended as a live cognitive node. Because the agent understands the context of *how* you do things, it can resume paused tasks, trace technical blockers, and act as an automated developer diary that grows with you.
+Traditional to-do list apps are static black holes where history goes to die. Once a task is completed, the struggles, decisions, and micro-milestones that got you there are lost forever. Dialogue turns this on its head by capturing a timestamped stream of your active consciousness. Every struggle, shift in scope, or design choice is appended as a live cognitive node with full chronological context. Because the agent understands the context of *how* you do things, it can resume paused tasks, trace technical blockers, and act as an automated developer diary that grows with you. These journals also feed into your memory layer—durable facts embedded in your notes are automatically synthesized into long-term semantic memories, so nothing you record is ever truly forgotten.
 
 #### Native Habits & Routine Tracking
 Checked off your habits twenty days in a row? Standard checklists break down when forced to manage repeating daily and weekly identities—they lack streak math, consistency grids, and agent intelligence. Dialogue treats habits as first-class schemas distinct from one-off tasks. The agent silently monitors your routines, updates streaks without blocking you with authorization cards, handles timezone-aware plan-approved skips (streak freezes), and automatically links routine trends directly to your reflections.
 
 #### Background Semantic Memory
-Standard AI assistants suffer from total amnesia—requiring you to re-introduce yourself, your goals, and your work style at the start of every new chat session. Dialogue runs quiet background evaluations to synthesize your workspace activity, storing your workflow patterns, preferences, and long-term milestones in a vector-indexed memory layer. The next time you open a thread, the agent already knows you prefer deep-work mornings, short code sprints, and clean boundaries.
+Standard AI assistants suffer from total amnesia—requiring you to re-introduce yourself, your goals, and your work style at the start of every new chat session. Dialogue runs quiet background evaluations to synthesize your workspace activity, storing your workflow patterns, preferences, and long-term milestones in a vector-indexed memory layer with automatic deduplication and time-decay weighting so recent context naturally takes priority. Memories are scoped to workspaces where relevant and automatically synthesized from your chronological journals—every task note and event outcome feeds back into the agent's long-term understanding of how you work. The next time you open a thread, the agent already knows you prefer deep-work mornings, short code sprints, and clean boundaries.
 
 #### Interactive Periodic Reflections
-Productivity isn't just about crossing items off a list; it is about recognizing your growth. Dialogue periodically aggregates your task velocity, habit streaks, and journaled milestones, compiling them into a visual, gamified summary—a "Spotify Wrapped" for your life. By reflecting on your output, the agent helps you celebrate wins and identify cognitive bottlenecks, transforming checklist compliance into a satisfying journey of self-reflection.
+Productivity isn't just about crossing items off a list; it is about recognizing your growth. Dialogue periodically aggregates your task velocity, habit streaks, journaled milestones, and narrative context from your chronological logs, compiling them into a visual, gamified summary—a "Spotify Wrapped" for your life. By reflecting on your output, the agent helps you celebrate wins and identify cognitive bottlenecks, transforming checklist compliance into a satisfying journey of self-reflection. Each reflection blends statistical breakdowns with a narrative arc drawn directly from the struggles and breakthroughs you recorded in your task and event journals.
 
 ---
 
@@ -32,7 +32,7 @@ Productivity isn't just about crossing items off a list; it is about recognizing
 
 * **Multimodal Ingestion & Web Research**: Drag PDFs, images, or briefs directly into your chat. The agent reads the content and launches real-time web searches to fact-check, synthesize, and execute schedule updates in a single turn.
 * **Context-Aware Smart Notifications**: No more dismissible, timezone-broken reminders. Dialogue fires browser notifications packed with active workspace context, giving you instant shortcuts to the exact resources and designs you need.
-* **Context-Isolated Workspaces & Universal Center**: Silo chats, tasks, and memory context into dedicated project workspaces (e.g. "Work", "Sovereign"). Then, step back into the **Universal Space**—a global control center where the agent coordinates tasks across boundaries.
+* **Context-Isolated Workspaces & Universal Center**: Silo chats, tasks, and memory context into dedicated project workspaces (e.g. "Work", "Sovereign"). Then, step back into the **Universal Space**—a dashboard that aggregates today's tasks, events, and journal summaries across all workspaces in a single view. The Universal Space runs its own neutral agent capable of cross-workspace queries ("what's my day look like?"), inline actions (mark done, reschedule, pin), and weekly reflections that draw from your entire activity, not just one silo.
 * **Task & Event Resource Tray**: A clean visual panel that aggregates external links, Figma specs, and PDF documents attached directly to your chronological logs, putting your active references a single click away.
 
 ---
@@ -101,7 +101,8 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 
 ### 3. Long-Term Memory & Search
 
-* **`updateMemory`**: Refines and updates the user's permanent biography summary based on behavioral insights.
+* **`saveSemanticMemory`**: Silently records persistent facts about the user (preferences, life context, technical stack, work details) on every turn, building a durable vector-indexed knowledge base that persists across sessions and workspaces.
+* **`updateUserBio`**: Refines and updates the user's permanent biography summary based on behavioral insights.
 * **`searchHistoricalEntities`**: Allows keyword and date range searches across completed tasks and past meetings, giving the agent a backward-looking historical perspective.
 * **`listWorkspaces`**: Reads all active workspaces to help users route, organize, and categorize items.
 
@@ -111,7 +112,7 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 
 ### 5. Periodic Reflections
 
-* **`triggerReflection`**: Aggregates workspace metrics (completed tasks, streaks, active categories) and invokes the LLM to generate an engaging, Spotify-Wrapped style narrative summary and stats card for a given period (weekly, monthly, or yearly).
+* **`triggerReflection`**: Aggregates workspace metrics (completed tasks, streaks, active categories) and narrative context from your chronological journals, then invokes the LLM to generate an engaging, Spotify-Wrapped style narrative summary and stats card for a given period (weekly, monthly, or yearly).
 
 ### 6. Native Habits & Routine Tracking
 
@@ -132,7 +133,7 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 * **`messages`**: Multi-turn chat message data. Stores text, author, attachments, extracted file contents, and tool call logs.
 * **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger incorporating chronological links and document storage references), progress percentage (0-100), `statusHook`, and time stamps (`dueDate`, `completedAt`).
 * **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema) and chronological notes ledger.
-* **`memories`**: Vector-indexed memory fragments for semantic search retrieval.
+* **`memories`**: Vector-indexed memory fragments with automatic deduplication, time-decay weighting, workspace scoping, and optional source attribution (agent-extracted, note-synthesized, user-saved).
 * **`reflections`**: Periodic summary logs containing the synthesized weekly, monthly, and yearly summaries, compiled focus statistics, and optional user feedback comments.
 * **`habits`**: Habit definitions including name, workspace configuration mapping, target completion metrics, and cached streak stats.
 * **`habitLogs`**: Timezone-adjusted completion logs, recording exact timestamps, skipped/completed states, and contextual progress notes.
