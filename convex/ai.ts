@@ -76,12 +76,10 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Recurrence: Populate 'recurrence' for repeating routines (daily/weekly). Set base startTime to the first occurrence.
 ### deleteEvent
 - Purpose: Use ONLY AFTER verification to remove a scheduled event.
-### cancelOccurrence
-- Purpose: Use ONLY AFTER verification to cancel a single occurrence of a recurring event series (e.g., 'cancel this Saturday's standup'). Provide seriesId (the parent event ID) and the timestamp (epoch ms) of the specific occurrence to cancel. The rest of the recurring schedule remains unchanged.
 ### updateEvent
-- Purpose: Use ONLY AFTER verification to modify an existing standalone event or update ALL occurrences of an entire recurring series. Provide only the fields that need modification.
+- Purpose: Use ONLY AFTER verification to modify an existing standalone event or update ALL occurrences of an entire recurring series. Provide only the fields that need modification. Set cancelled to true to cancel an event without deleting it.
 ### updateEventOccurrence
-- Purpose: Use ONLY AFTER verification to modify or reschedule a single day/occurrence of a recurring series (e.g., 'move Tuesday gym to 8am'). Provide seriesId and originalStartTime. Explain clearly during confirmation that ONLY this specific date was modified.
+- Purpose: Use ONLY AFTER verification to modify or reschedule a single day/occurrence of a recurring series (e.g., 'move Tuesday gym to 8am', 'cancel this Saturday'). Provide seriesId and originalStartTime. Set cancelled to true to cancel this specific occurrence. Explain clearly during confirmation that ONLY this specific date was modified.
 ### fetchUrl
 - Purpose: Fetch and read the content of a URL shared by the user. Use this to read web pages, articles, or documents at a specific URL.
 - THE URL FIDELITY PROTOCOL:
@@ -139,13 +137,10 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Purpose: Creates a new habit routine for the user in the active workspace. Do not use for one-off tasks.
 - Parameters: name (string), description (optional string), frequency (daily/custom), daysOfWeek (optional array of numbers).
 ### log_habit
-- Purpose: Logs a habit execution (completed or skipped).
+- Purpose: Logs a habit execution (completed or skipped) silently. Runs instantly without confirmation — the user can correct you if wrong.
 - Parameters: habitId (string), dateString (string, local format YYYY-MM-DD), status (completed/skipped), notes (optional string).
-- IMPORTANT RULES:
-  1. NEVER log a habit silently when inferred from casual conversation. If the user did NOT explicitly ask you to log a habit, you MUST first surface your intent and ask for confirmation. Example: "Sounds like you skipped your Morning Run today — want me to log that?" Only call this tool AFTER the user confirms.
-  2. If the user explicitly said "log my [habit] as [status]", call this tool immediately — no extra confirmation needed.
-  3. When logging from a conversational remark (e.g. "too tired after the flight"), pass the user's own words as the notes field.
-  4. ALWAYS include a natural language acknowledgement in your response after calling this tool.
+- When logging from a conversational remark (e.g. "too tired after the flight"), pass the user's own words as the notes field.
+- ALWAYS include a natural language acknowledgement in your response after calling this tool.
 ### get_habit_consistency
 - Purpose: Queries consistency percentages, streak metadata, and log details. Executed silently.
 - Parameters: periodStartDate (string), periodEndDate (string).
@@ -571,6 +566,7 @@ export const updatePreferences = mutation({
     provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"), v.literal("openai"), v.literal("anthropic"))),
     searchProvider: v.optional(v.union(v.literal("tavily"), v.literal("serper"))),
     customConfigs: v.optional(v.any()),
+    taskModels: v.optional(v.any()),
     userId: v.optional(v.id("users"))
   },
   handler: async (ctx, args) => {
@@ -606,7 +602,8 @@ export const updatePreferences = mutation({
         preferences: { 
           ...preferences, 
           ...(args.provider ? { provider: args.provider } : {}),
-          ...(args.searchProvider ? { searchProvider: args.searchProvider } : {}),
+          ...(args.searchProvider ? { searchProvider: args.searchProvider } : { searchProvider: "tavily" }),
+          ...(args.taskModels ? { taskModels: args.taskModels } : {}),
           customConfigs: newConfigs
         }
       });
@@ -617,7 +614,8 @@ export const updatePreferences = mutation({
         preferences: { 
           ...(args.provider ? { provider: args.provider } : { provider: "gemini" }),
           ...(args.searchProvider ? { searchProvider: args.searchProvider } : { searchProvider: "tavily" }),
-          ...(processedConfigs ? { customConfigs: processedConfigs } : {})
+          ...(processedConfigs ? { customConfigs: processedConfigs } : {}),
+          ...(args.taskModels ? { taskModels: args.taskModels } : {})
         }
       });
     }

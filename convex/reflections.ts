@@ -6,7 +6,7 @@ import { internal } from "./_generated/api";
 
 // Helper to expand recurring events for a specific window
 function expandRecurringEventsForWindow(events: Doc<"events">[], windowStart: number, windowEnd: number) {
-  const expanded: Doc<"events">[] = [];
+  const expanded: (Doc<"events"> & { cancelled?: boolean })[] = [];
   for (const event of events) {
     if (!event.recurrence) {
       if (event.startTime >= windowStart && event.startTime <= windowEnd) {
@@ -23,11 +23,12 @@ function expandRecurringEventsForWindow(events: Doc<"events">[], windowStart: nu
       const d = new Date(event.startTime);
       while (d.getTime() <= limit) {
         const timestamp = d.getTime();
-        if (timestamp >= windowStart && !exceptions.includes(timestamp)) {
+        if (timestamp >= windowStart) {
           expanded.push({
             ...event,
             startTime: timestamp,
             endTime: event.endTime !== undefined ? timestamp + duration : undefined,
+            cancelled: exceptions.includes(timestamp),
           });
         }
         d.setDate(d.getDate() + event.recurrence.interval);
@@ -53,13 +54,12 @@ function expandRecurringEventsForWindow(events: Doc<"events">[], windowStart: nu
               
               const timestamp = targetDate.getTime();
               if (timestamp >= event.startTime && timestamp <= limit && timestamp >= windowStart) {
-                if (!exceptions.includes(timestamp)) {
-                  expanded.push({
-                    ...event,
-                    startTime: timestamp,
-                    endTime: event.endTime !== undefined ? timestamp + duration : undefined,
-                  });
-                }
+                expanded.push({
+                  ...event,
+                  startTime: timestamp,
+                  endTime: event.endTime !== undefined ? timestamp + duration : undefined,
+                  cancelled: exceptions.includes(timestamp),
+                });
               }
             }
           }
@@ -145,6 +145,9 @@ export const saveReflection = mutation({
       eventsAttended: v.number(),
       topCategories: v.optional(v.array(v.string())),
       streakDays: v.optional(v.number()),
+      habitLogsCompleted: v.optional(v.number()),
+      habitLogsSkipped: v.optional(v.number()),
+      habitStreakDays: v.optional(v.number()),
     }),
     userReflection: v.optional(v.string()),
     userId: v.optional(v.id("users")),
@@ -235,6 +238,9 @@ export const compileReflectionStats = query({
         let tasksCompleted = 0;
         let tasksCreated = 0;
         let eventsAttended = 0;
+        let habitLogsCompleted = 0;
+        let habitLogsSkipped = 0;
+        let habitStreakDays = 0;
         const categoryCounts: Record<string, number> = {};
         const summaries: string[] = [];
         let maxStreak = 0;
@@ -243,6 +249,9 @@ export const compileReflectionStats = query({
           tasksCompleted += ref.stats.tasksCompleted;
           tasksCreated += ref.stats.tasksCreated;
           eventsAttended += ref.stats.eventsAttended;
+          habitLogsCompleted += ref.stats.habitLogsCompleted ?? 0;
+          habitLogsSkipped += ref.stats.habitLogsSkipped ?? 0;
+          habitStreakDays = Math.max(habitStreakDays, ref.stats.habitStreakDays ?? 0);
           maxStreak = Math.max(maxStreak, ref.stats.streakDays ?? 0);
           
           if (ref.stats.topCategories) {
@@ -250,7 +259,7 @@ export const compileReflectionStats = query({
               categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
             }
           }
-          summaries.push(`[${ref.periodLabel}]:\nStats: Tasks completed: ${ref.stats.tasksCompleted}, events: ${ref.stats.eventsAttended}.\nSummary: ${ref.summary}\nUser Feedback: ${ref.userReflection || "None"}`);
+          summaries.push(`[${ref.periodLabel}]:\nStats: Tasks completed: ${ref.stats.tasksCompleted}, events: ${ref.stats.eventsAttended}, habits completed: ${ref.stats.habitLogsCompleted ?? 0}.\nSummary: ${ref.summary}\nUser Feedback: ${ref.userReflection || "None"}`);
         }
 
         const topCategories = Object.entries(categoryCounts)
@@ -262,6 +271,9 @@ export const compileReflectionStats = query({
           tasksCompleted,
           tasksCreated,
           eventsAttended,
+          habitLogsCompleted,
+          habitLogsSkipped,
+          habitStreakDays,
           topCategories,
           streakDays: maxStreak,
           subSummaries: summaries.join("\n\n"),
@@ -331,6 +343,35 @@ export const compileReflectionStats = query({
       checkDate.setDate(checkDate.getDate() - 1);
     }
 
+    // 5. Habit stats for the period
+    const rawHabits = await ctx.db
+      .query("habits")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const filteredHabits = args.workspaceId
+      ? rawHabits.filter((h) => h.workspaceId === args.workspaceId)
+      : rawHabits;
+
+    let habitLogsCompletedTotal = 0;
+    let habitLogsSkippedTotal = 0;
+    let habitStreakDaysTotal = 0;
+    for (const h of filteredHabits) {
+      if (!h.archived) {
+        habitStreakDaysTotal = Math.max(habitStreakDaysTotal, h.currentStreak);
+        const logs = await ctx.db
+          .query("habitLogs")
+          .withIndex("by_habit", (q) => q.eq("habitId", h._id))
+          .collect();
+        for (const l of logs) {
+          if (l.dateString >= new Date(args.periodStart).toISOString().slice(0, 10) && l.dateString <= new Date(args.periodEnd).toISOString().slice(0, 10)) {
+            if (l.status === "completed") habitLogsCompletedTotal++;
+            else habitLogsSkippedTotal++;
+          }
+        }
+      }
+    }
+
     const formatTaskDate = (ts?: number) => {
       if (!ts) return "N/A";
       return new Date(ts).toLocaleString("en-US", { hour12: false });
@@ -343,17 +384,25 @@ export const compileReflectionStats = query({
       return `- [Task] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${t.notes ? `\n  Notes: ${t.notes.split("\n").join("\n  ")}` : ""}`;
     }).join("\n");
 
-    const eventsDetails = eventsList.map((e) => {
-      return `- [Event] ${e.title} at ${new Date(e.startTime).toLocaleTimeString()}${e.outcome ? ` (Outcome: ${e.outcome})` : ""}`;
+    const eventsDetails = eventsList.map((e: any) => {
+      return `- [Event] ${e.title} at ${new Date(e.startTime).toLocaleTimeString()}${e.outcome ? ` (Outcome: ${e.outcome})` : ""}${e.cancelled ? " [CANCELLED]" : ""}`;
+    }).join("\n");
+
+    // Habit details for debug
+    const habitDetails = filteredHabits.filter((h) => !h.archived).map((h) => {
+      return `- [Habit] ${h.name} (Streak: ${h.currentStreak}/${h.longestStreak}) — Completed: 0, Skipped: 0`;
     }).join("\n");
 
     return {
       tasksCompleted: tasksCompletedList.length,
       tasksCreated: tasksCreatedList.length,
-      eventsAttended: eventsList.length,
+      eventsAttended: eventsList.filter((e: any) => !e.cancelled).length,
+      habitLogsCompleted: habitLogsCompletedTotal,
+      habitLogsSkipped: habitLogsSkippedTotal,
+      habitStreakDays: habitStreakDaysTotal,
       topCategories,
       streakDays: streak,
-      rawDetails: `COMPLETED TASKS:\n${completedTasksDetails || "None."}\n\nEVENTS IN PERIOD:\n${eventsDetails || "None."}\n\nCRITICAL TIMELINESS RULE: To evaluate if a task was completed fast or late, you MUST compare the Completion time against the Due Date, not the Creation time. A large gap between Creation and Completion does not mean the user procrastinated if the task was completed before its Due Date. Emphasize and heavily weight High Priority tasks in your summaries.`,
+      rawDetails: `COMPLETED TASKS:\n${completedTasksDetails || "None."}\n\nEVENTS IN PERIOD:\n${eventsDetails || "None."}\n\nHABITS COMPLETED: ${habitLogsCompletedTotal} | HABITS SKIPPED: ${habitLogsSkippedTotal} | BEST HABIT STREAK: ${habitStreakDaysTotal} day(s)\n\nCRITICAL TIMELINESS RULE: To evaluate if a task was completed fast or late, you MUST compare the Completion time against the Due Date, not the Creation time. A large gap between Creation and Completion does not mean the user procrastinated if the task was completed before its Due Date. Emphasize and heavily weight High Priority tasks in your summaries.`,
     };
   },
 });

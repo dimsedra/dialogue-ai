@@ -212,7 +212,7 @@ export async function runChatEngine(options: ChatEngineOptions): Promise<ChatEng
     
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: modelId || "gemini-3.1-flash-lite-preview",
+      model: modelId || "gemini-2.0-flash",
       systemInstruction,
       tools,
     }, { baseUrl });
@@ -355,7 +355,7 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
   } else {
     if (!apiKey) apiKey = process.env.GEMINI_API_KEY || "";
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelId || "gemini-3.1-flash-lite-preview", systemInstruction }, { baseUrl });
+    const model = genAI.getGenerativeModel({ model: modelId || "gemini-2.0-flash", systemInstruction }, { baseUrl });
 
     const functionCalls = calls.map(c => ({ functionCall: { name: c.name, args: c.args } }));
     const functionResponses = calls.map(c => {

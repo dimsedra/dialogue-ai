@@ -60,6 +60,7 @@ export function HabitList({
   const [loggingId, setLoggingId] = useState<string | null>(null);
   const [notesInput, setNotesInput] = useState<Record<string, string>>({});
   const [savingNotesId, setSavingNotesId] = useState<string | null>(null);
+  const [noteSavedToast, setNoteSavedToast] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -127,6 +128,9 @@ export function HabitList({
         status,
         notes,
       });
+      setNotesInput((prev) => ({ ...prev, [habitId]: "" }));
+      setNoteSavedToast(habitId);
+      setTimeout(() => setNoteSavedToast((prev) => prev === habitId ? null : prev), 2000);
     } catch (error) {
       console.error("Failed to save notes:", error);
     } finally {
@@ -449,7 +453,7 @@ export function HabitList({
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
+                      className="overflow-hidden relative"
                     >
                       {todayLog.notes ? (
                         <div className="flex items-start gap-2 mt-1">
@@ -481,6 +485,19 @@ export function HabitList({
                         className="w-full mt-1.5 bg-[#0f0e0c]/50 border border-[#2a2723]/50 rounded-xl px-3 py-2 text-[11px] text-[#a8a29e] placeholder:text-[#a8a29e]/30 resize-none focus:outline-none focus:border-[#d4a373]/30 focus:text-[#f2efeb] transition-all duration-200"
                         disabled={savingNotesId === habit._id}
                       />
+                      <AnimatePresence>
+                        {noteSavedToast === habit._id && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="absolute -top-2 right-2 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase tracking-wider"
+                          >
+                            Note Updated!
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                       {savingNotesId === habit._id && (
                         <p className="text-[10px] text-[#a8a29e]/40 mt-1">Saving...</p>
                       )}

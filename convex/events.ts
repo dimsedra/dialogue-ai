@@ -195,6 +195,7 @@ export const update = mutation({
     notes: v.optional(v.string()),
     outcome: v.optional(v.string()),
     statusHook: v.optional(v.string()),
+    cancelled: v.optional(v.boolean()),
     recurrence: recurrenceValidator,
     resources: v.optional(v.array(v.object({
       type: v.union(v.literal("url"), v.literal("document")),
@@ -291,6 +292,7 @@ export const updateOccurrence = mutation({
     startTime: v.optional(v.number()),
     endTime: v.optional(v.number()),
     eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
+    cancelled: v.optional(v.boolean()),
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -322,6 +324,7 @@ export const updateOccurrence = mutation({
       notes: parent.notes,
       outcome: parent.outcome,
       statusHook: parent.statusHook,
+      cancelled: args.cancelled,
       contextUpdatedAt: parent.contextUpdatedAt,
       startTime: finalStartTime,
       endTime: finalEndTime,

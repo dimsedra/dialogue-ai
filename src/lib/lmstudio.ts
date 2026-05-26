@@ -189,23 +189,8 @@ export async function processLocalLLMRequest({
     {
       type: "function",
       function: {
-        name: "cancelOccurrence",
-        description: "Cancels a single occurrence of a recurring event series. The rest of the schedule remains unchanged.",
-        parameters: {
-          type: "object",
-          properties: {
-            seriesId: { type: "string", description: "The ID of the recurring event series" },
-            occurrenceTimestamp: { type: "number", description: "The epoch ms timestamp of the specific occurrence to cancel" },
-          },
-          required: ["seriesId", "occurrenceTimestamp"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
         name: "updateEvent",
-        description: "Updates an existing scheduled event by its ID. Provide only the fields you want to change.",
+        description: "Updates an existing scheduled event by its ID. Provide only the fields you want to change. Set cancelled to true to cancel an event.",
         parameters: {
           type: "object",
           properties: {
@@ -219,6 +204,7 @@ export async function processLocalLLMRequest({
             notes: { type: "string", description: "Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]. If the user explicitly asks to remove or correct a specific entry, you may surgically edit it." },
             outcome: { type: "string", description: "Post-event summary: decisions made, action items, key takeaways. Updated after the event concludes." },
             statusHook: { type: "string", description: "A single punchy sentence summarizing the event status or prep state for quick UI glances and notifications." },
+            cancelled: { type: "boolean", description: "Set to true to cancel/soft-delete this event without removing it." },
             recurrence: {
               type: "object",
               description: "Optional updated recurrence rule.",
@@ -253,7 +239,7 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "updateEventOccurrence",
-        description: "Modifies or reschedules a single detached occurrence of a recurring event series.",
+        description: "Modifies or reschedules a single detached occurrence of a recurring event series. Set cancelled to true to cancel this occurrence only.",
         parameters: {
           type: "object",
           properties: {
@@ -264,6 +250,7 @@ export async function processLocalLLMRequest({
             eventType: { type: "string", description: "Optional new event type ('interval' or 'point')" },
             title: { type: "string", description: "Optional new title" },
             location: { type: "string", description: "Optional new location" },
+            cancelled: { type: "boolean", description: "Set to true to cancel this specific occurrence of the recurring series" },
           },
           required: ["seriesId", "originalStartTime"],
         },
@@ -301,7 +288,7 @@ export async function processLocalLLMRequest({
       type: "function",
       function: {
         name: "triggerReflection",
-        description: "Triggers a periodic reflection (Spotify Wrapped style) for the user to summarize tasks completed, events attended, streaks, etc. Can be weekly, monthly, or yearly.",
+        description: "Triggers a periodic reflection (Spotify Wrapped style) for the user to summarize tasks completed, events attended, habits logged, streaks, etc. Can be weekly, monthly, or yearly.",
         parameters: {
           type: "object",
           properties: {

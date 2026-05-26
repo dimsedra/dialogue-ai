@@ -113,6 +113,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
     outcome: v.optional(v.string()),
     statusHook: v.optional(v.string()),
+    cancelled: v.optional(v.boolean()),
     contextUpdatedAt: v.optional(v.number()),
     workspaceId: v.optional(v.id("workspaces")),
     recurrence: v.optional(v.object({
@@ -143,6 +144,9 @@ export default defineSchema({
       eventsAttended: v.number(),
       topCategories: v.optional(v.array(v.string())),
       streakDays: v.optional(v.number()),
+      habitLogsCompleted: v.optional(v.number()),
+      habitLogsSkipped: v.optional(v.number()),
+      habitStreakDays: v.optional(v.number()),
     }),
     userReflection: v.optional(v.string()),  // User's own words during reflection conversation
     createdAt: v.number(),

@@ -298,6 +298,16 @@ Rules:
 - Only link resources when the user explicitly asks to associate them with a task or event.
 `;
 
+function getTaskModel(profile: any, task: string): string {
+  const models = (profile?.preferences as any)?.taskModels;
+  const taskModel = models?.[task];
+  if (taskModel) return taskModel;
+  const configs = (profile?.preferences as any)?.customConfigs || {};
+  const provider = (profile?.preferences as any)?.provider || "gemini";
+  const mainModel = configs[provider]?.modelId;
+  return mainModel || "gemini-2.0-flash-lite";
+}
+
 export const chat = internalAction({
   args: {
     sessionId: v.id("chatSessions"),
@@ -699,7 +709,7 @@ export const chat = internalAction({
           },
           {
             name: "updateEvent",
-            description: "Updates an existing scheduled event by its ID. Provide only the fields you want to change.",
+            description: "Updates an existing scheduled event by its ID. Provide only the fields you want to change. Set cancelled to true to cancel an event.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -712,6 +722,7 @@ export const chat = internalAction({
                 notes: { type: SchemaType.STRING, description: "Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]. If the user explicitly asks to remove or correct a specific entry, you may surgically edit it." },
                 outcome: { type: SchemaType.STRING, description: "Post-event summary: decisions made, action items, key takeaways. Updated after the event concludes." },
                 statusHook: { type: SchemaType.STRING, description: "A single punchy sentence summarizing the event status or prep state for quick UI glances and notifications." },
+                cancelled: { type: SchemaType.BOOLEAN, description: "Set to true to cancel/soft-delete this event without removing it." },
                 recurrence: {
                   type: SchemaType.OBJECT,
                   description: "Optional updated recurrence rule.",
@@ -743,7 +754,7 @@ export const chat = internalAction({
           },
           {
             name: "updateEventOccurrence",
-            description: "Modifies or reschedules a single detached occurrence of a recurring event series (e.g. moving just this Tuesday's workout to 8am).",
+            description: "Modifies or reschedules a single detached occurrence of a recurring event series (e.g. moving just this Tuesday's workout to 8am). Set cancelled to true to cancel this occurrence only.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -754,6 +765,7 @@ export const chat = internalAction({
                 eventType: { type: SchemaType.STRING, description: "Optional new event type ('interval' or 'point')" },
                 title: { type: SchemaType.STRING, description: "Optional new title for this occurrence" },
                 location: { type: SchemaType.STRING, description: "Optional new location for this occurrence" },
+                cancelled: { type: SchemaType.BOOLEAN, description: "Set to true to cancel this specific occurrence of the recurring series" },
               },
               required: ["seriesId", "originalStartTime"],
             },
@@ -767,18 +779,6 @@ export const chat = internalAction({
                 eventId: { type: SchemaType.STRING, description: "The ID of the event to delete" },
               },
               required: ["eventId"],
-            },
-          },
-          {
-            name: "cancelOccurrence",
-            description: "Cancels a single occurrence of a recurring event series. The rest of the schedule remains unchanged.",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                seriesId: { type: SchemaType.STRING, description: "The ID of the recurring event series" },
-                occurrenceTimestamp: { type: SchemaType.NUMBER, description: "The epoch ms timestamp of the specific occurrence to cancel" },
-              },
-              required: ["seriesId", "occurrenceTimestamp"],
             },
           },
           {
@@ -940,7 +940,7 @@ export const chat = internalAction({
           },
           {
             name: "log_habit",
-            description: "Logs a habit execution (completed or skipped) for the user. IMPORTANT RULES:\n1. NEVER log a habit silently. If the user did NOT explicitly ask you to log a habit, you MUST first surface your intent and ask for their confirmation. Example: 'Sounds like you skipped your Morning Run today — want me to log it as skipped?' Only call this tool after the user says yes (or equivalent).\n2. If the user DID explicitly say 'log my [habit] as [status]', call this tool immediately without extra confirmation.\n3. When logging from a casual remark (e.g. 'too tired to work out'), infer the habit from the Active Habits list and pass the user's own words as the notes field.\n4. ALWAYS include a natural language confirmation in your response after calling this tool.",
+            description: "Logs a habit execution (completed or skipped) silently. Runs instantly without confirmation — the user can correct you if wrong. When logging from a conversational remark, pass the user's own words as the notes field. ALWAYS include a natural language acknowledgement in your response after calling this tool.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -1121,7 +1121,7 @@ export const chat = internalAction({
       if (!isMultimodalProvider(providerStr) && mediaParts.length > 0) {
         const imageParts = mediaParts.filter(p => p.inlineData?.mimeType?.startsWith("image/"));
         if (imageParts.length > 0 && genAI) {
-          const geminiModelId = customConfigs.gemini?.modelId || "gemini-3.1-flash-lite-preview";
+          const geminiModelId = getTaskModel(profile, "ocr");
           const ocrModel = genAI.getGenerativeModel({ model: geminiModelId });
           for (const part of imageParts) {
             try {
@@ -1325,6 +1325,7 @@ export const chat = internalAction({
               startTime?: string;
               endTime?: string;
               eventType?: "interval" | "point";
+              cancelled?: boolean;
               recurrence?: {
                 frequency: "daily" | "weekly";
                 interval: number;
@@ -1385,6 +1386,7 @@ export const chat = internalAction({
               if (eventArgs.startTime) updates.startTime = parseLocal(eventArgs.startTime);
               if (eventArgs.endTime) updates.endTime = parseLocal(eventArgs.endTime);
               if (eventArgs.eventType) updates.eventType = eventArgs.eventType;
+              if (eventArgs.cancelled !== undefined) updates.cancelled = eventArgs.cancelled;
               if (eventArgs.recurrence) {
                 updates.recurrence = {
                   frequency: eventArgs.recurrence.frequency,
@@ -1443,17 +1445,8 @@ export const chat = internalAction({
               summary: `Deleted event or entire recurring series '${event?.title}'.`
             });
             activeToolCalls.push({ name: "deleteEvent", args: { ...call.args as Record<string, unknown>, titleHint: event?.title }, result: { status: "success" } });
-          } else if (call.name === "cancelOccurrence") {
-            const { seriesId, occurrenceTimestamp } = call.args as { seriesId: string; occurrenceTimestamp: number };
-            const series = await ctx.runQuery(api.events.get, { id: seriesId as Id<"events">, userId: args.userId });
-            await ctx.runMutation(api.events.cancelOccurrence, { id: seriesId as Id<"events">, timestamp: occurrenceTimestamp, userId: args.userId });
-            executedActionSummaries.push({
-              name: "cancelOccurrence",
-              summary: `Cancelled occurrence of recurring series '${series?.title}'`
-            });
-            activeToolCalls.push({ name: "cancelOccurrence", args: call.args as Record<string, unknown>, result: { status: "success" } });
           } else if (call.name === "updateEventOccurrence") {
-            const occArgs = call.args as { seriesId: string; originalStartTime: string; startTime?: string; endTime?: string; eventType?: "interval" | "point"; title?: string; location?: string };
+            const occArgs = call.args as { seriesId: string; originalStartTime: string; startTime?: string; endTime?: string; eventType?: "interval" | "point"; title?: string; location?: string; cancelled?: boolean };
             const oldEvent = await ctx.runQuery(api.events.get, { id: occArgs.seriesId as Id<"events">, userId: args.userId });
             await ctx.runMutation(api.events.updateOccurrence, {
               seriesId: occArgs.seriesId as Id<"events">,
@@ -1464,10 +1457,13 @@ export const chat = internalAction({
               eventType: occArgs.eventType,
               title: occArgs.title,
               location: occArgs.location,
+              cancelled: occArgs.cancelled,
             });
             executedActionSummaries.push({
               name: "updateEventOccurrence",
-              summary: `Successfully modified only the single occurrence on ${occArgs.originalStartTime} for recurring event series '${oldEvent?.title}'. New details for this single day: startTime=${occArgs.startTime || occArgs.originalStartTime}, title=${occArgs.title || oldEvent?.title}. NOTE: Added exception to parent series so it skips this date, and created a standalone event specifically for this date. The rest of the recurring schedule remains completely unchanged.`
+              summary: occArgs.cancelled
+                ? `Cancelled the single occurrence on ${occArgs.originalStartTime} for recurring series '${oldEvent?.title}'. The rest of the schedule remains unchanged.`
+                : `Successfully modified only the single occurrence on ${occArgs.originalStartTime} for recurring event series '${oldEvent?.title}'. New details for this single day: startTime=${occArgs.startTime || occArgs.originalStartTime}, title=${occArgs.title || oldEvent?.title}. NOTE: Added exception to parent series so it skips this date, and created a standalone event specifically for this date. The rest of the recurring schedule remains completely unchanged.`
             });
             activeToolCalls.push({
               name: "updateEventOccurrence",
@@ -1550,7 +1546,7 @@ export const chat = internalAction({
                 });
                 return;
               }
-              const summaryModel = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+              const summaryModel = genAI.getGenerativeModel({ model: getTaskModel(profile, "reflection") });
               const statsText = `
                 Type: ${type}
                 Period: ${periodLabel}
@@ -2115,7 +2111,7 @@ export const generateSessionTitle = internalAction({
     if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    const model = genAI.getGenerativeModel({ model: getTaskModel(profile, "title") });
 
     const messages = await ctx.runQuery(api.messages.list, { sessionId: args.sessionId, userId: args.userId });
     if (!messages || messages.length === 0) return;
@@ -2149,7 +2145,7 @@ export const parseDate = action({
     if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    const model = genAI.getGenerativeModel({ model: getTaskModel(profile, "title") });
 
     const now = new Date();
     if (args.timezoneOffset !== undefined) {
@@ -2223,13 +2219,16 @@ export const generateCronReflection = internalAction({
 
     if (!stats) return;
 
-    const summaryModel = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    const summaryModel = genAI.getGenerativeModel({ model: getTaskModel(profile, "reflection") });
     const statsText = `
       Type: ${args.type}
       Period: ${periodLabel}
       Tasks Completed: ${stats.tasksCompleted}
       Tasks Created: ${stats.tasksCreated}
       Events Attended: ${stats.eventsAttended}
+      Habits Completed: ${stats.habitLogsCompleted ?? 0}
+      Habits Skipped: ${stats.habitLogsSkipped ?? 0}
+      Best Habit Streak: ${stats.habitStreakDays ?? 0} day(s)
       Top Categories: ${stats.topCategories?.join(", ") || "None"}
       Streak Days: ${stats.streakDays || 0}
       
@@ -2242,7 +2241,7 @@ export const generateCronReflection = internalAction({
       Create a high-fidelity, Spotify-Wrapped style periodic reflection summary.
       Keep it highly engaging, celebratory, motivating, but honest.
       Use bullet points, emojis, bold text, and highlights.
-      Draw connections between tasks and events if possible.
+      Draw connections between tasks, events, and habits if possible.
       Address the user by name: "${profile?.name || "User"}".
       
       Stats data:

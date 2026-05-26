@@ -144,7 +144,7 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 * **`saveSemanticMemory`**: Silently records persistent facts about the user (preferences, life context, technical stack, work details) on every turn, building a durable vector-indexed knowledge base that persists across sessions.
 * **`deleteMemory`**: Removes a specific fact from the semantic memory store, letting the user correct wrong memories.
 * **`updateUserBio`**: Refines and updates the user's permanent biography summary based on behavioral insights. Previous bio versions are retained for rollback via `revertBio`.
-* **`scanRecentNotes`**: Reads recent journal entries across all tasks, events, and habits, giving the agent a cross-entity view of the user's recent activity and emotional context.
+* **`recentActivityFeed`**: Reads recent journal entries across all tasks, events, and habits with full entity and workspace context, giving the agent a cross-entity view of the user's recent activity and emotional arc.
 * **`searchHistoricalEntities`**: Allows keyword and date range searches across completed tasks and past meetings, giving the agent a backward-looking historical perspective.
 * **`listWorkspaces`**: Reads all active workspaces to help users route, organize, and categorize items.
 

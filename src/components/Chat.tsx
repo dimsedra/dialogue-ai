@@ -255,6 +255,7 @@ export function Chat({
               if (args.startTime) updates.startTime = parseLocal(args.startTime as string);
               if (args.endTime) updates.endTime = parseLocal(args.endTime as string);
               if (args.eventType) updates.eventType = args.eventType as string;
+              if (args.cancelled !== undefined) updates.cancelled = args.cancelled as boolean;
               if (args.recurrence) {
                 updates.recurrence = {
                   frequency: (args.recurrence as any).frequency,
@@ -284,11 +285,6 @@ export function Chat({
             await deleteEvent({ id: args.eventId as Id<"events"> });
             enrichedArgs.titleHint = event?.title;
           }
-          else if (name === "cancelOccurrence") {
-            const series = await convex.query(api.events.get, { id: args.seriesId as Id<"events"> });
-            await convex.mutation(api.events.cancelOccurrence, { id: args.seriesId as Id<"events">, timestamp: args.occurrenceTimestamp as number });
-            enrichedArgs.titleHint = series?.title;
-          }
           else if (name === "updateEventOccurrence") {
             const oldEvent = await convex.query(api.events.get, { id: args.seriesId as Id<"events"> });
             await updateOccurrence({
@@ -299,6 +295,7 @@ export function Chat({
               eventType: args.eventType ? (args.eventType as "interval" | "point") : undefined,
               title: args.title as string | undefined,
               location: args.location as string | undefined,
+              cancelled: args.cancelled !== undefined ? (args.cancelled as boolean) : undefined,
             });
             enrichedArgs.titleHint = (args.title as string | undefined) ?? oldEvent?.title;
           }

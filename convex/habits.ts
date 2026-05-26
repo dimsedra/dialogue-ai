@@ -225,7 +225,7 @@ export const logHabit = mutation({
       throw new Error("Habit not found or unauthorized");
     }
 
-    // Check unique constraint for this day
+    // Check if a log already exists for this date
     const existingLog = await ctx.db
       .query("habitLogs")
       .withIndex("by_habit_dateString", (q) =>
@@ -233,36 +233,45 @@ export const logHabit = mutation({
       )
       .unique();
 
+    // Format timestamp prefix
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const ts = `[${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
+
     let logId;
     if (existingLog) {
       if (existingLog.status === args.status) {
+        // Same status clicked again — idempotent. Do nothing, preserve notes.
         if (args.notes !== undefined) {
-          // Same status but notes provided — patch notes only, do NOT toggle off
-          await ctx.db.patch(existingLog._id, { notes: args.notes });
-          logId = existingLog._id;
-        } else {
-          // Toggle off: same status clicked with no notes
-          await ctx.db.delete(existingLog._id);
-          logId = null;
+          // Append notes with timestamp
+          const timestampedNote = `${ts} ${args.notes.trim()}`;
+          const updatedNotes = existingLog.notes
+            ? `${existingLog.notes}\n${timestampedNote}`
+            : timestampedNote;
+          await ctx.db.patch(existingLog._id, {
+            notes: updatedNotes,
+            timestamp: Date.now(),
+          });
         }
+        logId = existingLog._id;
       } else {
-        // Switch status: update existing log status/notes
+        // Switch status: update existing log status
         await ctx.db.patch(existingLog._id, {
           status: args.status,
-          notes: args.notes ?? existingLog.notes,
           timestamp: Date.now(),
         });
         logId = existingLog._id;
       }
     } else {
-      // Write log entry
+      // Write log entry with timestamped notes
+      const timestampedNote = args.notes ? `${ts} ${args.notes.trim()}` : undefined;
       logId = await ctx.db.insert("habitLogs", {
         userId,
         habitId: args.habitId,
         timestamp: Date.now(),
         dateString: args.dateString,
         status: args.status,
-        notes: args.notes,
+        notes: timestampedNote,
       });
     }
 

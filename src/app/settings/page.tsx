@@ -51,6 +51,7 @@ export default function SettingsPage() {
   type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic";
   const [provider, setProvider] = useState<AIProvider>("gemini");
   const [customConfigs, setCustomConfigs] = useState<Record<string, { apiKey?: string, baseUrl?: string, modelId?: string }>>({});
+  const [taskModels, setTaskModels] = useState<Record<string, string>>({});
   const [searchProvider, setSearchProvider] = useState<"tavily" | "serper">("tavily");
   const [prevProfileId, setPrevProfileId] = useState<Id<"userProfile"> | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -73,6 +74,9 @@ export default function SettingsPage() {
     if (profile.preferences?.customConfigs) {
       setCustomConfigs(profile.preferences.customConfigs);
     }
+    if (profile.preferences?.taskModels) {
+      setTaskModels(profile.preferences.taskModels as Record<string, string>);
+    }
     if (profile.preferences?.searchProvider) {
       setSearchProvider(profile.preferences.searchProvider as "tavily" | "serper");
     }
@@ -82,7 +86,7 @@ export default function SettingsPage() {
     setIsSaving(true);
     try {
       await updateProfile({ name, bio });
-      await updatePreferences({ provider, searchProvider, customConfigs });
+      await updatePreferences({ provider, searchProvider, customConfigs, taskModels });
     } catch (error) {
       console.error(error);
     } finally {
@@ -313,6 +317,45 @@ export default function SettingsPage() {
                           value={customConfigs[provider]?.modelId || ""}
                           onChange={(e) => setCustomConfigs(prev => ({ ...prev, [provider]: { ...prev[provider], modelId: e.target.value } }))}
                           placeholder={provider === "openai" ? "gpt-4o" : provider === "anthropic" ? "claude-3-5-sonnet-latest" : provider === "lmstudio" ? "e.g. llama-3.2-3b-instruct" : "gemini-1.5-pro"}
+                          className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
+                      <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">Task Models</h3>
+                      <p className="text-[11px] text-[#a8a29e]/60 leading-relaxed">Models used for background tasks like reflection summaries and OCR. These don't need to be as powerful as your chat model.</p>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">Reflection Summary</label>
+                          <input 
+                          type="text"
+                          value={taskModels["reflection"] || ""}
+                          onChange={(e) => setTaskModels(prev => ({ ...prev, reflection: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSaveProfile()}
+                          placeholder={customConfigs[provider]?.modelId || "gemini-2.0-flash"}
+                          className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">OCR / Vision Extraction</label>
+                        <p className="text-[10px] text-[#a8a29e]/50">Requires a multimodal model that supports image input (e.g. Gemini Pro Vision, GPT-4o).</p>
+                        <input 
+                          type="text"
+                          value={taskModels["ocr"] || ""}
+                          onChange={(e) => setTaskModels(prev => ({ ...prev, ocr: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSaveProfile()}
+                          placeholder={customConfigs[provider]?.modelId || "gemini-2.0-flash"}
+                          className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">Auto-Title & Date Parsing</label>
+                        <input 
+                          type="text"
+                          value={taskModels["title"] || ""}
+                          onChange={(e) => setTaskModels(prev => ({ ...prev, title: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSaveProfile()}
+                          placeholder={customConfigs[provider]?.modelId || "gemini-2.0-flash-lite"}
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
                       </div>

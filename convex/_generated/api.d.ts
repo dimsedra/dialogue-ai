@@ -23,6 +23,7 @@ import type * as messages_internal from "../messages_internal.js";
 import type * as migrations from "../migrations.js";
 import type * as pageSettings from "../pageSettings.js";
 import type * as reflections from "../reflections.js";
+import type * as seed from "../seed.js";
 import type * as tasks from "../tasks.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   pageSettings: typeof pageSettings;
   reflections: typeof reflections;
+  seed: typeof seed;
   tasks: typeof tasks;
   workspaces: typeof workspaces;
 }>;
