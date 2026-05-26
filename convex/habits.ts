@@ -291,7 +291,7 @@ export const getHabits = query({
 
     // Filter by workspace & archived status
     const activeHabits = allHabits.filter(
-      (h) => h.workspaceId === args.workspaceId && !h.archived
+      (h) => (args.workspaceId ? h.workspaceId === args.workspaceId : true) && !h.archived
     );
 
     const todayStr = args.todayDateString ?? (() => {
@@ -385,7 +385,7 @@ export const getHabitConsistency = query({
       .collect();
 
     const activeHabits = habits.filter(
-      (h) => h.workspaceId === args.workspaceId && !h.archived
+      (h) => (args.workspaceId ? h.workspaceId === args.workspaceId : true) && !h.archived
     );
 
     const reports = [];
