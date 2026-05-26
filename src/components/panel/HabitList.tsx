@@ -29,6 +29,8 @@ export interface HabitWithLogs {
   lastLoggedDate?: string;
   archived: boolean;
   recentLogs: HabitLog[];
+  weeklyRate?: number;
+  weeklyStats?: { completed: number; scheduled: number };
 }
 
 interface HabitListProps {
@@ -132,6 +134,20 @@ export function HabitList({
     }
   };
 
+  const overallStats = useMemo(() => {
+    if (!habits || habits.length === 0) return { rate: 0, completed: 0, scheduled: 0 };
+    let totalCompleted = 0;
+    let totalScheduled = 0;
+    habits.forEach((h) => {
+      if (h.weeklyStats) {
+        totalCompleted += h.weeklyStats.completed;
+        totalScheduled += h.weeklyStats.scheduled;
+      }
+    });
+    const rate = totalScheduled > 0 ? Math.round((totalCompleted / totalScheduled) * 100) : 0;
+    return { rate, completed: totalCompleted, scheduled: totalScheduled };
+  }, [habits]);
+
   if (!habits) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
@@ -170,6 +186,49 @@ export function HabitList({
       transition={isLargeViewport ? undefined : { duration: 0 }}
       className="space-y-4"
     >
+      {/* Overall Consistency Summary Card */}
+      <div className="rounded-3xl border border-[#2a2723] bg-[#1f1d19] p-4 flex items-center justify-between gap-4 hover:border-[#d4a373]/10 transition-all duration-300">
+        <div className="space-y-1">
+          <h4 className="text-xs font-bold text-[#a8a29e] uppercase tracking-widest">
+            Weekly Consistency
+          </h4>
+          <p className="text-lg font-black text-[#f2efeb]">
+            {overallStats.rate}% Complete
+          </p>
+          <p className="text-[10px] text-[#a8a29e]/60">
+            {overallStats.completed} of {overallStats.scheduled} scheduled entries completed this rolling week.
+          </p>
+        </div>
+        <div className="relative flex items-center justify-center shrink-0">
+          <svg className="w-14 h-14" viewBox="0 0 36 36">
+            <path
+              className="text-[#2a2723]"
+              strokeWidth="3"
+              stroke="currentColor"
+              fill="none"
+              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            />
+            <path
+              className="text-[#d4a373] transition-all duration-500 ease-out"
+              strokeDasharray={`${overallStats.rate}, 100`}
+              strokeWidth="3"
+              strokeLinecap="round"
+              stroke="currentColor"
+              fill="none"
+              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            />
+            <text
+              x="18"
+              y="20.35"
+              className="text-[9px] font-black fill-[#f2efeb]"
+              textAnchor="middle"
+            >
+              {overallStats.rate}%
+            </text>
+          </svg>
+        </div>
+      </div>
+
       <AnimatePresence mode="popLayout">
         {habits.map((habit: HabitWithLogs) => {
           const todayLog = habit.recentLogs?.find((l: HabitLog) => l.dateString === todayDateString);
@@ -205,27 +264,61 @@ export function HabitList({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {/* Pin to Chat button */}
-                  {onReferHabit && (
-                    <button
-                      type="button"
-                      onClick={() => onReferHabit(habit)}
-                      className="p-1.5 rounded-xl text-[#a8a29e]/40 hover:text-[#d4a373] hover:bg-[#d4a373]/10 transition-all duration-200 opacity-0 group-hover:opacity-100"
-                      title="Pin to chat"
-                    >
-                      <MessageSquarePlus className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    {/* Pin to Chat button */}
+                    {onReferHabit && (
+                      <button
+                        type="button"
+                        onClick={() => onReferHabit(habit)}
+                        className="p-1.5 rounded-xl text-[#a8a29e]/40 hover:text-[#d4a373] hover:bg-[#d4a373]/10 transition-all duration-200 opacity-0 group-hover:opacity-100"
+                        title="Pin to chat"
+                      >
+                        <MessageSquarePlus className="w-3.5 h-3.5" />
+                      </button>
+                    )}
 
-                  {/* Streak Counter */}
-                  <div className="flex items-center gap-1 bg-[#d4a373]/10 text-[#d4a373] px-2.5 py-1 rounded-2xl border border-[#d4a373]/10">
-                    <Flame className="w-3.5 h-3.5 fill-current" />
-                    <span className="text-xs font-black leading-none">{habit.currentStreak}</span>
-                    <span className="text-[9px] text-[#d4a373]/50 font-bold ml-0.5 leading-none">
-                      /{habit.longestStreak}
-                    </span>
+                    {/* Streak Counter */}
+                    <div className="flex items-center gap-1 bg-[#d4a373]/10 text-[#d4a373] px-2.5 py-1 rounded-2xl border border-[#d4a373]/10">
+                      <Flame className="w-3.5 h-3.5 fill-current" />
+                      <span className="text-xs font-black leading-none">{habit.currentStreak}</span>
+                      <span className="text-[9px] text-[#d4a373]/50 font-bold ml-0.5 leading-none">
+                        /{habit.longestStreak}
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Rolling Weekly Completion Rate Badge */}
+                  {habit.weeklyStats && (
+                    <div
+                      className={`flex items-center gap-1.5 px-2 py-0.5 rounded-xl border text-[10px] font-bold transition-all duration-300 ${
+                        (habit.weeklyRate ?? 0) >= 80
+                          ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                          : (habit.weeklyRate ?? 0) >= 50
+                          ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                          : "text-red-400 bg-red-500/10 border-red-500/20"
+                      }`}
+                    >
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 36 36">
+                        <path
+                          className="opacity-25"
+                          strokeWidth="4"
+                          stroke="currentColor"
+                          fill="none"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                        <path
+                          strokeDasharray={`${habit.weeklyRate ?? 0}, 100`}
+                          strokeWidth="4"
+                          strokeLinecap="round"
+                          stroke="currentColor"
+                          fill="none"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                      </svg>
+                      <span>{habit.weeklyStats.completed}/{habit.weeklyStats.scheduled} this week</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

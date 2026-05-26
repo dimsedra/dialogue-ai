@@ -196,7 +196,7 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
                   ) : (
                     <div 
                       onClick={() => window.open(`${(process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL)?.replace(".cloud", ".site")}/api/storage?id=${att.storageId}`, "_blank")}
-                      className="flex items-center gap-2 p-2 rounded-xl border max-w-[200px] bg-[#1a1814] border-[#2a2723] hover:border-[#d4a373]/30 transition-all cursor-pointer"
+                      className="flex items-center gap-2 p-2 rounded-xl border max-w-50 bg-[#1a1814] border-[#2a2723] hover:border-[#d4a373]/30 transition-all cursor-pointer"
                     >
                       <div className="w-8 h-8 rounded-lg bg-[#1a1814] flex items-center justify-center border border-[#2a2723] shrink-0">
                         <FileIcon className="w-4 h-4 text-[#d4a373]" />
@@ -215,9 +215,9 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
 
         {/* Text Body */}
         {msg.author === "User" ? (
-          <p className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] whitespace-pre-wrap break-words font-sans min-w-0">{msg.text}</p>
+          <p className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] whitespace-pre-wrap wrap-break-word font-sans min-w-0">{msg.text}</p>
         ) : (
-          <div className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] font-sans prose prose-invert prose-sm max-w-none break-words w-full min-w-0">
+          <div className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] font-sans prose prose-invert prose-sm max-w-none wrap-break-word w-full min-w-0">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkMath]}
               rehypePlugins={[rehypeKatex]}

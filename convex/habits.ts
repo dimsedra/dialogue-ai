@@ -9,6 +9,20 @@ const parseDateString = (ds: string) => {
   return new Date(y, m - 1, d);
 };
 
+const getRolling7Days = (todayStr: string) => {
+  const [y, m, d] = todayStr.split("-").map(Number);
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(d - i);
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    dates.push(`${yyyy}-${mm}-${dd}`);
+  }
+  return dates;
+};
+
 export function calculateNewStreak(
   habit: {
     frequency: "daily" | "custom";
@@ -280,6 +294,11 @@ export const getHabits = query({
       (h) => h.workspaceId === args.workspaceId && !h.archived
     );
 
+    const todayStr = args.todayDateString ?? (() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    })();
+
     // Jointly fetch the last 30 logs for each habit to avoid N+1 query loops
     const enrichedHabits = await Promise.all(
       activeHabits.map(async (habit) => {
@@ -300,9 +319,42 @@ export const getHabits = query({
           }
         }
 
+        // Compute rolling weekly completion metrics
+        const last7Days = getRolling7Days(todayStr);
+        let completedCount = 0;
+        let scheduledCount = 0;
+
+        for (const dateStr of last7Days) {
+          const [y, m, d] = dateStr.split("-").map(Number);
+          const dt = new Date(y, m - 1, d);
+          const dayOfWeek = dt.getDay();
+
+          let isScheduled = true;
+          if (habit.frequency === "custom" && habit.frequencyConfig?.daysOfWeek) {
+            isScheduled = habit.frequencyConfig.daysOfWeek.includes(dayOfWeek);
+          }
+
+          if (isScheduled) {
+            scheduledCount++;
+            const log = logs.find((l) => l.dateString === dateStr);
+            if (log && log.status === "completed") {
+              completedCount++;
+            }
+          }
+        }
+
+        const weeklyRate = scheduledCount > 0
+          ? Math.round((completedCount / scheduledCount) * 100)
+          : 0;
+
         return {
           ...habit,
           currentStreak,
+          weeklyRate,
+          weeklyStats: {
+            completed: completedCount,
+            scheduled: scheduledCount,
+          },
           recentLogs: logs.map((l) => ({
             dateString: l.dateString,
             status: l.status,

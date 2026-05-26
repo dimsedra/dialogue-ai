@@ -22,7 +22,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSubmit, isLargeViewpor
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-1000 flex items-center justify-center p-4">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -36,7 +36,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onSubmit, isLargeViewpor
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={isLargeViewport ? { type: "spring", damping: 30, stiffness: 300 } : { duration: 0 }}
-            className="relative w-full max-w-[400px] bg-[#1a1814] border border-[#d4a373]/30 rounded-[32px] p-8 lg:p-10 shadow-[0_30px_90px_rgba(0,0,0,0.8)] space-y-8 overflow-hidden"
+            className="relative w-full max-w-100 bg-[#1a1814] border border-[#d4a373]/30 rounded-4xl p-8 lg:p-10 shadow-[0_30px_90px_rgba(0,0,0,0.8)] space-y-8 overflow-hidden"
           >
             <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#d4a373]/10 blur-[80px] rounded-full" />
             

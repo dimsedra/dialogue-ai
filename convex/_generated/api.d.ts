@@ -21,6 +21,7 @@ import type * as images from "../images.js";
 import type * as messages from "../messages.js";
 import type * as messages_internal from "../messages_internal.js";
 import type * as migrations from "../migrations.js";
+import type * as pageSettings from "../pageSettings.js";
 import type * as reflections from "../reflections.js";
 import type * as tasks from "../tasks.js";
 import type * as workspaces from "../workspaces.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   messages_internal: typeof messages_internal;
   migrations: typeof migrations;
+  pageSettings: typeof pageSettings;
   reflections: typeof reflections;
   tasks: typeof tasks;
   workspaces: typeof workspaces;

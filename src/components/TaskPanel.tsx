@@ -39,6 +39,17 @@ export function TaskPanel({
 }) {
   const tasks = useQuery(api.tasks.list, { workspaceId: activeWorkspaceId });
   const events = useQuery(api.events.list, { workspaceId: activeWorkspaceId });
+  
+  const todayDateString = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const rawHabits = useQuery(api.habits.getHabits, {
+    workspaceId: activeWorkspaceId,
+    todayDateString,
+  });
+
   const toggleTask = useMutation(api.tasks.toggleCompleted);
   const deleteTask = useMutation(api.tasks.deleteTask);
   const updateTask = useMutation(api.tasks.updateTask);
@@ -276,6 +287,9 @@ export function TaskPanel({
               } : undefined}
               onReferEvent={onRefer ? (event) => onRefer({ type: "event", id: event._id, title: event.title }) : undefined}
               onReferTask={onRefer ? (task) => onRefer({ type: "task", id: task._id, title: task.text }) : undefined}
+              habits={rawHabits}
+              todayDateString={todayDateString}
+              onReferHabit={onRefer ? (habit) => onRefer({ type: "habit", id: habit._id, title: habit.name }) : undefined}
             />
           ) : (
             <HabitList

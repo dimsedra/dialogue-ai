@@ -18,7 +18,7 @@ export function DeleteSessionModal({ session, onConfirm, onCancel, isLargeViewpo
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={isLargeViewport ? { duration: 0.2 } : { duration: 0 }}
-          className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-sm p-6"
+          className="fixed inset-0 z-1000 flex items-center justify-center bg-[#0f0e0c]/80 backdrop-blur-sm p-6"
           onClick={onCancel}
         >
           <motion.div 

@@ -165,7 +165,7 @@ export const ChatInput = React.memo(function ChatInput({
               ) : (
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#d4a373]" />
               )}
-              <span className="text-[11px] font-medium text-[#f2efeb] truncate max-w-[200px]">
+              <span className="text-[11px] font-medium text-[#f2efeb] truncate max-w-50">
                 {activeScope.title}
               </span>
               <button

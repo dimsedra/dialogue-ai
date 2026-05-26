@@ -1,9 +1,13 @@
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { motion } from "framer-motion";
-import { DayPicker } from "react-day-picker";
+import { DayPicker, type DayButtonProps } from "react-day-picker";
 import { Calendar as CalendarIcon, Clock, Edit3, RefreshCw, Tag, Trash2, Zap, MessageSquarePlus } from "lucide-react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { EventDoc, TaskDoc } from "./types";
+import { useState, useMemo } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { HabitWithLogs } from "./HabitList";
 
 interface CalendarViewProps {
   selectedDate: Date | undefined;
@@ -21,6 +25,9 @@ interface CalendarViewProps {
   onReferDate?: (date: Date) => void;
   onReferEvent?: (event: EventDoc) => void;
   onReferTask?: (task: TaskDoc) => void;
+  habits?: HabitWithLogs[];
+  todayDateString?: string;
+  onReferHabit?: (habit: HabitWithLogs) => void;
 }
 
 export function CalendarView({
@@ -39,7 +46,60 @@ export function CalendarView({
   onReferDate,
   onReferEvent,
   onReferTask,
+  habits,
+  todayDateString,
+  onReferHabit,
 }: CalendarViewProps) {
+  const logHabit = useMutation(api.habits.logHabit);
+  const [loggingId, setLoggingId] = useState<string | null>(null);
+
+  const selectedDateStr = useMemo(() => {
+    if (!selectedDate) return "";
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
+    const day = String(selectedDate.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, [selectedDate]);
+
+  const habitsOnSelectedDate = useMemo(() => {
+    if (!habits || !selectedDate) return [];
+    const dayOfWeek = selectedDate.getDay();
+    return habits.filter((h) => {
+      // If logged on this day, display it
+      const hasLog = h.recentLogs?.some((l) => l.dateString === selectedDateStr);
+      if (hasLog) return true;
+
+      // Otherwise show if scheduled
+      if (h.frequency === "daily") return true;
+      if (h.frequency === "custom" && h.frequencyConfig?.daysOfWeek) {
+        return h.frequencyConfig.daysOfWeek.includes(dayOfWeek);
+      }
+      return false;
+    });
+  }, [habits, selectedDate, selectedDateStr]);
+
+  const handleLogHabit = async (habitId: Id<"habits">, status: "completed" | "skipped") => {
+    const opId = `${habitId}-${status}`;
+    setLoggingId(opId);
+    try {
+      await logHabit({
+        habitId,
+        dateString: selectedDateStr,
+        status,
+      });
+    } catch (error) {
+      console.error("Failed to log habit from calendar view:", error);
+    } finally {
+      setLoggingId(null);
+    }
+  };
+
+  const totalAgendaItems = tasksOnSelectedDate.length + eventsOnSelectedDate.length + habitsOnSelectedDate.length;
+
+  const hasTasksSelected = tasksOnSelectedDate.length > 0;
+  const hasEventsSelected = eventsOnSelectedDate.length > 0;
+  const hasHabitsSelected = habitsOnSelectedDate.length > 0;
+
   return (
     <motion.div
       key="calendar"
@@ -49,19 +109,11 @@ export function CalendarView({
       transition={isLargeViewport ? undefined : { duration: 0 }}
       className="space-y-6"
     >
-      <div className="relative p-4 bg-[#1f1d19] rounded-3xl border border-[#2a2723] flex justify-center shadow-xl shadow-black/20">
+      <div className="relative p-4 overflow-hidden bg-[#1f1d19] rounded-3xl border border-[#2a2723] flex flex-col items-stretch shadow-xl shadow-black/20">
         <DayPicker
           mode="single"
           selected={selectedDate}
           onSelect={setSelectedDate}
-          modifiers={{
-            hasTask: taskDates,
-            hasEvent: eventDates,
-          }}
-          modifiersClassNames={{
-            hasTask: "has-task-dot",
-            hasEvent: "has-event-dot",
-          }}
           className="rdp-custom relative w-full"
           classNames={{
             weekdays: "text-[10px] font-bold uppercase tracking-[0.2em] text-[#a8a29e]/40 p-2",
@@ -77,6 +129,36 @@ export function CalendarView({
             caption_label: "rdp-caption_label",
           }}
         />
+
+        {/* Legend Centered at the Bottom - Active Items Only */}
+        {(hasTasksSelected || hasEventsSelected || hasHabitsSelected) && (
+          <div className="flex items-center justify-center gap-4 mt-3 pt-3 border-t border-[#2a2723]/30 w-full text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
+            {hasTasksSelected && (
+              <div className="flex items-center gap-1.5">
+                <svg className="w-2.5 h-2.5 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Tasks</span>
+              </div>
+            )}
+            {hasEventsSelected && (
+              <div className="flex items-center gap-1.5">
+                <svg className="w-2.5 h-2.5 text-[#d4a373] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                <span>Events</span>
+              </div>
+            )}
+            {hasHabitsSelected && (
+              <div className="flex items-center gap-1.5">
+                <svg className="w-2.5 h-2.5 text-purple-400 fill-current shrink-0" viewBox="0 0 24 24">
+                  <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                </svg>
+                <span>Habits</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -101,8 +183,7 @@ export function CalendarView({
             )}
             <div className="px-3 py-1 rounded-full bg-[#d4a373]/5 border border-[#d4a373]/10">
               <span className="text-[10px] font-bold text-[#d4a373]">
-                {tasksOnSelectedDate.length + eventsOnSelectedDate.length}{" "}
-                {tasksOnSelectedDate.length + eventsOnSelectedDate.length === 1 ? "Item" : "Items"}
+                {totalAgendaItems} {totalAgendaItems === 1 ? "Item" : "Items"}
               </span>
             </div>
           </div>
@@ -171,15 +252,15 @@ export function CalendarView({
                         <Trash2 className="w-3 h-3" />
                       </button>
                       <div className="flex items-center gap-1">
-                        {(event.eventType === "point" || !event.endTime) && (
+                        {(event.eventType === "point" || (!event.eventType && !event.endTime)) && (
                           <Zap className="w-2.5 h-2.5 text-amber-400" />
                         )}
                         <span
                           className={`text-[9px] font-bold uppercase tracking-widest ${
-                            event.eventType === "point" || !event.endTime ? "text-amber-400" : "text-[#d4a373]/60"
+                            event.eventType === "point" || (!event.eventType && !event.endTime) ? "text-amber-400" : "text-[#d4a373]/60"
                           }`}
                         >
-                          {event.eventType === "point" || !event.endTime ? "Release / Drop" : "Event"}
+                          {event.eventType === "point" || (!event.eventType && !event.endTime) ? "Release / Drop" : "Event"}
                         </span>
                       </div>
                     </div>
@@ -274,7 +355,75 @@ export function CalendarView({
             </div>
           ))}
 
-          {tasksOnSelectedDate.length === 0 && eventsOnSelectedDate.length === 0 && (
+          {/* Habits Section */}
+          {habitsOnSelectedDate.map((habit: HabitWithLogs) => {
+            const todayLog = habit.recentLogs?.find((l) => l.dateString === selectedDateStr);
+            return (
+              <div
+                key={habit._id}
+                className="p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] flex items-center gap-4 group hover:border-[#d4a373]/20 transition-all"
+              >
+                <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.4)]" />
+                <div className="flex-1 flex items-center justify-between gap-2 overflow-hidden">
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-xs text-[#f2efeb] truncate font-medium tracking-tight">
+                      {habit.name}
+                    </span>
+                    <div className="flex items-center gap-1.5 text-[9px] font-bold text-[#a8a29e]/30 uppercase tracking-widest">
+                      <span>Habit</span>
+                      {habit.currentStreak > 0 && (
+                        <span className="text-[#d4a373] font-bold">
+                          • {habit.currentStreak}d Streak
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {onReferHabit && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onReferHabit(habit);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                        title="Pin this Habit to Chat"
+                      >
+                        <MessageSquarePlus className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleLogHabit(habit._id, "completed")}
+                        disabled={loggingId !== null}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all duration-300 ${
+                          todayLog?.status === "completed"
+                            ? "bg-purple-500/20 border border-purple-500/30 text-purple-400"
+                            : "border border-[#2a2723] text-[#a8a29e]/60 hover:text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/20"
+                        }`}
+                      >
+                        {loggingId === `${habit._id}-completed` ? "..." : "Done"}
+                      </button>
+                      <button
+                        onClick={() => handleLogHabit(habit._id, "skipped")}
+                        disabled={loggingId !== null}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all duration-300 ${
+                          todayLog?.status === "skipped"
+                            ? "bg-[#5c554f] text-[#f2efeb]"
+                            : "border border-[#2a2723] text-[#a8a29e]/60 hover:text-[#f2efeb] hover:bg-[#2a2723]"
+                        }`}
+                      >
+                        {loggingId === `${habit._id}-skipped` ? "..." : "Skip"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {totalAgendaItems === 0 && (
             <div className="py-12 text-center space-y-3 bg-[#1f1d19]/30 rounded-3xl border border-dashed border-[#2a2723]">
               <CalendarIcon className="w-6 h-6 text-[#a8a29e]/10 mx-auto" />
               <p className="text-[10px] text-[#a8a29e]/40 uppercase tracking-[0.2em] font-bold">Clear Horizon</p>

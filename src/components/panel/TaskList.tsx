@@ -86,7 +86,7 @@ export function TaskList({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={isLargeViewport ? { duration: 0.3 } : { duration: 0 }}
-        className={`rounded-3xl border group transition-all duration-500 overflow-hidden ${
+        className={`rounded-2xl border group transition-all duration-500 overflow-hidden ${
           isCompletedArchive
             ? "bg-[#1f1d19]/40 border-[#2a2723]/60 opacity-60 hover:opacity-100"
             : task.priority === "high"
@@ -95,16 +95,16 @@ export function TaskList({
         } ${expandedTaskId === task._id ? "ring-1 ring-[#d4a373]/30" : ""}`}
       >
         <div
-          className="p-5 cursor-pointer"
+          className="py-2.5 px-3.5 cursor-pointer"
           onClick={() => setExpandedTaskId(expandedTaskId === task._id ? null : task._id)}
         >
-          <div className="flex gap-4">
+          <div className="flex gap-2.5">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleTask(task._id);
               }}
-              className="mt-1 transition-all duration-300 transform group-hover:scale-110"
+              className="mt-0.5 transition-all duration-300 transform group-hover:scale-110"
             >
               {task.completed ? (
                 <CheckCircle2 className="w-4 h-4 text-[#d4a373] fill-[#d4a373]/20" />
@@ -112,11 +112,11 @@ export function TaskList({
                 <Circle className="w-4 h-4 text-[#a8a29e]/40 group-hover:text-[#d4a373]" />
               )}
             </button>
-            <div className="flex-1 min-w-0 space-y-3">
+            <div className="flex-1 min-w-0 space-y-1.5">
               <div className="flex items-start justify-between gap-2">
-                <div className="flex flex-col gap-1 flex-1 min-w-0 overflow-hidden">
+                <div className="flex flex-col gap-0.5 flex-1 min-w-0 overflow-hidden">
                   {!activeWorkspaceId && taskWorkspace && (
-                    <div className="flex items-center gap-1.5 mb-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
                       <div
                         className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]"
                         style={{ backgroundColor: taskWorkspace.color }}
@@ -127,25 +127,25 @@ export function TaskList({
                     </div>
                   )}
                   <p
-                    className={`text-sm font-medium leading-[1.5] transition-all truncate ${
+                    className={`text-sm font-medium leading-snug transition-all truncate ${
                       task.completed ? "text-[#a8a29e]/40 line-through" : "text-[#f2efeb]"
                     }`}
                   >
                     {task.text}
                   </p>
                 </div>
-                <div className="mt-1 shrink-0 flex items-center gap-1">
-                  <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all mr-2">
+                <div className="mt-0.5 shrink-0 flex items-center gap-1">
+                  <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all mr-1.5">
                     {onReferTask && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onReferTask(task as TaskDoc);
                         }}
-                        className="p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
+                        className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all"
                         title="Pin this Task to Chat"
                       >
-                        <MessageSquarePlus className="w-3.5 h-3.5" />
+                        <MessageSquarePlus className="w-3 h-3" />
                       </button>
                     )}
                   </div>
@@ -158,7 +158,7 @@ export function TaskList({
                         e.stopPropagation();
                         setDropdownTaskId(dropdownTaskId === task._id ? null : task._id);
                       }}
-                      className={`p-1.5 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all ${dropdownTaskId !== task._id ? "opacity-100 lg:opacity-0 lg:group-hover:opacity-100" : ""}`}
+                      className={`p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all ${dropdownTaskId !== task._id ? "opacity-100 lg:opacity-0 lg:group-hover:opacity-100" : ""}`}
                     >
                       <MoreVertical className="w-3.5 h-3.5" />
                     </button>
@@ -200,20 +200,20 @@ export function TaskList({
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 {task.dueDate && (
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#a8a29e]/60">
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-[#a8a29e]/60">
                     <Clock className="w-3.5 h-3.5 text-[#d4a373]/40" />
                     {formatDateLabel(task.dueDate)}
                   </div>
                 )}
                 {task.priority === "high" && (
-                  <span className="text-[9px] font-bold uppercase tracking-[0.15em] px-2 py-0.5 rounded-full bg-[#d4a373]/10 text-[#d4a373] border border-[#d4a373]/20">
+                  <span className="text-[8px] font-bold uppercase tracking-[0.12em] px-1.5 py-0.2 rounded-md bg-[#d4a373]/10 text-[#d4a373] border border-[#d4a373]/20">
                     High
                   </span>
                 )}
                 {task.resources && task.resources.length > 0 && (
-                  <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/30">
+                  <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
                     <Paperclip className="w-2.5 h-2.5" />
                     <span>{task.resources.length}</span>
                   </div>
@@ -221,10 +221,10 @@ export function TaskList({
               </div>
 
               {expandedTaskId === task._id && (
-                <div className="pt-4 mt-4 border-t border-[#2a2723] space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
+                <div className="pt-3 mt-3 border-t border-[#2a2723] space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-0.5">
+                      <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
                         Priority
                       </span>
                       <div className="flex items-center gap-1.5">
@@ -237,31 +237,31 @@ export function TaskList({
                               : "text-blue-400"
                           }`}
                         />
-                        <span className="text-[11px] text-[#f2efeb] capitalize font-medium">
+                        <span className="text-[10px] text-[#f2efeb] capitalize font-medium">
                           {task.priority || "Medium"}
                         </span>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
+                    <div className="space-y-0.5">
+                      <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
                         Category
                       </span>
                       <div className="flex items-center gap-1.5">
                         <Tag className="w-3 h-3 text-[#d4a373]/60" />
-                        <span className="text-[11px] text-[#f2efeb] font-medium">
+                        <span className="text-[10px] text-[#f2efeb] font-medium">
                           {task.category || "Uncategorized"}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
+                  <div className="space-y-0.5">
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-[#a8a29e]/40">
                       Timeline
                     </span>
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3 h-3 text-[#a8a29e]/40" />
-                      <span className="text-[11px] text-[#f2efeb] font-medium">
+                      <span className="text-[10px] text-[#f2efeb] font-medium">
                         {task.dueDate ? `Due ${formatDateLabel(task.dueDate)}` : "No due date set"}
                       </span>
                     </div>
@@ -271,7 +271,7 @@ export function TaskList({
                     <ResourceTray resources={task.resources} />
                   )}
 
-                  <div className="pt-2">
+                  <div className="pt-1">
                     <span className="text-[9px] text-[#a8a29e]/30 italic">
                       Created {new Date(task.createdAt).toLocaleDateString()}
                     </span>
@@ -292,23 +292,23 @@ export function TaskList({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={isLargeViewport ? undefined : { duration: 0 }}
-      className="space-y-3"
+      className="space-y-2"
     >
       <AnimatePresence mode="popLayout">
         {activeTasks.map((task) => renderTask(task, false))}
       </AnimatePresence>
 
       {activeTasks.length === 0 && recentCompletedTasks.length > 0 && (
-        <div className="py-8 text-center">
+        <div className="py-6 text-center">
           <p className="text-xs font-medium text-[#a8a29e]/40 italic">No active tasks. Great job!</p>
         </div>
       )}
 
       {recentCompletedTasks.length > 0 && (
-        <div className="pt-6 mt-6 border-t border-[#2a2723]">
+        <div className="pt-4 mt-4 border-t border-[#2a2723]">
           <button
             onClick={() => setShowCompleted(!showCompleted)}
-            className="flex items-center justify-between w-full py-2 px-1 text-[11px] font-bold text-[#a8a29e]/60 uppercase tracking-widest hover:text-[#f2efeb] transition-colors group"
+            className="flex items-center justify-between w-full py-1.5 px-1 text-[11px] font-bold text-[#a8a29e]/60 uppercase tracking-widest hover:text-[#f2efeb] transition-colors group"
           >
             <div className="flex items-center gap-2">
               <Archive className="w-3.5 h-3.5 text-[#d4a373]/60 group-hover:text-[#d4a373] transition-colors" />
@@ -328,7 +328,7 @@ export function TaskList({
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.3 }}
-                className="space-y-3 mt-3 overflow-hidden"
+                className="space-y-2 mt-2 overflow-hidden"
               >
                 {recentCompletedTasks.map((task) => renderTask(task, true))}
                 {olderCount > 0 && (

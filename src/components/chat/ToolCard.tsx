@@ -21,7 +21,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2.5 shadow-lg shadow-black/10 max-w-100"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-[#d4a373]">
@@ -65,7 +65,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-orange-500/5 border border-orange-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+        className="mt-3 p-3.5 rounded-2xl bg-orange-500/5 border border-orange-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-100"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-orange-400">
@@ -95,7 +95,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
         className="mt-3 p-2.5 pr-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex items-center gap-3 shadow-md shadow-black/10 w-fit max-w-full"
       >
         <div className="p-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
-          <Check className="w-4 h-4 stroke-[3]" />
+          <Check className="w-4 h-4 stroke-3" />
         </div>
         <div className="min-w-0">
           <span className="text-[8px] font-black uppercase tracking-[0.2em] text-emerald-500/60 block">Done</span>
@@ -134,12 +134,12 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       location?: string;
       recurrence?: { frequency: string; interval: number; daysOfWeek?: number[]; until?: string | number };
     };
-    const isPoint = eventType === "point" || !endTime;
+    const isPoint = eventType === "point" || (!eventType && !endTime);
     return (
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`mt-3 p-3.5 rounded-2xl ${isPoint ? 'bg-amber-500/5 border-amber-500/10' : 'bg-[#8b5cf6]/5 border-[#8b5cf6]/10'} border space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]`}
+        className={`mt-3 p-3.5 rounded-2xl ${isPoint ? 'bg-amber-500/5 border-amber-500/10' : 'bg-[#8b5cf6]/5 border-[#8b5cf6]/10'} border space-y-2.5 shadow-lg shadow-black/10 max-w-100`}
       >
         <div className={`flex items-center gap-2 ${isPoint ? 'text-amber-400' : 'text-[#8b5cf6]'}`}>
           {isPoint ? <Zap className="w-3.5 h-3.5" /> : <CalendarDays className="w-3.5 h-3.5" />}
@@ -197,7 +197,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+        className="mt-3 p-3.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-100"
       >
         <div className="flex items-center gap-2 text-indigo-400">
           <CalendarDays className="w-3.5 h-3.5" />
@@ -228,7 +228,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-[400px]"
+        className="mt-3 p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/10 space-y-2.5 shadow-lg shadow-black/10 max-w-100"
       >
         <div className="flex items-center gap-2 text-amber-400">
           <CalendarDays className="w-3.5 h-3.5" />
@@ -285,15 +285,15 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
     const count = isMulti ? (toolCall.args as { count: number }).count : 1;
     
     return (
-      <div className="mt-2 flex items-center gap-2.5 py-1.5 px-3 rounded-full bg-[#3b82f6]/[0.03] border border-[#3b82f6]/10 w-fit">
+      <div className="mt-2 flex items-center gap-2.5 py-1.5 px-3 rounded-full bg-[#3b82f6]/3 border border-[#3b82f6]/10 w-fit">
         <Search className="w-3 h-3 text-[#3b82f6]/60" />
         <span className="text-[9px] font-bold uppercase tracking-wider text-[#3b82f6]/80 whitespace-nowrap">
           {isMulti ? `${count} Research Queries` : "Researching"}
         </span>
         {query && (
           <>
-            <div className="w-[1px] h-2 bg-[#3b82f6]/20" />
-            <span className="text-[9px] text-[#a8a29e]/60 truncate max-w-[150px] font-medium">&quot;{query}&quot;</span>
+            <div className="w-px h-2 bg-[#3b82f6]/20" />
+            <span className="text-[9px] text-[#a8a29e]/60 truncate max-w-37.5 font-medium">&quot;{query}&quot;</span>
           </>
         )}
       </div>
@@ -305,7 +305,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div 
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="mt-3 flex items-center gap-3 p-3 rounded-2xl bg-emerald-500/[0.03] border border-emerald-500/10 shadow-sm"
+        className="mt-3 flex items-center gap-3 p-3 rounded-2xl bg-emerald-500/3 border border-emerald-500/10 shadow-sm"
       >
         <div className="p-1.5 rounded-lg bg-emerald-500/10">
           <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
@@ -323,7 +323,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div 
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="mt-3 flex flex-col gap-1.5 p-3 rounded-2xl bg-emerald-500/[0.03] border border-emerald-500/10 shadow-sm max-w-[400px]"
+        className="mt-3 flex flex-col gap-1.5 p-3 rounded-2xl bg-emerald-500/3 border border-emerald-500/10 shadow-sm max-w-100"
       >
         <div className="flex items-center gap-2 text-emerald-500">
           <Sparkles className="w-3.5 h-3.5" />
@@ -370,7 +370,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
         initial={{ opacity: 0, y: 15, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
-        className="mt-3 p-4.5 rounded-2xl bg-gradient-to-br from-[#d4a373]/10 via-[#d4a373]/2 to-transparent border border-[#d4a373]/15 shadow-xl shadow-black/20 max-w-[400px] space-y-4 backdrop-blur-md"
+        className="mt-3 p-4.5 rounded-2xl bg-linear-to-br from-[#d4a373]/10 via-[#d4a373]/2 to-transparent border border-[#d4a373]/15 shadow-xl shadow-black/20 max-w-100 space-y-4 backdrop-blur-md"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-[#d4a373]">
@@ -385,7 +385,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
         {/* Stats Grid */}
         <div className="grid grid-cols-3 gap-2.5">
           {/* Completed Card */}
-          <div className="bg-emerald-500/[0.04] border border-emerald-500/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
+          <div className="bg-emerald-500/4 border border-emerald-500/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
             <Award className="w-5 h-5 text-emerald-400 mb-1" />
             <span className="text-[9px] font-bold text-[#a8a29e]/80 uppercase tracking-wider">Done</span>
             <span className="text-lg font-black text-[#f2efeb] mt-0.5">{stats.tasksCompleted}</span>
@@ -393,7 +393,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
           </div>
 
           {/* Events Card */}
-          <div className="bg-[#8b5cf6]/[0.04] border border-[#8b5cf6]/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
+          <div className="bg-[#8b5cf6]/4 border border-[#8b5cf6]/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
             <CalendarDays className="w-5 h-5 text-[#8b5cf6] mb-1" />
             <span className="text-[9px] font-bold text-[#a8a29e]/80 uppercase tracking-wider">Events</span>
             <span className="text-lg font-black text-[#f2efeb] mt-0.5">{stats.eventsAttended}</span>
@@ -401,7 +401,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
           </div>
 
           {/* Streak Card */}
-          <div className="bg-orange-500/[0.04] border border-orange-500/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
+          <div className="bg-orange-500/4 border border-orange-500/10 rounded-xl p-2.5 flex flex-col items-center justify-center text-center">
             <Flame className="w-5 h-5 text-orange-400 mb-1" />
             <span className="text-[9px] font-bold text-[#a8a29e]/80 uppercase tracking-wider">Streak</span>
             <span className="text-lg font-black text-[#f2efeb] mt-0.5">{stats.streakDays ?? 0}</span>
@@ -439,7 +439,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-[#3b82f6]/5 border border-[#3b82f6]/10 space-y-2 shadow-lg shadow-black/10 max-w-[400px]"
+        className="mt-3 p-3.5 rounded-2xl bg-[#3b82f6]/5 border border-[#3b82f6]/10 space-y-2 shadow-lg shadow-black/10 max-w-100"
       >
         <div className="flex items-center gap-2 text-[#3b82f6]">
           <Search className="w-3.5 h-3.5" />
@@ -447,7 +447,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
           <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-[#3b82f6]/10 text-[#3b82f6]/80 font-bold">{count} found</span>
         </div>
         {result?.results && result.results.length > 0 && (
-          <div className="space-y-1 max-h-[120px] overflow-y-auto">
+          <div className="space-y-1 max-h-30 overflow-y-auto">
             {result.results.slice(0, 5).map((item, i) => (
               <div key={i} className="flex items-center gap-2 text-[11px] text-[#a8a29e]">
                 <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase ${item.type === "task" ? "bg-emerald-500/10 text-emerald-400" : "bg-[#8b5cf6]/10 text-[#8b5cf6]"}`}>
@@ -470,7 +470,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2 shadow-lg shadow-black/10 max-w-[400px]"
+        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2 shadow-lg shadow-black/10 max-w-100"
       >
         <div className="flex items-center gap-2 text-[#d4a373]">
           <List className="w-3.5 h-3.5" />
@@ -497,7 +497,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-cyan-500/5 border border-cyan-500/10 space-y-2 shadow-lg shadow-black/10 max-w-[400px]"
+        className="mt-3 p-3.5 rounded-2xl bg-cyan-500/5 border border-cyan-500/10 space-y-2 shadow-lg shadow-black/10 max-w-100"
       >
         <div className="flex items-center gap-2 text-cyan-400">
           <FileText className="w-3.5 h-3.5" />
@@ -520,7 +520,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2 shadow-lg shadow-black/10 max-w-[400px]"
+        className="mt-3 p-3.5 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2 shadow-lg shadow-black/10 max-w-100"
       >
         <div className="flex items-center gap-2 text-indigo-400">
           <Layers className="w-3.5 h-3.5" />
@@ -551,7 +551,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2 max-w-[400px] shadow-lg shadow-black/10"
+        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2 max-w-100 shadow-lg shadow-black/10"
       >
         <div className="flex items-center gap-2 text-[#d4a373]">
           <Flame className="w-3.5 h-3.5" />
@@ -585,7 +585,7 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className={`mt-3 p-3 rounded-2xl border flex items-center gap-3 shadow-md shadow-black/10 max-w-[400px] ${
+        className={`mt-3 p-3 rounded-2xl border flex items-center gap-3 shadow-md shadow-black/10 max-w-100 ${
           isCompleted ? "bg-emerald-500/5 border-emerald-500/10" : "bg-slate-500/5 border-slate-500/10"
         }`}
       >

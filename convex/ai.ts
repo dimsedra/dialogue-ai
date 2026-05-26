@@ -291,10 +291,24 @@ export const getPromptContext = query({
       return dt.toLocaleString("en-US", { hour12: false });
     };
 
-    const formatResources = (resources: { title: string; type: string; summary?: string }[] | undefined) => {
+    const formatResources = (resources: { title: string; type: string; url?: string; summary?: string }[] | undefined) => {
       if (!resources || resources.length === 0) return "";
-      const summary = resources.map(r => `    - ${r.type === "url" ? "URL" : "File"}: "${r.title}"${r.summary ? ` — ${r.summary}` : ""}`).join("\n");
+      const summary = resources.map(r => `    - ${r.type === "url" ? "URL" : "File"}: "${r.title}" (${r.url || ""})${r.summary ? ` — ${r.summary}` : ""}`).join("\n");
       return `\n  Resources (${resources.length}):\n${summary}`;
+    };
+
+    const getRolling7Days = (todayStr: string) => {
+      const [y, m, d] = todayStr.split("-").map(Number);
+      const dates: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        const dt = new Date(y, m - 1, d);
+        dt.setDate(d - i);
+        const yyyy = dt.getFullYear();
+        const mm = String(dt.getMonth() + 1).padStart(2, "0");
+        const dd = String(dt.getDate()).padStart(2, "0");
+        dates.push(`${yyyy}-${mm}-${dd}`);
+      }
+      return dates;
     };
 
     const pendingTasksContext = sortedPendingTasks.map(t => {
@@ -357,7 +371,42 @@ export const getPromptContext = query({
       const statusStr = todayLog ? `Today: ${todayLog.status.toUpperCase()}` : "Today: PENDING (Not logged yet)";
       const schedStr = h.frequency === "daily" ? "Daily" : `Days: [${h.frequencyConfig?.daysOfWeek?.join(",")}]`;
       const lastLoggedStr = h.lastLoggedDate ? ` | Last Logged: ${h.lastLoggedDate}` : "";
-      return `- [${h._id}] "${h.name}" (${schedStr}) | Current Streak: ${h.currentStreak} day(s), Longest Streak: ${h.longestStreak} day(s) | ${statusStr}${lastLoggedStr}`;
+
+      // Fetch the logs for the current habit to compute the weekly rate
+      const logs = await ctx.db
+        .query("habitLogs")
+        .withIndex("by_habit", (q) => q.eq("habitId", h._id))
+        .order("desc")
+        .take(30);
+
+      const last7Days = getRolling7Days(todayDateString);
+      let completedCount = 0;
+      let scheduledCount = 0;
+
+      for (const dateStr of last7Days) {
+        const [y, m, d] = dateStr.split("-").map(Number);
+        const dt = new Date(y, m - 1, d);
+        const dayOfWeek = dt.getDay();
+
+        let isScheduled = true;
+        if (h.frequency === "custom" && h.frequencyConfig?.daysOfWeek) {
+          isScheduled = h.frequencyConfig.daysOfWeek.includes(dayOfWeek);
+        }
+
+        if (isScheduled) {
+          scheduledCount++;
+          const log = logs.find((l) => l.dateString === dateStr);
+          if (log && log.status === "completed") {
+            completedCount++;
+          }
+        }
+      }
+
+      const weeklyRate = scheduledCount > 0
+        ? Math.round((completedCount / scheduledCount) * 100)
+        : 0;
+
+      return `- [${h._id}] "${h.name}" (${schedStr}) | Current Streak: ${h.currentStreak} day(s) (Longest: ${h.longestStreak}d), Weekly Rate: ${weeklyRate}% (${completedCount}/${scheduledCount} Completed) | ${statusStr}${lastLoggedStr}`;
     }));
     const habitsContext = habitsContextLines.join("\n");
 

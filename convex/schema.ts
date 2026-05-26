@@ -186,4 +186,26 @@ export default defineSchema({
     .index("by_habit", ["habitId"])
     .index("by_timestamp", ["timestamp"])
     .index("by_habit_dateString", ["habitId", "dateString"]),
+
+  pageSettings: defineTable({
+    userId: v.id("users"),
+    page: v.literal("dashboard"),
+    settings: v.object({
+      url: v.optional(v.string()),
+      storageId: v.optional(v.string()),
+      opacity: v.number(),
+      blur: v.number(),
+      grain: v.number(),
+      vfxEnabled: v.boolean(),
+      vfxColor: v.string(),
+      cardBg: v.string(),
+      cardOpacity: v.number(),
+      cardBlur: v.number(),
+      cardBorder: v.string(),
+      primaryText: v.string(),
+      secondaryText: v.string(),
+      accentColor: v.string(),
+      cardStyle: v.union(v.literal("glass"), v.literal("solid")),
+    }),
+  }).index("by_user_page", ["userId", "page"]),
 });

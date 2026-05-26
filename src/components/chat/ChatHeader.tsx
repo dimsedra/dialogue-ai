@@ -119,7 +119,7 @@ export function ChatHeader({
                             </button>
                           </div>
 
-                          <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                          <div className="space-y-1.5 max-h-55 overflow-y-auto pr-1 scrollbar-thin">
                              {( [
                                { id: "gemini", name: "Google Gemini" },
                                { id: "openai", name: "OpenAI" },

@@ -162,13 +162,13 @@ export function EventList({
               )}
             </div>
             <div className="flex items-center gap-1">
-              {(event.eventType === "point" || !event.endTime) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
+              {(event.eventType === "point" || (!event.eventType && !event.endTime)) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
               <span
                 className={`text-[9px] font-bold uppercase tracking-widest whitespace-nowrap ${
-                  event.eventType === "point" || !event.endTime ? "text-amber-400" : "text-[#d4a373]/60"
+                  event.eventType === "point" || (!event.eventType && !event.endTime) ? "text-amber-400" : "text-[#d4a373]/60"
                 }`}
               >
-                {event.eventType === "point" || !event.endTime ? "Release / Drop" : "Event"}
+                {event.eventType === "point" || (!event.eventType && !event.endTime) ? "Release / Drop" : "Event"}
               </span>
             </div>
           </div>

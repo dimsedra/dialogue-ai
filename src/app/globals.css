@@ -211,19 +211,25 @@ html:not(.allow-scroll), body:not(.allow-scroll) {
   color: #0f0e0c !important;
 }
 
+.rdp-custom table {
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+
 /* Shape Inconsistency Fixes - High Specificity */
 .rdp-custom .rdp-day_button {
-  width: 34px !important;
-  height: 34px !important;
+  width: 100% !important;
+  height: 38px !important;
   border-radius: 12px !important;
   border: 1px solid transparent !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 0.7rem !important;
+  font-size: 0.75rem !important;
   color: #f2efeb !important;
   margin: 1px !important;
+  padding: 0 !important;
 }
 
 /* Selected Day State */
@@ -250,21 +256,4 @@ html:not(.allow-scroll), body:not(.allow-scroll) {
 .rdp-custom .rdp-day_button:hover:not(.rdp-selected .rdp-day_button) {
   background-color: #2a2723 !important;
   color: #d4a373 !important;
-}
-
-/* Task Indicator Dot */
-.has-task-dot .rdp-day_button::after {
-  content: '';
-  position: absolute;
-  bottom: 4px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 3px;
-  height: 3px;
-  background-color: #d4a373;
-  border-radius: 50%;
-}
-
-.rdp-custom .rdp-selected.has-task-dot .rdp-day_button::after {
-  background-color: #0f0e0c;
 }

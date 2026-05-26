@@ -4,12 +4,9 @@ import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { motion } from "framer-motion";
 import { Bot, Sparkles, Plus, Pin, Calendar, CheckCircle2, ArrowRight, Brush, Menu, ClipboardList, ChevronDown } from "lucide-react";
 import { useState } from "react";
-import { DashboardBgEditor, DashboardBgSettings } from "./DashboardEditor";
-
-function hexToRgb(hex: string): string {
-  const c = hex.replace("#", "");
-  return `${parseInt(c.substring(0, 2), 16)}, ${parseInt(c.substring(2, 4), 16)}, ${parseInt(c.substring(4, 6), 16)}`;
-}
+import { PageCustomizer } from "./PageCustomizer";
+import { usePageSettings } from "../../hooks/usePageSettings";
+import { DASHBOARD_DEFAULTS, getCardBgStyle } from "../../utils/color";
 
 interface DashboardProps {
   workspaces: Doc<"workspaces">[] | undefined;
@@ -36,25 +33,7 @@ export function Dashboard({
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
   const [selectedWsId, setSelectedWsId] = useState<Id<"workspaces"> | undefined>(undefined);
   const [wsWarning, setWsWarning] = useState(false);
-  const updateProfile = useMutation(api.ai.updateProfile);
-
-  const storedBg = ((profile as any)?.preferences?.dashboardBg || {}) as Partial<DashboardBgSettings>;
-  const bgSettings: DashboardBgSettings = {
-    opacity: 30,
-    blur: 0,
-    grain: 0,
-    vfxEnabled: true,
-    vfxColor: "#d4a373",
-    cardBg: "#1a1814",
-    cardOpacity: 100,
-    cardBlur: 0,
-    cardBorder: "#2a2723",
-    primaryText: "#f2efeb",
-    secondaryText: "#a8a29e",
-    accentColor: "#d4a373",
-    cardStyle: "glass",
-    ...storedBg,
-  };
+  const [bgSettings, updateBgSettings] = usePageSettings("dashboard", DASHBOARD_DEFAULTS);
 
   const resolvedBgUrl = useQuery(
     api.messages.getStorageUrl,
@@ -62,25 +41,7 @@ export function Dashboard({
   );
   const bgUrl = resolvedBgUrl ?? bgSettings.url;
 
-  const cardBgStyle = bgSettings.cardStyle === "solid"
-    ? {
-        backgroundColor: bgSettings.cardBg,
-        borderColor: bgSettings.cardBorder,
-        backdropFilter: "none" as const,
-      }
-    : {
-        backgroundColor: `rgba(${hexToRgb(bgSettings.cardBg)}, ${
-          bgSettings.cardBlur > 0
-            ? Math.min(bgSettings.cardOpacity / 100, 0.7)
-            : bgSettings.cardOpacity / 100
-        })`,
-        borderColor: bgSettings.cardBorder,
-        backdropFilter: bgSettings.cardBlur > 0 ? `blur(${bgSettings.cardBlur / 5}px)` : "none",
-      };
-
-  const handleSaveBg = (settings: DashboardBgSettings) => {
-    updateProfile({ preferences: { dashboardBg: settings } });
-  };
+  const cardBgStyle = getCardBgStyle(bgSettings);
 
   const allTasks = useQuery(api.tasks.list, {});
   const allEvents = useQuery(api.events.list, {});
@@ -149,7 +110,7 @@ export function Dashboard({
         >
           {bgSettings.vfxEnabled && (
             <div
-              className="absolute -top-60 left-1/2 w-[800px] h-[600px] rounded-full pointer-events-none"
+              className="absolute -top-60 left-1/2 w-200 h-150 rounded-full pointer-events-none"
               style={{
                 marginLeft: "-400px",
                 background: `radial-gradient(ellipse at center, ${bgSettings.vfxColor}26 0%, transparent 70%)`,
@@ -378,11 +339,12 @@ export function Dashboard({
       </button>
 
       {/* Background Editor Sidebar */}
-      <DashboardBgEditor
+      <PageCustomizer
         isOpen={showBgEditor}
         onClose={() => setShowBgEditor(false)}
         settings={bgSettings}
-        onSave={handleSaveBg}
+        onUpdate={updateBgSettings}
+        pageName="Dashboard"
       />
     </div>
   );

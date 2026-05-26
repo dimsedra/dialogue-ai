@@ -188,14 +188,14 @@ export const MessageStream = React.memo(function MessageStream({
             >
               <div className="relative group">
                 <div className="absolute inset-0 bg-[#d4a373]/20 blur-3xl rounded-full group-hover:bg-[#d4a373]/30 transition-all duration-500" />
-                <div className="relative w-24 h-24 rounded-[32px] bg-[#1a1814] border border-[#d4a373]/20 flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:border-[#d4a373]/40 transition-all duration-500">
+                <div className="relative w-24 h-24 rounded-4xl bg-[#1a1814] border border-[#d4a373]/20 flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:border-[#d4a373]/40 transition-all duration-500">
                   <Bot className="w-10 h-10 text-[#d4a373]" />
                 </div>
               </div>
               
               <div className="text-center space-y-3">
                 <h3 className="text-2xl font-bold text-[#f2efeb] tracking-tight">Dialogue Initialized</h3>
-                <p className="text-sm text-[#a8a29e] max-w-[280px] leading-relaxed mx-auto">
+                <p className="text-sm text-[#a8a29e] max-w-70 leading-relaxed mx-auto">
                   Select a session from the history or start a fresh conversation to begin.
                 </p>
               </div>

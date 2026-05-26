@@ -205,13 +205,13 @@ export function SessionSidebar({
         x: isLargeViewport ? 0 : (showHistory ? 0 : "-100%")
       }}
       transition={isLargeViewport ? { type: "spring", damping: 30, stiffness: 250 } : { duration: 0 }}
-      className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 z-[100] overflow-hidden ${
+      className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 z-100 overflow-hidden ${
         isLargeViewport ? "relative border-r" : "fixed left-0 shadow-[20px_0_40px_rgba(0,0,0,0.5)]"
       }`}
     >
       <div className="w-full h-full flex overflow-hidden">
           {/* Mobile Workspace Rail (Inside the Drawer) */}
-          <div className="lg:hidden w-[72px] h-full bg-[#141210] border-r border-[#2a2723] flex flex-col items-center pt-10 pb-6 gap-6 shrink-0">
+          <div className="lg:hidden w-18 h-full bg-[#141210] border-r border-[#2a2723] flex flex-col items-center pt-10 pb-6 gap-6 shrink-0">
             <button 
               onClick={() => onSelectWorkspace(undefined)}
               className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${!activeWorkspaceId ? 'bg-[#d4a373] shadow-lg shadow-[#d4a373]/20' : 'bg-[#0f0e0c] border border-[#2a2723] text-[#a8a29e]'}`}
@@ -219,7 +219,7 @@ export function SessionSidebar({
               <LayoutDashboard className={`w-5 h-5 ${!activeWorkspaceId ? 'text-[#0f0e0c]' : ''}`} />
             </button>
             
-            <div className="w-8 h-[1px] bg-[#2a2723]" />
+            <div className="w-8 h-px bg-[#2a2723]" />
             
             <div className="flex-1 flex flex-col items-center gap-4 overflow-y-auto scrollbar-hide w-full px-2 pt-4">
               {workspaces === undefined ? (
@@ -259,7 +259,7 @@ export function SessionSidebar({
           <div className="flex-1 flex flex-col min-w-0 bg-[#1a1814] relative">
             <button
               onClick={onCloseHistory}
-              className="absolute left-full top-1/2 -translate-y-1/2 z-[110] w-7 h-16 rounded-r-2xl bg-[#d4a373] text-[#0f0e0c] flex items-center justify-center transition-all shadow-[10px_0_30px_rgba(0,0,0,0.4)] lg:hidden active:scale-95"
+              className="absolute left-full top-1/2 -translate-y-1/2 z-110 w-7 h-16 rounded-r-2xl bg-[#d4a373] text-[#0f0e0c] flex items-center justify-center transition-all shadow-[10px_0_30px_rgba(0,0,0,0.4)] lg:hidden active:scale-95"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -404,7 +404,7 @@ export function SessionSidebar({
       if (!session) return null;
       return (
         <div 
-          className="lg:hidden fixed inset-0 z-[200] flex items-end justify-center"
+          className="lg:hidden fixed inset-0 z-200 flex items-end justify-center"
           onClick={() => { setActionMenuSessionId(null); setSheetRenameMode(false); }}
         >
           {/* Backdrop */}
@@ -524,7 +524,7 @@ export function SessionSidebar({
         return createPortal(
           <div
             data-session-dropdown
-            className="fixed z-[300] min-w-[160px] rounded-xl bg-[#1a1815] border border-[#2a2723] shadow-xl py-1.5 overflow-hidden"
+            className="fixed z-300 min-w-40 rounded-xl bg-[#1a1815] border border-[#2a2723] shadow-xl py-1.5 overflow-hidden"
             style={{ top: dropdownAnchor.top, left: dropdownAnchor.left }}
             onClick={(e) => e.stopPropagation()}
           >

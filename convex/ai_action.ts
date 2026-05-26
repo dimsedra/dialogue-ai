@@ -498,7 +498,10 @@ export const chat = internalAction({
       const statusStr = todayLog ? `Today: ${todayLog.status.toUpperCase()}` : "Today: PENDING (Not logged yet)";
       const schedStr = h.frequency === "daily" ? "Daily" : `Days: [${h.frequencyConfig?.daysOfWeek?.join(",")}]`;
       const lastLoggedStr = h.lastLoggedDate ? ` | Last Logged: ${h.lastLoggedDate}` : "";
-      return `- [${h._id}] "${h.name}" (${schedStr}) | Current Streak: ${h.currentStreak} day(s), Longest Streak: ${h.longestStreak} day(s) | ${statusStr}${lastLoggedStr}`;
+      const weeklyRate = h.weeklyRate ?? 0;
+      const completed = h.weeklyStats?.completed ?? 0;
+      const scheduled = h.weeklyStats?.scheduled ?? 0;
+      return `- [${h._id}] "${h.name}" (${schedStr}) | Current Streak: ${h.currentStreak} day(s) (Longest: ${h.longestStreak}d), Weekly Rate: ${weeklyRate}% (${completed}/${scheduled} Completed) | ${statusStr}${lastLoggedStr}`;
     });
     const habitsContext = habitsContextLines.join("\n");
 
