@@ -21,6 +21,8 @@ import type * as images from "../images.js";
 import type * as messages from "../messages.js";
 import type * as messages_internal from "../messages_internal.js";
 import type * as migrations from "../migrations.js";
+import type * as notes from "../notes.js";
+import type * as notes_action from "../notes_action.js";
 import type * as pageSettings from "../pageSettings.js";
 import type * as reflections from "../reflections.js";
 import type * as seed from "../seed.js";
@@ -47,6 +49,8 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   messages_internal: typeof messages_internal;
   migrations: typeof migrations;
+  notes: typeof notes;
+  notes_action: typeof notes_action;
   pageSettings: typeof pageSettings;
   reflections: typeof reflections;
   seed: typeof seed;

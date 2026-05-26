@@ -287,6 +287,20 @@ export async function processLocalLLMRequest({
     {
       type: "function",
       function: {
+        name: "deleteSemanticMemory",
+        description: "Deletes a specific long-term semantic memory/fact about the user by its memory ID.",
+        parameters: {
+          type: "object",
+          properties: {
+            memoryId: { type: "string", description: "The ID of the memory to delete" },
+          },
+          required: ["memoryId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "triggerReflection",
         description: "Triggers a periodic reflection (Spotify Wrapped style) for the user to summarize tasks completed, events attended, habits logged, streaks, etc. Can be weekly, monthly, or yearly.",
         parameters: {
@@ -481,6 +495,21 @@ export async function processLocalLLMRequest({
           required: ["periodStartDate", "periodEndDate"],
         },
       },
+    },
+    {
+      type: "function",
+      function: {
+        name: "compileNotesPyramid",
+        description: "Compiles a weekly or monthly notes pyramid segment to distill behavioral patterns from user notes.",
+        parameters: {
+          type: "object",
+          properties: {
+            segment: { type: "number", description: "The specific split-week segment to compile (1: days 1-7, 2: days 8-14, 3: days 15-21, 4: days 22-End). If omitted, compiles the current running segment." },
+            timezoneOffset: { type: "number", description: "The user's local timezone offset in minutes." }
+          },
+          required: []
+        }
+      }
     },
   ];
 

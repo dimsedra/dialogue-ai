@@ -47,5 +47,36 @@ export const clearAllData = internalMutation({
   },
 });
 
+// Helper function to hash text using Web Crypto SHA-256
+async function computeHash(text: string): Promise<string> {
+  const msgUint8 = new TextEncoder().encode(text.toLowerCase().trim());
+  const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export const backfillMemories = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const memories = await ctx.db.query("memories").collect();
+    let updatedCount = 0;
+    const now = Date.now();
+
+    for (const mem of memories) {
+      if (!mem.hash || !mem.createdAt || !mem.updatedAt) {
+        const hash = await computeHash(mem.text);
+        await ctx.db.patch(mem._id, {
+          hash,
+          createdAt: mem.createdAt ?? now,
+          updatedAt: mem.updatedAt ?? now,
+        });
+        updatedCount++;
+      }
+    }
+
+    return { updatedCount };
+  },
+});
+
 
 

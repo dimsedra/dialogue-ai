@@ -19,4 +19,12 @@ crons.cron(
   {}
 );
 
+// Run pyramid segment compilation on days 1, 8, 15, and 22 of every month at 00:05 UTC
+crons.cron(
+  "pyramid-segment-compilation",
+  "5 0 1,8,15,22 * *",
+  internal.notes.cronTriggerPyramid,
+  {}
+);
+
 export default crons;

@@ -74,8 +74,10 @@ export function Chat({
   const updateTask = useMutation(api.tasks.updateTask);
   const updateUserBio = useMutation(api.ai.updateProfile);
   const saveSemanticMemory = useAction(api.ai_action.saveSemanticMemoryAction);
+  const deleteSemanticMemory = useMutation(api.ai.deleteMemory);
   const saveReflection = useMutation(api.reflections.saveReflection);
   const updatePreferences = useMutation(api.ai.updatePreferences);
+  const compileNotesPyramidAction = useAction(api.notes_action.compileNotesPyramidSegment);
 
   const convex = useConvex();
 
@@ -316,6 +318,9 @@ export function Chat({
           else if (name === "saveSemanticMemory") {
             await saveSemanticMemory({ text: args.text as string });
           }
+          else if (name === "deleteSemanticMemory") {
+            await deleteSemanticMemory({ id: args.memoryId as Id<"memories"> });
+          }
           else if (name === "triggerReflection") {
             const reflArgs = args as {
               type: "weekly" | "monthly" | "yearly";
@@ -545,6 +550,14 @@ export function Chat({
               periodEndDate: args.periodEndDate as string,
             });
             enrichedArgs.report = report;
+          }
+          else if (name === "compileNotesPyramid") {
+            const res = await compileNotesPyramidAction({
+              segment: args.segment as number | undefined,
+              timezoneOffset: args.timezoneOffset as number | undefined,
+            });
+            enrichedArgs.weeklySummary = res.weeklySummary;
+            enrichedArgs.monthlySummary = res.monthlySummary;
           }
 
           const isOnlyContext = (name === "updateTask" && Object.keys(args).every(k => ["taskId", "notes", "progress", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "progress", "statusHook"].includes(k))) ||

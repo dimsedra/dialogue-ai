@@ -89,13 +89,20 @@ export default defineSchema({
     name: v.optional(v.string()),
     bio: v.string(),
     preferences: v.any(),
+    weeklyNotesSummaries: v.optional(v.array(v.string())),
+    monthlyNotesSummaries: v.optional(v.array(v.string())),
+    behavioralProfile: v.optional(v.string()),
   }).index("by_user", ["userId"]),
 
   memories: defineTable({
     userId: v.id("users"),
     text: v.string(),
     embedding: v.array(v.number()),
+    hash: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
   }).index("by_user", ["userId"])
+    .index("by_hash", ["hash"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 768,
@@ -193,7 +200,7 @@ export default defineSchema({
 
   pageSettings: defineTable({
     userId: v.id("users"),
-    page: v.literal("dashboard"),
+    page: v.string(),
     settings: v.object({
       url: v.optional(v.string()),
       storageId: v.optional(v.string()),
@@ -210,6 +217,7 @@ export default defineSchema({
       secondaryText: v.string(),
       accentColor: v.string(),
       cardStyle: v.union(v.literal("glass"), v.literal("solid")),
+      bubbleStyle: v.optional(v.string()),
     }),
   }).index("by_user_page", ["userId", "page"]),
 });

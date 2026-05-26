@@ -2,6 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { auth } from "./auth";
 import { encrypt, decrypt } from "./encryption";
+import { recentActivityFeedHandler } from "./notes";
 
 const SKILLS_INSTRUCTION = `
 ## Agent Skills Reference
@@ -101,6 +102,9 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Mandatory Action Rule: You MUST proactively call this tool immediately whenever the user reveals durable, long-term facts about themselves (hobbies, skills, life context, tech stack, workspace details, preferred methodologies, or recurring personal/work-related struggles).
 - Mandatory Skip Rule (Triviality Gate): Do NOT call this tool for trivial, short-term, redundant, or purely conversational banter (e.g. user says "Thanks!", "I agree", "That makes sense", "Nice", or repeats a fact already saved in memories).
 - Exemption: This tool is strictly EXEMPT from the Verification Protocol. You do not need the user's permission or confirmation to save a memory; call it silently and instantly during the turn.
+### deleteSemanticMemory
+- Purpose: Delete a specific long-term semantic memory/fact if the user explicitly corrects a previously remembered fact or requests that it be forgotten.
+- Verification Protocol: You MUST ask for confirmation/verification before calling this tool, unless the user's message is an explicit instruction to delete/forget it (e.g., "Forget that I have a cat").
 ### triggerReflection
 - Purpose: Use to trigger a Spotify-Wrapped style periodic reflection summary of the user's tasks, events, categories, and streaks over a specific period. Use when the user asks how they are doing, requests a summary/reflection of their week/month/year, or says "How is my week going?"
 - Parameters:
@@ -144,6 +148,11 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 ### get_habit_consistency
 - Purpose: Queries consistency percentages, streak metadata, and log details. Executed silently.
 - Parameters: periodStartDate (string), periodEndDate (string).
+### compileNotesPyramid
+- Purpose: Compiles a weekly or monthly notes pyramid segment to distill behavioral patterns from user notes.
+- Parameters:
+  * segment: number (optional, the split-week segment 1, 2, 3, 4).
+  * timezoneOffset: number (optional, timezone offset in minutes).
 
 # 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
 You maintain a "living chronological journal" on every task and event inside the 'notes' field.
@@ -231,13 +240,7 @@ export const getPromptContext = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
 
-    const memories = await ctx.db
-      .query("memories")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .order("desc")
-      .take(5);
-
-    const personalityFragments = memories.map(m => m.text).join("\n- ");
+    const personalityFragments = "";
 
     let nowString = "";
     if (args.timezoneOffset !== undefined) {
@@ -407,6 +410,24 @@ export const getPromptContext = query({
     }));
     const habitsContext = habitsContextLines.join("\n");
 
+    // Fetch Note-Scan data
+    const weeklySummaries = profile?.weeklyNotesSummaries ?? [];
+    const monthlySummaries = profile?.monthlyNotesSummaries ?? [];
+    const behavioralProfile = profile?.behavioralProfile ?? "";
+
+    const weeklySummariesContext = weeklySummaries.length > 0
+      ? weeklySummaries.map((s, i) => `Week ${i + 1}:\n${s}`).join("\n\n")
+      : "No recent weekly summaries.";
+
+    const monthlySummariesContext = monthlySummaries.length > 0
+      ? monthlySummaries.map((s, i) => `Month ${i + 1}:\n${s}`).join("\n\n")
+      : "No recent monthly summaries.";
+
+    const notesTimeline = await recentActivityFeedHandler(ctx, { userId });
+    const timelineContext = notesTimeline.length > 0
+      ? notesTimeline.map((item: any) => `[${item.date}] [${item.entityType.toUpperCase()}] ${item.entityName} (${item.workspaceName || "No Workspace"}): ${item.noteText}`).join("\n")
+      : "No raw notes recorded in the last 7 days.";
+
     let briefingContext = "";
     if (args.brief) {
       briefingContext = `
@@ -454,6 +475,21 @@ export const getPromptContext = query({
       Active Habits & Routine Streaks:
       ${habitsContext || "No active habits."}
 
+      ## USER BEHAVIORAL PROFILE & SUMMARY PYRAMID (Note-Scan):
+      This section contains distilled weekly and monthly summaries of the user's past workflows, behavioral patterns, energy levels, mood, and habits, plus a permanent behavioral profile. Use this to adapt your tone, coaching approach, and advice without explicitly repeating observations unless asked.
+      
+      ### Permanent Behavioral Profile:
+      ${behavioralProfile || "No behavioral profile established yet."}
+      
+      ### Monthly Summaries (Current Year):
+      ${monthlySummariesContext}
+      
+      ### Weekly Summaries (Current Month):
+      ${weeklySummariesContext}
+      
+      ### Recent Raw Activity Notes (Last 7 Days):
+      ${timelineContext}
+
       Personality Fragments (Relevant context from past chats):
       - ${personalityFragments || "No specific patterns learned yet."}
       
@@ -486,15 +522,60 @@ export const getMemoryById = query({
   },
 });
 
+export const getMemoryByHash = query({
+  args: { hash: v.string(), userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) return null;
+    return await ctx.db
+      .query("memories")
+      .withIndex("by_hash", (q) => q.eq("hash", args.hash))
+      .filter((q) => q.eq(q.field("userId"), userId))
+      .first();
+  },
+});
+
 export const saveMemory = mutation({
-  args: { text: v.string(), embedding: v.array(v.number()), userId: v.optional(v.id("users")) },
+  args: { 
+    text: v.string(), 
+    embedding: v.array(v.number()), 
+    userId: v.optional(v.id("users")),
+    hash: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) throw new Error("Unauthorized");
-    await ctx.db.insert("memories", { 
+
+    const now = Date.now();
+    const createdAt = args.createdAt ?? now;
+    const updatedAt = args.updatedAt ?? now;
+
+    if (args.hash) {
+      const existing = await ctx.db
+        .query("memories")
+        .withIndex("by_hash", (q) => q.eq("hash", args.hash))
+        .filter((q) => q.eq(q.field("userId"), userId))
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          text: args.text,
+          embedding: args.embedding,
+          updatedAt,
+        });
+        return existing._id;
+      }
+    }
+
+    return await ctx.db.insert("memories", { 
       userId, 
       text: args.text, 
-      embedding: args.embedding 
+      embedding: args.embedding,
+      hash: args.hash,
+      createdAt,
+      updatedAt,
     });
   },
 });

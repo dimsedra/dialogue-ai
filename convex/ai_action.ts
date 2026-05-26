@@ -1,5 +1,5 @@
 "use node";
-import { internalAction, action } from "./_generated/server";
+import { internalAction, action, ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
@@ -22,6 +22,71 @@ async function getEmbedding(genAI: GoogleGenerativeAI, text: string): Promise<nu
   const magnitude = Math.sqrt(sumSq);
   if (magnitude === 0) return rawVector;
   return rawVector.map(v => v / magnitude);
+}
+
+// Helper function to hash text using Web Crypto SHA-256
+async function computeHash(text: string): Promise<string> {
+  const msgUint8 = new TextEncoder().encode(text.toLowerCase().trim());
+  const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function saveSemanticMemoryInternal(
+  ctx: ActionCtx,
+  genAI: GoogleGenerativeAI,
+  text: string,
+  userId?: Id<"users">
+): Promise<{ status: "inserted" | "updated" | "skipped_duplicate"; id?: string }> {
+  const profile = await ctx.runQuery(api.ai.getProfile, { userId, revealKeys: true });
+  const resolvedUserId = userId ?? profile?.userId;
+  if (!resolvedUserId) throw new Error("Unauthorized");
+
+  const hash = await computeHash(text);
+
+  // 1. Check if duplicate hash exists
+  const existingMemory = await ctx.runQuery(api.ai.getMemoryByHash, { hash, userId: resolvedUserId });
+  if (existingMemory) {
+    console.log(`Duplicate memory hash found: ${hash}. Updating timestamp.`);
+    const embedding = await getEmbedding(genAI, text);
+    await ctx.runMutation(api.ai.saveMemory, {
+      text,
+      embedding,
+      userId: resolvedUserId,
+      hash,
+      updatedAt: Date.now(),
+    });
+    return { status: "updated", id: existingMemory._id };
+  }
+
+  const embedding = await getEmbedding(genAI, text);
+
+  // 2. Semantic write guard: check if any existing memory has cosine similarity > 0.85
+  const searchResults = await ctx.vectorSearch("memories", "by_embedding", {
+    vector: embedding,
+    limit: 1,
+    filter: (q) => q.eq("userId", resolvedUserId),
+  });
+
+  if (searchResults.length > 0) {
+    const topMatch = searchResults[0];
+    if (topMatch._score > 0.85) {
+      console.log(`Semantic duplicate detected (similarity score: ${topMatch._score} > 0.85). Skipping save.`);
+      return { status: "skipped_duplicate" };
+    }
+  }
+
+  // 3. Save new memory
+  const id = await ctx.runMutation(api.ai.saveMemory, {
+    text,
+    embedding,
+    userId: resolvedUserId,
+    hash,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+
+  return { status: "inserted", id };
 }
 
 function getPeriodRange(
@@ -205,6 +270,9 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Mandatory Action Rule: You MUST proactively call this tool immediately whenever the user reveals durable, long-term facts about themselves (hobbies, skills, life context, tech stack, workspace details, preferred methodologies, or recurring personal/work-related struggles).
 - Mandatory Skip Rule (Triviality Gate): Do NOT call this tool for trivial, short-term, redundant, or purely conversational banter (e.g. user says "Thanks!", "I agree", "That makes sense", "Nice", or repeats a fact already saved in memories).
 - Exemption: This tool is strictly EXEMPT from the Verification Protocol. You do not need the user's permission or confirmation to save a memory; call it silently and instantly during the turn.
+### deleteSemanticMemory
+- Purpose: Delete a specific long-term semantic memory/fact if the user explicitly corrects a previously remembered fact or requests that it be forgotten.
+- Verification Protocol: You MUST ask for confirmation/verification before calling this tool, unless the user's message is an explicit instruction to delete/forget it (e.g., "Forget that I have a cat").
 ### triggerReflection
 - Purpose: Use to trigger a Spotify-Wrapped style periodic reflection summary of the user's tasks, events, categories, and streaks over a specific period. Use when the user asks how they are doing, requests a summary/reflection of their week/month/year, or says "How is my week going?"
 - Parameters:
@@ -237,6 +305,22 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Purpose: List the user's workspace names, IDs, and colors for context switching and categorization.
 - Parameters: none.
 - When to use: When the user asks about their workspaces, wants to move items between them, or you need workspace context.
+### create_habit
+- Purpose: Creates a new habit routine for the user in the active workspace. Do not use for one-off tasks.
+- Parameters: name (string), description (optional string), frequency (daily/custom), daysOfWeek (optional array of numbers).
+### log_habit
+- Purpose: Logs a habit execution (completed or skipped) silently. Runs instantly without confirmation — the user can correct you if wrong.
+- Parameters: habitId (string), dateString (string, local format YYYY-MM-DD), status (completed/skipped), notes (optional string).
+- When logging from a conversational remark (e.g. "too tired after the flight"), pass the user's own words as the notes field.
+- ALWAYS include a natural language acknowledgement in your response after calling this tool.
+### get_habit_consistency
+- Purpose: Queries consistency percentages, streak metadata, and log details. Executed silently.
+- Parameters: periodStartDate (string), periodEndDate (string).
+### compileNotesPyramid
+- Purpose: Compiles a weekly or monthly notes pyramid segment to distill behavioral patterns from user notes.
+- Parameters:
+  * segment: number (optional, the split-week segment 1, 2, 3, 4).
+  * timezoneOffset: number (optional, timezone offset in minutes).
 
 # 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
 You maintain a "living chronological journal" on every task and event inside the 'notes' field.
@@ -377,35 +461,39 @@ export const chat = internalAction({
 
         const searchResults = await ctx.vectorSearch("memories", "by_embedding", {
           vector: queryEmbedding,
-          limit: 5,
+          limit: 10,
           filter: (q) => q.eq("userId", args.userId),
         });
 
         if (searchResults.length > 0) {
-          const matchedMemories = await Promise.all(
+          const now = Date.now();
+          const matchedWithScores = await Promise.all(
             searchResults.map(async (res) => {
               const doc = await ctx.runQuery(api.ai.getMemoryById, { id: res._id });
-              return doc?.text;
+              if (!doc) return null;
+              const updatedAt = doc.updatedAt ?? doc.createdAt ?? now;
+              const recencyFactor = Math.max(0, 1 - (now - updatedAt) / (30 * 24 * 60 * 60 * 1000));
+              const finalScore = res._score * (1 + 0.1 * recencyFactor);
+              return {
+                text: doc.text,
+                finalScore,
+              };
             })
           );
-          const filteredMatched = matchedMemories.filter(Boolean);
-          if (filteredMatched.length > 0) {
-            personalityFragments = filteredMatched.join("\n- ");
+
+          const validMatches = matchedWithScores.filter((m): m is { text: string; finalScore: number } => m !== null);
+          validMatches.sort((a, b) => b.finalScore - a.finalScore);
+          
+          const top5 = validMatches.slice(0, 5).map(m => m.text);
+          if (top5.length > 0) {
+            personalityFragments = top5.join("\n- ");
           }
         }
       } catch (err) {
-        console.error("Vector search failed, falling back to chronological memories:", err);
-        const memories = await ctx.runQuery(api.ai.getLatestMemories, { userId: args.userId });
-        if (memories.length > 0) {
-          personalityFragments = memories.map((m: any) => m.text).join("\n- ");
-        }
+        console.error("Vector search failed:", err);
       }
     } else {
-      console.warn("GEMINI_API_KEY is not available. Skipping vector memory search, falling back to chronological memories.");
-      const memories = await ctx.runQuery(api.ai.getLatestMemories, { userId: args.userId });
-      if (memories.length > 0) {
-        personalityFragments = memories.map((m: any) => m.text).join("\n- ");
-      }
+      console.warn("GEMINI_API_KEY is not available. Skipping vector memory search.");
     }
 
     // Calculate local time based on offset if provided
@@ -515,6 +603,24 @@ export const chat = internalAction({
     });
     const habitsContext = habitsContextLines.join("\n");
 
+    // Fetch Note-Scan data
+    const weeklySummaries = profile?.weeklyNotesSummaries ?? [];
+    const monthlySummaries = profile?.monthlyNotesSummaries ?? [];
+    const behavioralProfile = profile?.behavioralProfile ?? "";
+
+    const weeklySummariesContext = weeklySummaries.length > 0
+      ? weeklySummaries.map((s, i) => `Week ${i + 1}:\n${s}`).join("\n\n")
+      : "No recent weekly summaries.";
+
+    const monthlySummariesContext = monthlySummaries.length > 0
+      ? monthlySummaries.map((s, i) => `Month ${i + 1}:\n${s}`).join("\n\n")
+      : "No recent monthly summaries.";
+
+    const notesTimeline = await ctx.runQuery(api.notes.recentActivityFeed, { userId: args.userId });
+    const timelineContext = notesTimeline.length > 0
+      ? notesTimeline.map(item => `[${item.date}] [${item.entityType.toUpperCase()}] ${item.entityName} (${item.workspaceName || "No Workspace"}): ${item.noteText}`).join("\n")
+      : "No raw notes recorded in the last 7 days.";
+
     let briefingContext = "";
     if (args.brief) {
       briefingContext = `
@@ -565,7 +671,22 @@ export const chat = internalAction({
       
       Active Habits & Routine Streaks:
       ${habitsContext || "No active habits."}
+
+      ## USER BEHAVIORAL PROFILE & SUMMARY PYRAMID (Note-Scan):
+      This section contains distilled weekly and monthly summaries of the user's past workflows, behavioral patterns, energy levels, mood, and habits, plus a permanent behavioral profile. Use this to adapt your tone, coaching approach, and advice without explicitly repeating observations unless asked.
       
+      ### Permanent Behavioral Profile:
+      ${behavioralProfile || "No behavioral profile established yet."}
+      
+      ### Monthly Summaries (Current Year):
+      ${monthlySummariesContext}
+      
+      ### Weekly Summaries (Current Month):
+      ${weeklySummariesContext}
+      
+      ### Recent Raw Activity Notes (Last 7 Days):
+      ${timelineContext}
+
       Personality Fragments (Relevant context from past chats):
       - ${personalityFragments || "No specific patterns learned yet."}
       
@@ -804,6 +925,17 @@ export const chat = internalAction({
             },
           },
           {
+            name: "deleteSemanticMemory",
+            description: "Deletes a specific long-term semantic memory/fact about the user by its memory ID.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                memoryId: { type: SchemaType.STRING, description: "The ID of the memory to delete" },
+              },
+              required: ["memoryId"],
+            },
+          },
+          {
             name: "triggerReflection",
             description: "Triggers a periodic reflection (Spotify Wrapped style) for the user to summarize tasks completed, events attended, streaks, etc. Can be weekly, monthly, or yearly.",
             parameters: {
@@ -815,6 +947,18 @@ export const chat = internalAction({
                 offsetYears: { type: SchemaType.NUMBER, description: "Offset years to look back (default 0)" },
               },
               required: ["type"],
+            },
+          },
+          {
+            name: "compileNotesPyramid",
+            description: "Compiles a weekly or monthly notes pyramid segment to distill behavioral patterns from user notes.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                segment: { type: SchemaType.NUMBER, description: "The specific split-week segment to compile (1: days 1-7, 2: days 8-14, 3: days 15-21, 4: days 22-End). If omitted, compiles the current running segment." },
+                timezoneOffset: { type: SchemaType.NUMBER, description: "The user's local timezone offset in minutes." }
+              },
+              required: []
             },
           },
           {
@@ -1498,15 +1642,46 @@ export const chat = internalAction({
                 summary: `Skipped saving memory because Google Gemini API key is not configured.`
               });
             } else {
-              const realEmbedding = await getEmbedding(genAI, text);
-              await ctx.runMutation(api.ai.saveMemory, { text, embedding: realEmbedding, userId: args.userId });
-              executedActionSummaries.push({
-                name: "saveSemanticMemory",
-                summary: `Saved a new granular semantic memory: "${text}"`
-              });
+              const saveResult = await saveSemanticMemoryInternal(ctx, genAI, text, args.userId);
+              if (saveResult.status === "inserted") {
+                executedActionSummaries.push({
+                  name: "saveSemanticMemory",
+                  summary: `Saved a new granular semantic memory: "${text}"`
+                });
+              } else if (saveResult.status === "updated") {
+                executedActionSummaries.push({
+                  name: "saveSemanticMemory",
+                  summary: `Updated timestamp for existing memory: "${text}"`
+                });
+              } else if (saveResult.status === "skipped_duplicate") {
+                executedActionSummaries.push({
+                  name: "saveSemanticMemory",
+                  summary: `Skipped saving duplicate memory (similarity score > 0.85).`
+                });
+              }
             }
             activeToolCalls.push({
               name: "saveSemanticMemory",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success" }
+            });
+          } else if (call.name === "deleteSemanticMemory") {
+            const { memoryId } = call.args as { memoryId: string };
+            try {
+              await ctx.runMutation(api.ai.deleteMemory, { id: memoryId as Id<"memories"> });
+              executedActionSummaries.push({
+                name: "deleteSemanticMemory",
+                summary: `Successfully deleted semantic memory.`
+              });
+            } catch (err: any) {
+              console.error(`Failed to delete memory ${memoryId}:`, err);
+              executedActionSummaries.push({
+                name: "deleteSemanticMemory",
+                summary: `Failed to delete semantic memory: ${err.message}`
+              });
+            }
+            activeToolCalls.push({
+              name: "deleteSemanticMemory",
               args: call.args as Record<string, unknown>,
               result: { status: "success" }
             });
@@ -1623,6 +1798,38 @@ export const chat = internalAction({
                     streakDays: stats.streakDays,
                   }
                 }
+              });
+            }
+          } else if (call.name === "compileNotesPyramid") {
+            const compileArgs = call.args as {
+              segment?: number;
+              timezoneOffset?: number;
+            };
+            try {
+              const res = await ctx.runAction(api.notes_action.compileNotesPyramidSegment, {
+                userId: args.userId,
+                segment: compileArgs.segment,
+                timezoneOffset: compileArgs.timezoneOffset ?? args.timezoneOffset,
+              });
+              executedActionSummaries.push({
+                name: "compileNotesPyramid",
+                summary: `Successfully compiled notes pyramid segment. Weekly summary: "${res.weeklySummary}"`
+              });
+              activeToolCalls.push({
+                name: "compileNotesPyramid",
+                args: call.args as Record<string, unknown>,
+                result: { status: "success", summary: res.weeklySummary }
+              });
+            } catch (err: any) {
+              console.error("Failed to compile notes pyramid:", err);
+              executedActionSummaries.push({
+                name: "compileNotesPyramid",
+                summary: `Failed to compile notes pyramid: ${err.message}`
+              });
+              activeToolCalls.push({
+                name: "compileNotesPyramid",
+                args: call.args as Record<string, unknown>,
+                result: { status: "error", error: err.message }
               });
             }
           } else if (call.name === "searchHistoricalEntities") {
@@ -2174,8 +2381,7 @@ export const saveSemanticMemoryAction = action({
     const apiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
     const genAI = new GoogleGenerativeAI(apiKey);
-    const embedding = await getEmbedding(genAI, args.text);
-    await ctx.runMutation(api.ai.saveMemory, { text: args.text, embedding, userId: args.userId });
+    await saveSemanticMemoryInternal(ctx, genAI, args.text, args.userId);
   }
 });
 
