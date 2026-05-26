@@ -47,7 +47,7 @@ export interface EnrichedToolArgs extends Record<string, unknown> {
 }
 
 export interface Scope {
-  type: "task" | "event" | "date";
+  type: "task" | "event" | "date" | "habit";
   id: string; // Document ID or date string (yyyy-MM-dd)
   title: string;
 }

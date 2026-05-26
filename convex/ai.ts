@@ -133,6 +133,20 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 - Purpose: List the user's workspace names, IDs, and colors for context switching and categorization.
 - Parameters: none.
 - When to use: When the user asks about their workspaces, wants to move items between them, or you need workspace context.
+### create_habit
+- Purpose: Creates a new habit routine for the user in the active workspace. Do not use for one-off tasks.
+- Parameters: name (string), description (optional string), frequency (daily/custom), daysOfWeek (optional array of numbers).
+### log_habit
+- Purpose: Logs a habit execution (completed or skipped).
+- Parameters: habitId (string), dateString (string, local format YYYY-MM-DD), status (completed/skipped), notes (optional string).
+- IMPORTANT RULES:
+  1. NEVER log a habit silently when inferred from casual conversation. If the user did NOT explicitly ask you to log a habit, you MUST first surface your intent and ask for confirmation. Example: "Sounds like you skipped your Morning Run today — want me to log that?" Only call this tool AFTER the user confirms.
+  2. If the user explicitly said "log my [habit] as [status]", call this tool immediately — no extra confirmation needed.
+  3. When logging from a conversational remark (e.g. "too tired after the flight"), pass the user's own words as the notes field.
+  4. ALWAYS include a natural language acknowledgement in your response after calling this tool.
+### get_habit_consistency
+- Purpose: Queries consistency percentages, streak metadata, and log details. Executed silently.
+- Parameters: periodStartDate (string), periodEndDate (string).
 
 # 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
 You maintain a "living chronological journal" on every task and event inside the 'notes' field.
@@ -319,6 +333,34 @@ export const getPromptContext = query({
       })
       .join("\n");
 
+    const activeHabits = workspaceId
+      ? await ctx.db.query("habits").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect()
+      : await ctx.db.query("habits").withIndex("by_user", (q) => q.eq("userId", userId)).collect();
+
+    const nonArchivedHabits = activeHabits.filter(h => !h.archived);
+
+    let todayDateString = "";
+    if (args.timezoneOffset !== undefined) {
+      const now = new Date();
+      const localTime = new Date(now.getTime() - (args.timezoneOffset * 60000));
+      todayDateString = `${localTime.getFullYear()}-${String(localTime.getMonth() + 1).padStart(2, "0")}-${String(localTime.getDate()).padStart(2, "0")}`;
+    } else {
+      const now = new Date();
+      todayDateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    }
+
+    const habitsContextLines = await Promise.all(nonArchivedHabits.map(async (h) => {
+      const todayLog = await ctx.db
+        .query("habitLogs")
+        .withIndex("by_habit_dateString", (q) => q.eq("habitId", h._id).eq("dateString", todayDateString))
+        .unique();
+      const statusStr = todayLog ? `Today: ${todayLog.status.toUpperCase()}` : "Today: PENDING (Not logged yet)";
+      const schedStr = h.frequency === "daily" ? "Daily" : `Days: [${h.frequencyConfig?.daysOfWeek?.join(",")}]`;
+      const lastLoggedStr = h.lastLoggedDate ? ` | Last Logged: ${h.lastLoggedDate}` : "";
+      return `- [${h._id}] "${h.name}" (${schedStr}) | Current Streak: ${h.currentStreak} day(s), Longest Streak: ${h.longestStreak} day(s) | ${statusStr}${lastLoggedStr}`;
+    }));
+    const habitsContext = habitsContextLines.join("\n");
+
     let briefingContext = "";
     if (args.brief) {
       briefingContext = `
@@ -363,6 +405,9 @@ export const getPromptContext = query({
       Upcoming Events for Reference:
       ${upcomingEventsContext || "No upcoming events."}
       
+      Active Habits & Routine Streaks:
+      ${habitsContext || "No active habits."}
+
       Personality Fragments (Relevant context from past chats):
       - ${personalityFragments || "No specific patterns learned yet."}
       

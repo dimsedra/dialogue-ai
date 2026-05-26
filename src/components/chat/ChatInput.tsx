@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Send, X, PlusCircle, ChevronsUpDown, File as FileIcon, Calendar, CheckCircle2 } from "lucide-react";
+import { Send, X, PlusCircle, ChevronsUpDown, File as FileIcon, Calendar, CheckCircle2, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Scope } from "./types";
@@ -160,6 +160,8 @@ export const ChatInput = React.memo(function ChatInput({
             >
               {activeScope.type === "date" ? (
                 <Calendar className="w-3.5 h-3.5 text-[#d4a373]" />
+              ) : activeScope.type === "habit" ? (
+                <Flame className="w-3.5 h-3.5 text-[#d4a373]" />
               ) : (
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#d4a373]" />
               )}

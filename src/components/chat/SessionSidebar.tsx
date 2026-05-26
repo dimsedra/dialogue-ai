@@ -177,8 +177,12 @@ export function SessionSidebar({
                 setActionMenuSessionId(null);
                 setDropdownAnchor(null);
               } else {
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setDropdownAnchor({ top: rect.top - 4, left: rect.right + 8 });
+                if (isLargeViewport) {
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setDropdownAnchor({ top: rect.top - 4, left: rect.right + 8 });
+                } else {
+                  setDropdownAnchor(null);
+                }
                 setActionMenuSessionId(session._id);
               }
             }}
@@ -514,7 +518,7 @@ export function SessionSidebar({
     })()}
 
       {/* Portal dropdown — opens rightward from action button */}
-      {actionMenuSessionId && dropdownAnchor && (() => {
+      {actionMenuSessionId && dropdownAnchor && isLargeViewport && (() => {
         const session = sessions?.find(s => s._id === actionMenuSessionId);
         if (!session) return null;
         return createPortal(

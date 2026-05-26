@@ -541,5 +541,79 @@ export function ToolCard({ toolCall }: { toolCall: ToolCall }) {
     );
   }
 
+  if (toolCall.name === "create_habit") {
+    const { name, frequency, description } = toolCall.args as {
+      name: string;
+      frequency: string;
+      description?: string;
+    };
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mt-3 p-3.5 rounded-2xl bg-[#d4a373]/5 border border-[#d4a373]/10 space-y-2 max-w-[400px] shadow-lg shadow-black/10"
+      >
+        <div className="flex items-center gap-2 text-[#d4a373]">
+          <Flame className="w-3.5 h-3.5" />
+          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Habit Created</span>
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm text-[#f2efeb] font-semibold leading-snug capitalize">{name}</p>
+          <span className="text-[9px] font-bold uppercase tracking-wider bg-[#d4a373]/10 px-2 py-0.5 rounded-full border border-[#d4a373]/20 text-[#d4a373] inline-block">
+            {frequency}
+          </span>
+          {description && (
+            <p className="text-[11px] text-[#a8a29e] leading-relaxed italic">{description}</p>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (toolCall.name === "log_habit") {
+    const { status, dateString, notes } = toolCall.args as {
+      status: "completed" | "skipped";
+      dateString: string;
+      notes?: string;
+    };
+    const titleHint = (toolCall.args as any).titleHint ?? "Habit";
+    const result = toolCall.result as { newStreak?: number } | undefined;
+    const streak = result?.newStreak ?? 0;
+    const isCompleted = status === "completed";
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={`mt-3 p-3 rounded-2xl border flex items-center gap-3 shadow-md shadow-black/10 max-w-[400px] ${
+          isCompleted ? "bg-emerald-500/5 border-emerald-500/10" : "bg-slate-500/5 border-slate-500/10"
+        }`}
+      >
+        <div className={`p-1.5 rounded-xl shrink-0 ${
+          isCompleted ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-500/20 text-slate-400"
+        }`}>
+          <Flame className="w-4 h-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className={`text-[8px] font-black uppercase tracking-[0.2em] block ${
+            isCompleted ? "text-emerald-500" : "text-slate-400"
+          }`}>
+            Habit {status} ({dateString})
+          </span>
+          <p className="text-[13px] text-[#f2efeb] font-bold truncate capitalize">{titleHint}</p>
+          {notes && (
+            <p className="text-[10px] text-[#a8a29e] italic truncate">{notes}</p>
+          )}
+        </div>
+        {isCompleted && streak > 0 && (
+          <div className="flex items-center gap-1 text-[10px] text-orange-400 font-bold shrink-0 bg-orange-400/10 px-2 py-0.5 rounded-full border border-orange-400/20">
+            <Flame className="w-3 h-3 fill-orange-400 animate-pulse" />
+            <span>{streak}d</span>
+          </div>
+        )}
+      </motion.div>
+    );
+  }
+
   return null;
 }

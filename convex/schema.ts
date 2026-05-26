@@ -60,7 +60,7 @@ export default defineSchema({
       extractedText: v.optional(v.string()),
     }))),
     scope: v.optional(v.object({
-      type: v.union(v.literal("date"), v.literal("task"), v.literal("event")),
+      type: v.union(v.literal("date"), v.literal("task"), v.literal("event"), v.literal("habit")),
       id: v.string(),
       title: v.string(),
     })),
@@ -156,4 +156,34 @@ export default defineSchema({
     fileType: v.string(),
     createdAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  habits: defineTable({
+    userId: v.id("users"),
+    workspaceId: v.optional(v.id("workspaces")),
+    name: v.string(),
+    description: v.optional(v.string()),
+    frequency: v.union(v.literal("daily"), v.literal("custom")),
+    frequencyConfig: v.object({
+      daysOfWeek: v.optional(v.array(v.number())),
+    }),
+    currentStreak: v.number(),
+    longestStreak: v.number(),
+    lastLoggedAt: v.optional(v.number()),
+    lastLoggedDate: v.optional(v.string()),
+    archived: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"])
+    .index("by_workspace", ["workspaceId"]),
+
+  habitLogs: defineTable({
+    userId: v.id("users"),
+    habitId: v.id("habits"),
+    timestamp: v.number(),
+    dateString: v.string(),
+    status: v.union(v.literal("completed"), v.literal("skipped")),
+    notes: v.optional(v.string()),
+  }).index("by_user", ["userId"])
+    .index("by_habit", ["habitId"])
+    .index("by_timestamp", ["timestamp"])
+    .index("by_habit_dateString", ["habitId", "dateString"]),
 });

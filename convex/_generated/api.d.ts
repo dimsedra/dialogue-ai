@@ -15,6 +15,7 @@ import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as encryption from "../encryption.js";
 import type * as events from "../events.js";
+import type * as habits from "../habits.js";
 import type * as http from "../http.js";
 import type * as images from "../images.js";
 import type * as messages from "../messages.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   encryption: typeof encryption;
   events: typeof events;
+  habits: typeof habits;
   http: typeof http;
   images: typeof images;
   messages: typeof messages;

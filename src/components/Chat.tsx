@@ -512,6 +512,38 @@ export function Chat({
             const workspaces = await convex.query(api.workspaces.list, {});
             enrichedArgs.workspaces = workspaces;
           }
+          else if (name === "create_habit") {
+            const habitId = await convex.mutation(api.habits.createHabit, {
+              workspaceId: promptCtx.workspaceId ?? undefined,
+              name: args.name as string,
+              description: args.description as string | undefined,
+              frequency: args.frequency as "daily" | "custom",
+              frequencyConfig: {
+                daysOfWeek: args.daysOfWeek as number[] | undefined,
+              },
+            });
+            enrichedArgs.habitId = habitId;
+          }
+          else if (name === "log_habit") {
+            const logId = await convex.mutation(api.habits.logHabit, {
+              habitId: args.habitId as Id<"habits">,
+              dateString: args.dateString as string,
+              status: args.status as "completed" | "skipped",
+              notes: args.notes as string | undefined,
+            });
+            const habit = await convex.query(api.habits.get, { id: args.habitId as Id<"habits"> });
+            enrichedArgs.logId = logId;
+            enrichedArgs.newStreak = habit?.currentStreak || 0;
+            enrichedArgs.titleHint = habit?.name;
+          }
+          else if (name === "get_habit_consistency") {
+            const report = await convex.query(api.habits.getHabitConsistency, {
+              workspaceId: promptCtx.workspaceId ?? undefined,
+              periodStartDate: args.periodStartDate as string,
+              periodEndDate: args.periodEndDate as string,
+            });
+            enrichedArgs.report = report;
+          }
 
           const isOnlyContext = (name === "updateTask" && Object.keys(args).every(k => ["taskId", "notes", "progress", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "progress", "statusHook"].includes(k))) ||
             (name === "updateEvent" && Object.keys(args).every(k => ["eventId", "notes", "outcome", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "outcome", "statusHook"].includes(k)));

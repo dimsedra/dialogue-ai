@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, Bot, Copy, Check, ExternalLink, File as FileIcon, ChevronDown, ChevronUp, Calendar, CheckCircle2 } from "lucide-react";
+import { User, Bot, Copy, Check, ExternalLink, File as FileIcon, ChevronDown, ChevronUp, Calendar, CheckCircle2, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -97,7 +97,7 @@ interface MessageBubbleProps {
     fileName?: string;
     fileType?: string;
     scope?: {
-      type: "date" | "task" | "event";
+      type: "date" | "task" | "event" | "habit";
       id: string;
       title: string;
     };
@@ -153,7 +153,7 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
         {msg.scope && (
           <div className="flex mb-3">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#d4a373]/10 border border-[#d4a373]/20 text-[#d4a373]">
-              {msg.scope.type === "date" ? <Calendar className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              {msg.scope.type === "date" ? <Calendar className="w-3.5 h-3.5" /> : msg.scope.type === "habit" ? <Flame className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
               <span className="text-[11px] font-bold uppercase tracking-widest">{msg.scope.title}</span>
             </div>
           </div>

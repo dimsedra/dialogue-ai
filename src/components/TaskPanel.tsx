@@ -23,6 +23,7 @@ import {
   TaskList,
   EventList,
   CalendarView,
+  HabitList,
 } from "./panel";
 
 export function TaskPanel({
@@ -47,7 +48,7 @@ export function TaskPanel({
   const cancelEventOccurrence = useMutation(api.events.cancelOccurrence);
 
   const [expandedTaskId, setExpandedTaskId] = useState<Id<"tasks"> | null>(null);
-  const [view, setView] = useState<"tasks" | "events" | "calendar">("tasks");
+  const [view, setView] = useState<"tasks" | "events" | "calendar" | "habits">("tasks");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isLargeViewport, setIsLargeViewport] = useState(true);
 
@@ -215,7 +216,7 @@ export function TaskPanel({
     <div className="flex flex-col h-full bg-[#1a1814] relative">
       <header className="p-6 shrink-0 space-y-6">
         <PanelHeader view={view} setView={setView} onClose={onClose} onSync={onSync} />
-        {view !== "calendar" && (
+        {view !== "calendar" && view !== "habits" && (
           <FilterBar
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
@@ -252,7 +253,7 @@ export function TaskPanel({
               onDeleteEvent={handleDeleteEvent}
               onReferEvent={onRefer ? (event) => onRefer({ type: "event", id: event._id, title: event.title }) : undefined}
             />
-          ) : (
+          ) : view === "calendar" ? (
             <CalendarView
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
@@ -275,6 +276,12 @@ export function TaskPanel({
               } : undefined}
               onReferEvent={onRefer ? (event) => onRefer({ type: "event", id: event._id, title: event.title }) : undefined}
               onReferTask={onRefer ? (task) => onRefer({ type: "task", id: task._id, title: task.text }) : undefined}
+            />
+          ) : (
+            <HabitList
+              activeWorkspaceId={activeWorkspaceId}
+              isLargeViewport={isLargeViewport}
+              onReferHabit={onRefer ? (habit) => onRefer({ type: "habit", id: habit._id, title: habit.name }) : undefined}
             />
           )}
         </AnimatePresence>

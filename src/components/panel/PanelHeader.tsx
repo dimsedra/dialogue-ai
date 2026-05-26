@@ -1,8 +1,8 @@
-import { Calendar as CalendarIcon, Clock, Grid, ListTodo, Sparkles, ChevronRight } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Grid, ListTodo, Sparkles, ChevronRight, Flame } from "lucide-react";
 
 interface PanelHeaderProps {
-  view: "tasks" | "events" | "calendar";
-  setView: (view: "tasks" | "events" | "calendar") => void;
+  view: "tasks" | "events" | "calendar" | "habits";
+  setView: (view: "tasks" | "events" | "calendar" | "habits") => void;
   onClose?: () => void;
   onSync?: () => void;
 }
@@ -17,16 +17,18 @@ export function PanelHeader({ view, setView, onClose, onSync }: PanelHeaderProps
               <ListTodo className="w-5 h-5 text-[#d4a373]" />
             ) : view === "events" ? (
               <Clock className="w-5 h-5 text-[#d4a373]" />
-            ) : (
+            ) : view === "calendar" ? (
               <CalendarIcon className="w-5 h-5 text-[#d4a373]" />
+            ) : (
+              <Flame className="w-5 h-5 text-[#d4a373]" />
             )}
           </div>
           <div>
             <h2 className="text-sm font-bold text-[#f2efeb]">
-              {view === "tasks" ? "Tasks" : view === "events" ? "Events" : "Calendar"}
+              {view === "tasks" ? "Tasks" : view === "events" ? "Events" : view === "calendar" ? "Calendar" : "Habits"}
             </h2>
             <p className="text-[9px] text-[#a8a29e] uppercase tracking-widest font-bold">
-              {view === "tasks" ? "Focus List" : view === "events" ? "Schedule" : "Timeline"}
+              {view === "tasks" ? "Focus List" : view === "events" ? "Schedule" : view === "calendar" ? "Timeline" : "Routines"}
             </p>
           </div>
         </div>
@@ -59,6 +61,15 @@ export function PanelHeader({ view, setView, onClose, onSync }: PanelHeaderProps
               title="Calendar View"
             >
               <CalendarIcon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setView("habits")}
+              className={`p-1.5 rounded-lg transition-all ${
+                view === "habits" ? "bg-[#2a2723] text-[#d4a373]" : "text-[#a8a29e] hover:text-[#f2efeb]"
+              }`}
+              title="Habits Tracker"
+            >
+              <Flame className="w-3.5 h-3.5" />
             </button>
           </div>
 

@@ -24,7 +24,7 @@ interface MessageStreamProps {
     fileType?: string;
     sessionId?: unknown;
     scope?: {
-      type: "date" | "task" | "event";
+      type: "date" | "task" | "event" | "habit";
       id: string;
       title: string;
     };

@@ -427,6 +427,59 @@ export async function processLocalLLMRequest({
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "create_habit",
+        description: "Creates a new habit routine for the user in the active workspace. Do not use for one-off tasks.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "The concise name of the habit, e.g. 'Skincare', 'Generate Leads'" },
+            description: { type: "string", description: "Optional details about how the user likes to fulfill this routine" },
+            frequency: { type: "string", enum: ["daily", "custom"], description: "Frequency type: 'daily' or 'custom'" },
+            daysOfWeek: {
+              type: "array",
+              description: "For custom frequency: Array of active days (0=Sunday, 1=Monday, ..., 6=Saturday)",
+              items: { type: "integer" }
+            }
+          },
+          required: ["name", "frequency"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "log_habit",
+        description: "Logs a habit execution (completed or skipped) silently. Do not ask for confirmation.",
+        parameters: {
+          type: "object",
+          properties: {
+            habitId: { type: "string", description: "The unique ID of the habit to log" },
+            dateString: { type: "string", description: "The local timezone-adjusted date in YYYY-MM-DD format" },
+            status: { type: "string", enum: ["completed", "skipped"], description: "Status: 'completed' or 'skipped'" },
+            notes: { type: "string", description: "Optional notes about the completion session" }
+          },
+          required: ["habitId", "dateString", "status"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_habit_consistency",
+        description: "Queries consistency percentages, streaks, and logs. Executed silently.",
+        parameters: {
+          type: "object",
+          properties: {
+            periodStartDate: { type: "string", description: "The start date in YYYY-MM-DD format" },
+            periodEndDate: { type: "string", description: "The end date in YYYY-MM-DD format" },
+          },
+          required: ["periodStartDate", "periodEndDate"],
+        },
+      },
+    },
   ];
 
   const messages = [

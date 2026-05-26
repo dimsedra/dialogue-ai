@@ -317,7 +317,7 @@ export const chat = internalAction({
       fileType: v.string(),
     }))),
     scope: v.optional(v.object({
-      type: v.union(v.literal("date"), v.literal("task"), v.literal("event")),
+      type: v.union(v.literal("date"), v.literal("task"), v.literal("event"), v.literal("habit")),
       id: v.string(),
       title: v.string(),
     })),
@@ -477,6 +477,31 @@ export const chat = internalAction({
       })
       .join("\n");
 
+    let todayDateString = "";
+    if (args.timezoneOffset !== undefined) {
+      const now = new Date();
+      const localTime = new Date(now.getTime() - (args.timezoneOffset * 60000));
+      todayDateString = `${localTime.getFullYear()}-${String(localTime.getMonth() + 1).padStart(2, "0")}-${String(localTime.getDate()).padStart(2, "0")}`;
+    } else {
+      const now = new Date();
+      todayDateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    }
+
+    const activeHabits = await ctx.runQuery(api.habits.getHabits, {
+      workspaceId: workspaceId ?? undefined,
+      userId: args.userId,
+      todayDateString,
+    });
+
+    const habitsContextLines = activeHabits.map((h: any) => {
+      const todayLog = h.recentLogs?.find((l: any) => l.dateString === todayDateString);
+      const statusStr = todayLog ? `Today: ${todayLog.status.toUpperCase()}` : "Today: PENDING (Not logged yet)";
+      const schedStr = h.frequency === "daily" ? "Daily" : `Days: [${h.frequencyConfig?.daysOfWeek?.join(",")}]`;
+      const lastLoggedStr = h.lastLoggedDate ? ` | Last Logged: ${h.lastLoggedDate}` : "";
+      return `- [${h._id}] "${h.name}" (${schedStr}) | Current Streak: ${h.currentStreak} day(s), Longest Streak: ${h.longestStreak} day(s) | ${statusStr}${lastLoggedStr}`;
+    });
+    const habitsContext = habitsContextLines.join("\n");
+
     let briefingContext = "";
     if (args.brief) {
       briefingContext = `
@@ -524,6 +549,9 @@ export const chat = internalAction({
       
       Upcoming Events for Reference:
       ${upcomingEventsContext || "No upcoming events."}
+      
+      Active Habits & Routine Streaks:
+      ${habitsContext || "No active habits."}
       
       Personality Fragments (Relevant context from past chats):
       - ${personalityFragments || "No specific patterns learned yet."}
@@ -875,6 +903,50 @@ export const chat = internalAction({
               type: SchemaType.OBJECT,
               properties: {},
               required: [],
+            },
+          },
+          {
+            name: "create_habit",
+            description: "Creates a new habit routine for the user in the active workspace. Do not use for one-off tasks.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                name: { type: SchemaType.STRING, description: "The concise name of the habit, e.g. 'Skincare', 'Generate Leads'" },
+                description: { type: SchemaType.STRING, description: "Optional details about how the user likes to fulfill this routine" },
+                frequency: { type: SchemaType.STRING, description: "Frequency type: 'daily' or 'custom'" },
+                daysOfWeek: {
+                  type: SchemaType.ARRAY,
+                  description: "For custom frequency: Array of active days (0=Sunday, 1=Monday, ..., 6=Saturday)",
+                  items: { type: SchemaType.NUMBER }
+                }
+              },
+              required: ["name", "frequency"],
+            },
+          },
+          {
+            name: "log_habit",
+            description: "Logs a habit execution (completed or skipped) for the user. IMPORTANT RULES:\n1. NEVER log a habit silently. If the user did NOT explicitly ask you to log a habit, you MUST first surface your intent and ask for their confirmation. Example: 'Sounds like you skipped your Morning Run today — want me to log it as skipped?' Only call this tool after the user says yes (or equivalent).\n2. If the user DID explicitly say 'log my [habit] as [status]', call this tool immediately without extra confirmation.\n3. When logging from a casual remark (e.g. 'too tired to work out'), infer the habit from the Active Habits list and pass the user's own words as the notes field.\n4. ALWAYS include a natural language confirmation in your response after calling this tool.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                habitId: { type: SchemaType.STRING, description: "The unique ID of the habit to log" },
+                dateString: { type: SchemaType.STRING, description: "The local timezone-adjusted date in YYYY-MM-DD format" },
+                status: { type: SchemaType.STRING, description: "Status: 'completed' or 'skipped'" },
+                notes: { type: SchemaType.STRING, description: "Optional notes about this log entry. When logging from a conversational inference, put the user's own words here (e.g. 'User mentioned: exhausted after the flight')." }
+              },
+              required: ["habitId", "dateString", "status"],
+            },
+          },
+          {
+            name: "get_habit_consistency",
+            description: "Queries consistency percentages, streaks, and logs. Executed silently.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                periodStartDate: { type: SchemaType.STRING, description: "The start date in YYYY-MM-DD format" },
+                periodEndDate: { type: SchemaType.STRING, description: "The end date in YYYY-MM-DD format" },
+              },
+              required: ["periodStartDate", "periodEndDate"],
             },
           },
         ],
@@ -1794,6 +1866,77 @@ export const chat = internalAction({
               name: "listWorkspaces",
               args: call.args as Record<string, unknown>,
               result: { status: "success", workspaces }
+            });
+          } else if (call.name === "create_habit") {
+            const { name, description, frequency, daysOfWeek } = call.args as {
+              name: string;
+              description?: string;
+              frequency: "daily" | "custom";
+              daysOfWeek?: number[];
+            };
+            const id = await ctx.runMutation(api.habits.createHabit, {
+              workspaceId: workspaceId ?? undefined,
+              name,
+              description,
+              frequency,
+              frequencyConfig: { daysOfWeek },
+              userId: args.userId,
+            });
+            executedActionSummaries.push({
+              name: "create_habit",
+              summary: `Created habit '${name}' with frequency '${frequency}'`
+            });
+            activeToolCalls.push({
+              name: "create_habit",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success", habitId: id, name }
+            });
+          } else if (call.name === "log_habit") {
+            const { habitId, dateString, status, notes } = call.args as {
+              habitId: string;
+              dateString: string;
+              status: "completed" | "skipped";
+              notes?: string;
+            };
+            const logId = await ctx.runMutation(api.habits.logHabit, {
+              habitId: habitId as Id<"habits">,
+              dateString,
+              status,
+              notes,
+              userId: args.userId,
+            });
+            const habit = await ctx.runQuery(api.habits.get, {
+              id: habitId as Id<"habits">,
+              userId: args.userId,
+            });
+            executedActionSummaries.push({
+              name: "log_habit",
+              summary: `Logged habit '${habit?.name || "Unknown"}' as ${status} on ${dateString}. Current streak: ${habit?.currentStreak || 0} day(s).`
+            });
+            activeToolCalls.push({
+              name: "log_habit",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success", logId, newStreak: habit?.currentStreak || 0 }
+            });
+          } else if (call.name === "get_habit_consistency") {
+            const { periodStartDate, periodEndDate } = call.args as {
+              periodStartDate: string;
+              periodEndDate: string;
+            };
+            const report = await ctx.runQuery(api.habits.getHabitConsistency, {
+              workspaceId: workspaceId ?? undefined,
+              periodStartDate,
+              periodEndDate,
+              userId: args.userId,
+            });
+            executedActionSummaries.push({
+              name: "get_habit_consistency",
+              summary: `Retrieved habit consistency for ${report.length} habit(s)`
+            });
+            activeToolCalls.push({
+              name: "get_habit_consistency",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success", report }
             });
           }
         }

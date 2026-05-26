@@ -148,7 +148,7 @@ const sendArgs = {
     fileType: v.string(),
   }))),
   scope: v.optional(v.object({
-    type: v.union(v.literal("date"), v.literal("task"), v.literal("event")),
+    type: v.union(v.literal("date"), v.literal("task"), v.literal("event"), v.literal("habit")),
     id: v.string(),
     title: v.string(),
   })),
@@ -202,7 +202,7 @@ async function sendImplementation(ctx: MutationCtx, args: {
   fileType?: string;
   fileName?: string;
   attachments?: { storageId: Id<"_storage">; fileName: string; fileType: string }[];
-  scope?: { type: "date" | "task" | "event"; id: string; title: string };
+  scope?: { type: "date" | "task" | "event" | "habit"; id: string; title: string };
 }) {
   const { sessionId, text, author, timezoneOffset, toolCall, toolCalls, storageId, fileType, fileName, attachments, scope } = args;
   
