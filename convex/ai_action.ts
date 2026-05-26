@@ -770,6 +770,18 @@ export const chat = internalAction({
             },
           },
           {
+            name: "cancelOccurrence",
+            description: "Cancels a single occurrence of a recurring event series. The rest of the schedule remains unchanged.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                seriesId: { type: SchemaType.STRING, description: "The ID of the recurring event series" },
+                occurrenceTimestamp: { type: SchemaType.NUMBER, description: "The epoch ms timestamp of the specific occurrence to cancel" },
+              },
+              required: ["seriesId", "occurrenceTimestamp"],
+            },
+          },
+          {
             name: "updateUserBio",
             description: "Updates the core user profile bio/personality summary and preferences.",
             parameters: {
@@ -1431,6 +1443,15 @@ export const chat = internalAction({
               summary: `Deleted event or entire recurring series '${event?.title}'.`
             });
             activeToolCalls.push({ name: "deleteEvent", args: { ...call.args as Record<string, unknown>, titleHint: event?.title }, result: { status: "success" } });
+          } else if (call.name === "cancelOccurrence") {
+            const { seriesId, occurrenceTimestamp } = call.args as { seriesId: string; occurrenceTimestamp: number };
+            const series = await ctx.runQuery(api.events.get, { id: seriesId as Id<"events">, userId: args.userId });
+            await ctx.runMutation(api.events.cancelOccurrence, { id: seriesId as Id<"events">, timestamp: occurrenceTimestamp, userId: args.userId });
+            executedActionSummaries.push({
+              name: "cancelOccurrence",
+              summary: `Cancelled occurrence of recurring series '${series?.title}'`
+            });
+            activeToolCalls.push({ name: "cancelOccurrence", args: call.args as Record<string, unknown>, result: { status: "success" } });
           } else if (call.name === "updateEventOccurrence") {
             const occArgs = call.args as { seriesId: string; originalStartTime: string; startTime?: string; endTime?: string; eventType?: "interval" | "point"; title?: string; location?: string };
             const oldEvent = await ctx.runQuery(api.events.get, { id: occArgs.seriesId as Id<"events">, userId: args.userId });

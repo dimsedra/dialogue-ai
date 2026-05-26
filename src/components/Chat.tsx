@@ -284,6 +284,11 @@ export function Chat({
             await deleteEvent({ id: args.eventId as Id<"events"> });
             enrichedArgs.titleHint = event?.title;
           }
+          else if (name === "cancelOccurrence") {
+            const series = await convex.query(api.events.get, { id: args.seriesId as Id<"events"> });
+            await convex.mutation(api.events.cancelOccurrence, { id: args.seriesId as Id<"events">, timestamp: args.occurrenceTimestamp as number });
+            enrichedArgs.titleHint = series?.title;
+          }
           else if (name === "updateEventOccurrence") {
             const oldEvent = await convex.query(api.events.get, { id: args.seriesId as Id<"events"> });
             await updateOccurrence({

@@ -189,6 +189,21 @@ export async function processLocalLLMRequest({
     {
       type: "function",
       function: {
+        name: "cancelOccurrence",
+        description: "Cancels a single occurrence of a recurring event series. The rest of the schedule remains unchanged.",
+        parameters: {
+          type: "object",
+          properties: {
+            seriesId: { type: "string", description: "The ID of the recurring event series" },
+            occurrenceTimestamp: { type: "number", description: "The epoch ms timestamp of the specific occurrence to cancel" },
+          },
+          required: ["seriesId", "occurrenceTimestamp"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "updateEvent",
         description: "Updates an existing scheduled event by its ID. Provide only the fields you want to change.",
         parameters: {
