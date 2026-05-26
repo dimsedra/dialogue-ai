@@ -192,11 +192,16 @@ export function CalendarView({
         <div className="space-y-2">
           {/* Events Section */}
           {eventsOnSelectedDate.map((event: Doc<"events">) => {
+            const isCancelled = (event as any).cancelled === true;
             const eventWorkspace = workspaces?.find((w) => w._id === event.workspaceId);
             return (
               <div
                 key={`${event._id}_${event.startTime}`}
-                className="p-4 rounded-2xl bg-[#1f1d19] border border-[#d4a373]/20 flex flex-col gap-2 group hover:bg-[#d4a373]/5 transition-all"
+                className={`p-4 rounded-2xl border flex flex-col gap-2 group transition-all ${
+                  isCancelled
+                    ? "bg-[#1f1d19] border-red-500/10 opacity-50"
+                    : "bg-[#1f1d19] border-[#d4a373]/20 hover:bg-[#d4a373]/5"
+                }`}
               >
                 <div className="flex flex-col gap-1">
                   {!activeWorkspaceId && eventWorkspace && (
@@ -218,9 +223,13 @@ export function CalendarView({
                           backgroundColor: !activeWorkspaceId && eventWorkspace ? eventWorkspace.color : "#d4a373",
                         }}
                       />
-                      <span className="text-xs text-[#f2efeb] font-bold tracking-tight">{event.title}</span>
+                      <span className={`text-xs font-bold tracking-tight ${isCancelled ? "text-[#a8a29e]/40 line-through" : "text-[#f2efeb]"}`}>{event.title}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {isCancelled ? (
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-red-400/60">Cancelled</span>
+                      ) : (
+                      <>
                       {onReferEvent && (
                         <button
                           onClick={(e) => {
@@ -263,6 +272,8 @@ export function CalendarView({
                           {event.eventType === "point" || (!event.eventType && !event.endTime) ? "Release / Drop" : "Event"}
                         </span>
                       </div>
+                      </>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -70,6 +70,7 @@ export function EventList({
   }, [events, now, sevenDaysAgo]);
 
   const renderEventCard = (event: Doc<"events">) => {
+    const isCancelled = (event as any).cancelled === true;
     const eventWorkspace = workspaces?.find((w) => w._id === event.workspaceId);
     return (
       <motion.div
@@ -77,7 +78,11 @@ export function EventList({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={isLargeViewport ? undefined : { duration: 0 }}
-        className={`p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all group cursor-pointer overflow-hidden ${expandedEventId === event._id ? "ring-1 ring-[#d4a373]/30" : ""}`}
+        className={`p-4 rounded-2xl border transition-all group cursor-pointer overflow-hidden ${
+          isCancelled
+            ? "bg-[#1f1d19] border-red-500/10 opacity-50 hover:opacity-80"
+            : "bg-[#1f1d19] border-[#2a2723] hover:border-[#d4a373]/20"
+        } ${expandedEventId === event._id ? "ring-1 ring-[#d4a373]/30" : ""}`}
         onClick={() => setExpandedEventId(expandedEventId === event._id ? null : event._id)}
       >
           <div className="flex items-start justify-between gap-4 mb-2">
@@ -100,7 +105,7 @@ export function EventList({
                   backgroundColor: !activeWorkspaceId && eventWorkspace ? eventWorkspace.color : "#d4a373",
                 }}
               />
-              <span className="text-xs text-[#f2efeb] font-bold tracking-tight truncate">{event.title}</span>
+              <span className={`text-xs font-bold tracking-tight truncate ${isCancelled ? "text-[#a8a29e]/40 line-through" : "text-[#f2efeb]"}`}>{event.title}</span>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -162,14 +167,20 @@ export function EventList({
               )}
             </div>
             <div className="flex items-center gap-1">
-              {(event.eventType === "point" || (!event.eventType && !event.endTime)) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
-              <span
-                className={`text-[9px] font-bold uppercase tracking-widest whitespace-nowrap ${
-                  event.eventType === "point" || (!event.eventType && !event.endTime) ? "text-amber-400" : "text-[#d4a373]/60"
-                }`}
-              >
-                {event.eventType === "point" || (!event.eventType && !event.endTime) ? "Release / Drop" : "Event"}
-              </span>
+              {isCancelled ? (
+                <span className="text-[9px] font-bold uppercase tracking-widest text-red-400/60">Cancelled</span>
+              ) : (
+                <>
+                  {(event.eventType === "point" || (!event.eventType && !event.endTime)) && <Zap className="w-2.5 h-2.5 text-amber-400" />}
+                  <span
+                    className={`text-[9px] font-bold uppercase tracking-widest whitespace-nowrap ${
+                      event.eventType === "point" || (!event.eventType && !event.endTime) ? "text-amber-400" : "text-[#d4a373]/60"
+                    }`}
+                  >
+                    {event.eventType === "point" || (!event.eventType && !event.endTime) ? "Release / Drop" : "Event"}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

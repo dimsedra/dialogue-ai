@@ -12,7 +12,7 @@ const recurrenceValidator = v.optional(v.union(v.object({
 }), v.null()));
 
 function expandRecurringEvents(events: Doc<"events">[], windowStart: number, windowEnd: number) {
-  const expanded: Doc<"events">[] = [];
+  const expanded: (Doc<"events"> & { cancelled?: boolean })[] = [];
   for (const event of events) {
     if (!event.recurrence) {
       expanded.push(event);
@@ -27,11 +27,13 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
       const d = new Date(event.startTime);
       while (d.getTime() <= limit) {
         const timestamp = d.getTime();
-        if (timestamp >= windowStart && !exceptions.includes(timestamp)) {
+        if (timestamp >= windowStart) {
+          const isCancelled = exceptions.includes(timestamp);
           expanded.push({
             ...event,
             startTime: timestamp,
             endTime: event.endTime !== undefined ? timestamp + duration : undefined,
+            cancelled: isCancelled,
           });
         }
         d.setDate(d.getDate() + event.recurrence.interval);
@@ -57,13 +59,13 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
               
               const timestamp = targetDate.getTime();
               if (timestamp >= event.startTime && timestamp <= limit && timestamp >= windowStart) {
-                if (!exceptions.includes(timestamp)) {
-                  expanded.push({
-                    ...event,
-                    startTime: timestamp,
-                    endTime: event.endTime !== undefined ? timestamp + duration : undefined,
-                  });
-                }
+                const isCancelled = exceptions.includes(timestamp);
+                expanded.push({
+                  ...event,
+                  startTime: timestamp,
+                  endTime: event.endTime !== undefined ? timestamp + duration : undefined,
+                  cancelled: isCancelled,
+                });
               }
             }
           }
