@@ -42,6 +42,7 @@ export const listSessions = query({
     return await ctx.db
       .query("chatSessions")
       .withIndex("by_user", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("workspaceId"), undefined))
       .order("desc")
       .collect();
   },
@@ -53,28 +54,56 @@ export const getSession = query({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const session = await ctx.db.get(args.id);
     if (!session || session.userId !== userId) return null;
-    return session;
+
+    let personaName = "Dialogue";
+    let personaPrompt = "You build relationships through concrete behaviors, not prescribed tones.";
+
+    if (session.agentPersonaId) {
+      const persona = await ctx.db.get(session.agentPersonaId);
+      if (persona && persona.userId === userId) {
+        personaName = persona.name;
+        personaPrompt = persona.prompt;
+      }
+    }
+
+    return {
+      ...session,
+      personaName,
+      personaPrompt,
+    };
   },
 });
 
 export const createSession = mutation({
   args: { 
     title: v.optional(v.string()),
-    workspaceId: v.optional(v.id("workspaces"))
+    workspaceId: v.optional(v.id("workspaces")),
+    agentPersonaId: v.optional(v.id("agentPersonas")),
   },
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
     if (!userId) throw new Error("Unauthorized");
 
+    let agentPersonaId = args.agentPersonaId;
+
     if (args.workspaceId) {
       const workspace = await ctx.db.get(args.workspaceId);
       if (!workspace || workspace.userId !== userId) throw new Error("Unauthorized");
+      if (!agentPersonaId && workspace.defaultAgentPersonaId) {
+        agentPersonaId = workspace.defaultAgentPersonaId;
+      }
+    }
+
+    if (agentPersonaId) {
+      const persona = await ctx.db.get(agentPersonaId);
+      if (!persona || persona.userId !== userId) throw new Error("Unauthorized");
     }
 
     return await ctx.db.insert("chatSessions", {
       userId,
       title: args.title || "New Chat",
       workspaceId: args.workspaceId,
+      agentPersonaId,
       createdAt: Date.now(),
       lastActivity: Date.now(),
     });

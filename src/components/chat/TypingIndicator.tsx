@@ -1,7 +1,7 @@
 import { Bot } from "lucide-react";
 import { motion } from "framer-motion";
 
-export function TypingIndicator() {
+export function TypingIndicator({ agentName }: { agentName?: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 5 }}
@@ -13,7 +13,7 @@ export function TypingIndicator() {
           <Bot className="w-3 h-3 text-[#0f0e0c]" />
         </div>
         <span className="text-[10px] font-black uppercase tracking-[0.25em] text-[#d4a373]">
-          Dialogue
+          {agentName || "Dialogue"}
         </span>
         <span className="text-[9px] text-[#d4a373]/50 font-bold tracking-widest uppercase animate-pulse">
           Typing

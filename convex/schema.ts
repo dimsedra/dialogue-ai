@@ -21,6 +21,7 @@ export default defineSchema({
     color: v.string(),
     context: v.optional(v.string()),
     agentName: v.optional(v.string()),
+    defaultAgentPersonaId: v.optional(v.id("agentPersonas")),
     createdAt: v.number(),
   }).index("by_user", ["userId"]),
 
@@ -28,11 +29,21 @@ export default defineSchema({
     userId: v.id("users"),
     title: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
+    agentPersonaId: v.optional(v.id("agentPersonas")),
     createdAt: v.number(),
     lastActivity: v.number(),
     pinned: v.optional(v.boolean()),
   }).index("by_user", ["userId"])
     .index("by_workspace", ["workspaceId"]),
+
+  agentPersonas: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    prompt: v.string(),
+    description: v.optional(v.string()),
+    isDefault: v.optional(v.boolean()),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
 
   messages: defineTable({
     sessionId: v.optional(v.id("chatSessions")),

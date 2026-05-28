@@ -23,8 +23,8 @@ Checked off your habits twenty days in a row? Standard checklists break down whe
 #### Semantic Memory (Facts)
 Standard AI assistants suffer from total amnesia—requiring you to re-introduce yourself, your goals, and your work style at the start of every new chat session. Dialogue remembers. It stores durable facts about your life, preferences, and technical stack in a vector-indexed memory layer with automatic deduplication and time-decay weighting. Automatic near-duplicate detection prevents contradictions, and a delete tool lets you correct wrong facts on the spot. You shouldn't have to repeat yourself. Ever.
 
-#### Behavioral Notes Pyramid (Patterns)
-Facts tell the agent *what* you like. Patterns tell it *who you are*. Dialogue analyzes your task notes, event outcomes, and habit logs across every workspace to understand how you operate under pressure, what drains your energy, and when you do your best work. Raw journal entries are summarized weekly, then monthly, then consolidated into a permanent behavioral profile that refines itself over years of use. The agent reads this profile at every session and adjusts its communication style—verbosity, proactiveness, suggestion frequency—based on the patterns it observes. Unlike semantic memory which accumulates facts, the notes pyramid discards raw data as it's distilled, keeping only the signal. Year 5's agent understands you better than year 1's, without needing more storage.
+#### Bidirectional OCEAN Processing (Patterns)
+Facts tell the agent *what* you like. Patterns tell it *who you are*. Dialogue captures daily activity snapshots across all workspaces and performs a weekly/monthly **Bidirectional Cognitive Processing** compile. It reads the feed backward (**Retrograde Analysis**) to understand context and justify behaviors, and forward (**Anterograde Analysis**) to map user trajectory momentum. It frames these insights using the **Big 5 (OCEAN)** personality model (Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism) with bulleted evidence. The agent reads these digests at session start to optimize prompt context and caching, adapting its coaching tone. Instead of starting fresh, it refines and updates the existing monthly profile, discarding raw details over time to protect storage.
 
 #### User Bio (Identity)
 Your core identity and communication preferences are stored as a single bio text, always loaded at session start. The agent updates it on request, and previous versions are retained for rollback. This is your permanent context—who you are changes slower than what you're doing or how you're feeling.
@@ -68,33 +68,48 @@ Productivity isn't just about crossing items off a list; it is about recognizing
 
 ## How Memory Works: The Agent That Grows With You
 
-Most AI assistants start fresh every conversation. Dialogue is built on a different premise: **the agent should be smarter on day 365 than it was on day 1.** Not because we feed it more data—because we designed three complementary memory systems that see you from different angles.
+Most AI assistants start fresh every conversation. Dialogue is built on a different premise: **the agent should be smarter on day 365 than it was on day 1.** Not because we feed it more data—because we designed three complementary, cross-referencing memory systems that see you from different angles: **Facts (Semantic Memory)**, **Patterns (Bidirectional OCEAN)**, and **Identity (User Bio)**.
 
-| Subsystem | What it stores | How it's retrieved | How it grows |
+| Subsystem | What it stores | Core Retrieval Method | Compounding & Pruning Mechanics |
 |---|---|---|---|
-| **Semantic memory** | Facts — projects, preferences, life context | Vector similarity search (top-5 relevant) | Accumulates indefinitely, time-decayed |
-| **Notes pyramid** | Behavioral patterns — mood, energy, workflows | Hierarchical summarization (daily → weekly → monthly → profile) | Discards raw data, distills signal |
-| **User bio** | Identity — name, role, communication style | Always loaded at session start | Overwritten with versioned history |
+| **Semantic memory** | Explicit facts, stack choices, links, credentials, context | Cosine similarity vector search (top-5 matches) | Point deduplication, 30-day recency boost, linear decay |
+| **Bidirectional OCEAN** | Psychometric profile (Big 5), behavior, energy, vector trajectory | Top-of-prompt instruction context (Cache-Optimized) | Daily snapshotting, weekly compile, monthly cascade (prunes weekly digests) |
+| **User bio** | Stated identity, communications, guidelines | Loaded globally on every message turn | Manual edit overrides with revision history rollbacks |
 
-### At session start, the agent loads all three:
+---
 
-1. **Your bio** — who you are
-2. **Behavioral profile** — how you operate (distilled from months of journal entries)
-3. **Weekly/monthly summaries** — recent patterns
-4. **Raw notes from last 7 days** — what literally happened
-5. **Top-5 relevant semantic memories** — facts that match the current context
+### 1. Explicit Facts (Semantic Memory)
+When you tell the agent about your preferences ("I prefer writing frontend code in TypeScript") or record details ("Figma design is located at this link"), it is committed to a vector-indexed database. 
+- **Point Deduplication**: Every fact is normalized and hashed using SHA-256. If you repeat a fact, the mutation patches the existing document's timestamp rather than writing duplicate rows.
+- **Semantic Write Guard**: Before saving, the system performs a similarity search. If a memory matches with a cosine similarity `score > 0.85`, writing is skipped to prevent duplicate clutter.
+- **Time-Decay Rescoring**: Older facts decay linearly. Recent facts (under 30 days old) receive a 10% relevance boost: `final_score = vector_score * (1 + 0.1 * recency_factor)`. This keeps active context top-of-mind.
+- **Explicit Delete Hook**: The agent has a `deleteSemanticMemory` tool. If a fact changes, the user can explicitly instruct the agent to "forget this," deleting the vector document instantly.
 
-This means the agent understands you from three angles simultaneously: what you've told it (facts), what your behavior reveals (patterns), and who you are (identity). No single system carries the full weight.
+---
 
-### How patterns compound over time
+### 2. Behavioral Patterns (Bidirectional OCEAN)
+Facts only represent what you *tell* the agent. Your actual behavior is a richer dataset. Dialogue compiles a cognitive profile based on the **Big 5 (OCEAN)** traits (Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism) using a multi-step bidirectional pipeline:
+- **Daily Ingestion**: Every night at 23:59 (local timezone), a cron creates a `dailyActivities` record containing all completed tasks, scheduled events, skipped habits, cancelled meetings, and a 2-line agent-synthesized chat reflection. Inactivity is recorded as "No activity".
+- **Deletion Interception**: If a task or event is deleted, the mutation intercepts the action and logs its final state to the day's snapshot before purging it, ensuring full activity logs.
+- **Retrograde & Anterograde weekly analysis**: Every Monday, the compiler runs two passes:
+  - *Retrograde Analysis (Day 7 → Day 1)*: Reads backward to find causal links (e.g. realizing a skipped workout on Tuesday was caused by a late-night coding crunch logged on Monday), eliminating false negative assessments.
+  - *Anterograde Analysis (Day 1 → Day 7)*: Reads forward to map your behavioral trajectory (momentum vector) rather than a single static snapshot.
+- **No-Bias Inactivity Guard**: Days or weeks with zero activity do not penalize scores. Inactivity is treated as neutral (insufficient data), retaining the baseline scores.
+- **OCEAN Percentile Scale**: Behaviors are scored against a standardized scale (Very Low: 0–10% to Very High: 90–100%) and justified with bulleted evidence.
+- **Monthly Cascade**: After 4 weeks, the weekly digests are compiled into a Monthly Digest and deleted to preserve storage.
+- **Stable Refinement**: The LLM refines the previous monthly summary rather than rewriting it from scratch, keeping the behavioral profile slow-moving and stable.
+- **Cache-Optimized Prompt Injection**: The monthly and weekly digests are hoisted to the **very top** of the system prompt. Since these files change slowly, they stay hot in the LLM's prefix cache, dramatically reducing token latency.
 
-The behavioral profile isn't built by saving every note forever. It's built by hierarchical summarization:
+---
 
-```
-Raw journal entries (7 days) → Weekly summary → Monthly summary → Behavioral profile (permanent)
-```
+### 3. Stated Identity (User Bio)
+Your stated biography and communication preferences (such as preferred tone, username, or guidelines) are loaded globally. Unlike behavioral patterns (which are *observed*), this is what you *want* the agent to know. Updates overwrite the active bio, but all historic revisions are saved for instant rollbacks.
 
-At each level, the previous level is discarded. Year 5's agent doesn't read more data than Year 1's — it has a more refined profile. Same storage, better signal. The agent grows with you not by hoarding every detail, but by getting better at knowing what matters.
+### Triangulation: How the Subsystems Collaborate
+At session start, the agent loads your stated **Identity (Bio)**, observes your **Behavioral Patterns (OCEAN Digests)**, and fetches matching **Factual Context (Semantic Memory)**. The agent triangulates these three signals:
+- *Bio* sets the user's explicit rules and username.
+- *OCEAN* adjusts the agent's coaching tone, verbosity, and recommendation frequencies based on actual pressure and energy patterns.
+- *Semantic memory* feeds technical facts as the conversation requests them.
 
 ---
 

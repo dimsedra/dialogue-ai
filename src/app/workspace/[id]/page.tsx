@@ -3,7 +3,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
-import { ArrowLeft, Save, Bot, BookOpen, Palette, Sparkles } from "lucide-react";
+import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -16,13 +16,14 @@ export default function WorkspaceSettingsPage() {
   const workspaceId = params.id as Id<"workspaces">;
 
   const workspace = useQuery(api.workspaces.get, { id: workspaceId });
+  const personas = useQuery(api.personas.list);
   const updateSettings = useMutation(api.workspaces.updateSettings);
 
-  const [behaviorGuide, setBehaviorGuide] = useState("");
-  const [agentName, setAgentName] = useState("");
+  const [defaultAgentPersonaId, setDefaultAgentPersonaId] = useState<Id<"agentPersonas"> | "default_dialogue">("default_dialogue");
   const [workspaceColor, setWorkspaceColor] = useState("#d4a373");
   const [isSaving, setIsSaving] = useState(false);
   const [prevId, setPrevId] = useState<Id<"workspaces"> | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.add("allow-scroll");
@@ -35,19 +36,19 @@ export default function WorkspaceSettingsPage() {
 
   if (workspace && workspace._id !== prevId) {
     setPrevId(workspace._id);
-    setBehaviorGuide(workspace.context || "");
-    setAgentName(workspace.agentName || "");
+    setDefaultAgentPersonaId(workspace.defaultAgentPersonaId || "default_dialogue");
     setWorkspaceColor(workspace.color || "#d4a373");
   }
+
+  const currentPersona = personas?.find(p => p._id === defaultAgentPersonaId) || personas?.find(p => p.isDefault);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
       await updateSettings({
         id: workspaceId,
-        context: behaviorGuide,
-        agentName: agentName || undefined,
         color: workspaceColor,
+        defaultAgentPersonaId: defaultAgentPersonaId === "default_dialogue" ? null : defaultAgentPersonaId,
       });
     } catch (err) {
       console.error(err);
@@ -92,33 +93,71 @@ export default function WorkspaceSettingsPage() {
 
             {/* Content */}
             <div className="space-y-4">
-              {/* AI Partner Name */}
+              {/* Default Agent Persona */}
               <motion.section
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
-                className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg"
+                className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg relative"
               >
                 <div className="mb-4">
                   <div className="flex items-center gap-2">
                     <Bot className="w-4 h-4 text-[#d4a373]" />
-                    <h2 className="text-base font-bold text-[#f2efeb]">AI Partner Name</h2>
+                    <h2 className="text-base font-bold text-[#f2efeb]">Default Agent Persona</h2>
                   </div>
                   <p className="text-[#a8a29e] text-[10px] mt-1">
-                    Give your AI partner a name for this workspace. It will appear on message bubbles.
+                    Select the default agent persona to automatically load when creating a new session in this workspace.
                   </p>
                 </div>
-                <input
-                  name="ws-agent-name"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  placeholder="e.g. Dialogue, Athena, Aria..."
-                  className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all"
-                />
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    className="w-full flex items-center justify-between bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all text-left"
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <div className="w-5 h-5 rounded bg-[#2a2723] text-[#d4a373] flex items-center justify-center text-[10px] font-black uppercase shrink-0">
+                        {currentPersona ? currentPersona.name.substring(0, 2) : "DI"}
+                      </div>
+                      <span className="text-[#f2efeb] font-medium text-xs">
+                        {currentPersona ? currentPersona.name : "Dialogue"}
+                      </span>
+                    </div>
+                    <ChevronDown className="w-4 h-4 text-[#a8a29e]" />
+                  </button>
+
+                  {dropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
+                      <div className="absolute left-0 right-0 mt-1.5 rounded-xl border border-[#2a2723] bg-[#1a1814] shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto custom-scrollbar">
+                        {personas === undefined ? (
+                          <div className="p-4 text-center text-xs text-[#a8a29e]">Loading personas...</div>
+                        ) : personas.map((p) => (
+                          <button
+                            key={p._id}
+                            type="button"
+                            onClick={() => {
+                              setDefaultAgentPersonaId(p._id);
+                              setDropdownOpen(false);
+                            }}
+                            className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold transition-all hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb] text-left border-b border-[#2a2723]/30 last:border-none"
+                          >
+                            <div className="flex items-center gap-2.5 truncate">
+                              <div className="w-5 h-5 rounded bg-[#2a2723] text-[#d4a373] flex items-center justify-center text-[9px] uppercase font-bold shrink-0">
+                                {p.name.substring(0, 2)}
+                              </div>
+                              <span className="truncate">{p.name}</span>
+                            </div>
+                            {defaultAgentPersonaId === p._id && (
+                              <Check className="w-3.5 h-3.5 text-[#d4a373]" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               </motion.section>
 
               {/* Workspace Color */}
@@ -145,36 +184,6 @@ export default function WorkspaceSettingsPage() {
                   className="w-full h-9 rounded-lg border border-[#2a2723] cursor-pointer bg-transparent [&::-webkit-color-swatch-wrapper]:p-1 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-none"
                 />
                 </div>
-              </motion.section>
-
-              {/* Behavior Guide */}
-              <motion.section
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.05 }}
-                className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg"
-              >
-                <div className="mb-4">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-[#d4a373]" />
-                    <h2 className="text-base font-bold text-[#f2efeb]">Behavior Guide</h2>
-                  </div>
-                  <p className="text-[#a8a29e] text-[10px] mt-1">
-                    Define how your AI partner should behave, respond, and prioritize in this workspace.
-                    This takes precedence over the default persona.
-                  </p>
-                </div>
-                <textarea
-                  name="ws-behavior-guide"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  value={behaviorGuide}
-                  onChange={(e) => setBehaviorGuide(e.target.value)}
-                  placeholder="e.g. Keep responses short and direct. Prioritize deep work blocks. Avoid casual chatter."
-                  className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-xl p-4 text-xs text-[#f2efeb] placeholder:text-[#a8a29e]/20 min-h-40 resize-none outline-none focus:border-[#d4a373]/40 transition-all scrollbar-hide"
-                />
               </motion.section>
 
               {/* Save Button / Actions */}

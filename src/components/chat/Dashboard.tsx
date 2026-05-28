@@ -13,7 +13,7 @@ interface DashboardProps {
   sessions: Doc<"chatSessions">[] | undefined;
   profile: { name?: string; bio?: string } | null | undefined;
   isLargeViewport: boolean;
-  onNewChat: (workspaceId?: Id<"workspaces">) => void;
+  onNewChat: (workspaceId?: Id<"workspaces"> | null, agentPersonaId?: Id<"agentPersonas">, initialMessage?: string) => void;
   onSelectSession: (id: Id<"chatSessions">) => void;
   onShowHistory: () => void;
   onShowTasks?: () => void;
@@ -34,6 +34,14 @@ export function Dashboard({
   const [selectedWsId, setSelectedWsId] = useState<Id<"workspaces"> | undefined>(undefined);
   const [wsWarning, setWsWarning] = useState(false);
   const [bgSettings, updateBgSettings] = usePageSettings("dashboard", DASHBOARD_DEFAULTS);
+
+  const [selectedPersonaId, setSelectedPersonaId] = useState<Id<"agentPersonas"> | undefined>(undefined);
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  const [inputText, setInputText] = useState("");
+
+  const personas = useQuery(api.personas.list);
+  const activePersona = personas?.find(p => p._id === selectedPersonaId) || personas?.find(p => p.isDefault);
+  const activePersonaName = activePersona?.name || "Dialogue";
 
   const resolvedBgUrl = useQuery(
     api.messages.getStorageUrl,
@@ -167,77 +175,90 @@ export function Dashboard({
           )}
         </div>
 
-        {/* Quick Actions */}
-        <div className="flex justify-center">
-          <div className="relative flex items-center">
-            <button
-              onClick={() => {
-                if (!selectedWsId && workspaces && workspaces.length > 0) {
-                  setWsDropdownOpen(true);
-                  setWsWarning(true);
-                  setTimeout(() => setWsWarning(false), 2000);
-                  return;
-                }
-                onNewChat(selectedWsId);
-              }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-l-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg active:scale-[0.98]"
-              style={{
-                ...cardBgStyle,
-                color: bgSettings.accentColor,
-              }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New Session
-            </button>
-            <button
-              onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-r-xl text-[10px] font-bold uppercase tracking-widest transition-all border-l border-[#2a2723]/50"
-              style={{
-                ...cardBgStyle,
-                color: bgSettings.accentColor,
-              }}
-            >
-              {workspaces?.find(w => w._id === selectedWsId)?.name
-                ? workspaces.find(w => w._id === selectedWsId)!.name.substring(0, 2).toUpperCase()
-                : "A"}
-              <ChevronDown className="w-3 h-3" />
-            </button>
+        {/* Centered Chat Input Bar */}
+        <div className="w-full max-w-lg px-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (inputText.trim()) {
+                onNewChat(null, activePersona?._id, inputText.trim());
+                setInputText("");
+              }
+            }}
+            className="relative flex items-center w-full rounded-full border border-[#2a2723]/60 p-1.5 transition-all duration-300 focus-within:border-[#d4a373]/60 focus-within:shadow-[0_0_20px_rgba(212,163,115,0.08)]"
+            style={cardBgStyle}
+          >
+            {/* Agent Persona Switcher */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
+                className="w-8 h-8 rounded-full bg-[#2a2723] hover:bg-[#3a3733] text-[#d4a373] flex items-center justify-center text-[10px] font-black uppercase transition-all duration-300 cursor-pointer"
+                title="Change Agent Persona"
+              >
+                {activePersona ? activePersona.name.substring(0, 2) : "DI"}
+              </button>
 
-            {wsWarning && (
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] text-red-400 font-bold uppercase tracking-wider whitespace-nowrap">
-                Select a workspace
-              </div>
-            )}
+              {agentDropdownOpen && personas && personas.length > 0 && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setAgentDropdownOpen(false)} />
+                  <div 
+                    className="absolute left-0 bottom-full mb-3.5 w-60 rounded-2xl border border-[#2a2723] shadow-2xl z-50 overflow-hidden"
+                    style={cardBgStyle}
+                  >
+                    <div className="px-3 py-2 border-b border-[#2a2723]/50">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-[#a8a29e]/50">Switch Persona</span>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto custom-scrollbar py-1">
+                      {personas.map((p) => (
+                        <button
+                          key={p._id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPersonaId(p._id);
+                            setAgentDropdownOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-bold transition-all hover:bg-[#2a2723]/50 text-left"
+                          style={{ color: (selectedPersonaId === p._id || (!selectedPersonaId && p.isDefault)) ? "#d4a373" : "#a8a29e" }}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <div className="w-5 h-5 rounded-md bg-[#2a2723] text-[#d4a373] flex items-center justify-center text-[9px] uppercase font-bold shrink-0">
+                              {p.name.substring(0, 2)}
+                            </div>
+                            <span className="truncate">{p.name}</span>
+                          </div>
+                          {p.isDefault && (
+                            <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded-sm bg-[#2a2723] text-[#a8a29e]/50 shrink-0">
+                              Default
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
-            {wsDropdownOpen && workspaces && workspaces.length > 0 && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setWsDropdownOpen(false)} />
-                <div
-                  className="absolute right-0 bottom-full mb-2 w-full rounded-xl border shadow-2xl z-50 overflow-hidden"
-                  style={{
-                    ...cardBgStyle,
-                  }}
-                >
-                  {workspaces.map((ws) => (
-                    <button
-                      key={ws._id}
-                      onClick={() => {
-                        setSelectedWsId(ws._id);
-                        setWsDropdownOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[11px] font-bold transition-all hover:bg-[#2a2723]/50 text-left"
-                      style={{
-                        color: selectedWsId === ws._id ? bgSettings.accentColor : bgSettings.secondaryText,
-                      }}
-                    >
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ws.color }} />
-                      {ws.name}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+            {/* Input field */}
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={`Ask ${activePersonaName}...`}
+              className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-[#a8a29e]/40 text-[#f2efeb] px-3 py-2"
+              autoFocus
+            />
+
+            {/* Send Button */}
+            <button
+              type="submit"
+              disabled={!inputText.trim()}
+              className="w-8 h-8 rounded-full bg-[#d4a373] text-[#0f0e0c] flex items-center justify-center hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100 transition-all shrink-0 cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
         </div>
 
         {/* Recent Sessions */}

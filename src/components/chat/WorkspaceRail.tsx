@@ -22,7 +22,7 @@ export function WorkspaceRail({
   onShowHistory
 }: WorkspaceRailProps) {
   return (
-    <nav className="hidden lg:flex w-21 h-full shrink-0 border-r border-[#2a2723] bg-linear-to-b from-[#141210] to-[#0f0e0c] flex-col items-center py-8 gap-8 z-50 relative">
+    <nav className="hidden lg:flex w-21 h-full shrink-0 border-r border-[#2a2723] bg-linear-to-b from-[#141210] to-[#0f0e0c] flex-col items-center pb-8 z-50 relative">
       {/* Floating Toggle for History (when collapsed) - Anchored to Rail */}
       <AnimatePresence>
         {!showHistory && (
@@ -44,27 +44,29 @@ export function WorkspaceRail({
         )}
       </AnimatePresence>
       {/* Dashboard - replaces the old Dialogue branding icon */}
-      <button
-        onClick={() => onSelectWorkspace(undefined)}
-        className={`w-12 h-12 rounded-[20px] flex items-center justify-center transition-all duration-300 border shrink-0 group relative ${
-          !activeWorkspaceId 
-            ? "bg-[#d4a373] border-[#d4a373] shadow-[0_0_20px_rgba(212,163,115,0.3)] scale-110" 
-            : "bg-[#1a1814] border-[#2a2723] text-[#a8a29e] hover:border-[#d4a373]/30 hover:text-[#f2efeb] hover:scale-110 active:scale-95"
-        }`}
-      >
-        <LayoutDashboard className={`w-6 h-6 transition-transform duration-300 ${!activeWorkspaceId ? "text-[#0f0e0c] scale-110" : "group-hover:rotate-12"}`} />
-        {!activeWorkspaceId && (
-          <motion.div 
-            layoutId="active-ws"
-            className="absolute -left-3 w-1.5 h-8 bg-[#d4a373] rounded-r-full shadow-[2px_0_10px_rgba(212,163,115,0.5)] z-20"
-          />
-        )}
-        <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
-          Dashboard
-        </div>
-      </button>
+      <div className="w-full h-24 flex items-center justify-center shrink-0">
+        <button
+          onClick={() => onSelectWorkspace(undefined)}
+          className={`w-12 h-12 rounded-[20px] flex items-center justify-center transition-all duration-300 border shrink-0 group relative ${
+            !activeWorkspaceId 
+              ? "bg-[#d4a373] border-[#d4a373] shadow-[0_0_20px_rgba(212,163,115,0.3)] scale-110" 
+              : "bg-[#1a1814] border-[#2a2723] text-[#a8a29e] hover:border-[#d4a373]/30 hover:text-[#f2efeb] hover:scale-110 active:scale-95"
+          }`}
+        >
+          <LayoutDashboard className={`w-6 h-6 transition-transform duration-300 ${!activeWorkspaceId ? "text-[#0f0e0c] scale-110" : "group-hover:rotate-12"}`} />
+          {!activeWorkspaceId && (
+            <motion.div 
+              layoutId="active-ws"
+              className="absolute -left-3 w-1.5 h-8 bg-[#d4a373] rounded-r-full shadow-[2px_0_10px_rgba(212,163,115,0.5)] z-20"
+            />
+          )}
+          <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
+            Dashboard
+          </div>
+        </button>
+      </div>
       
-      <div className="w-10 h-px bg-[#2a2723]/50" />
+      <div className="w-10 h-px bg-[#2a2723]/50 shrink-0" />
       
       <div className="flex-1 w-full flex flex-col items-center gap-5 overflow-y-auto overflow-x-hidden custom-scrollbar py-6">
         {workspaces?.map((ws) => (

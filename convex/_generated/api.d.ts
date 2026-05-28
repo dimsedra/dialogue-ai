@@ -24,6 +24,7 @@ import type * as migrations from "../migrations.js";
 import type * as notes from "../notes.js";
 import type * as notes_action from "../notes_action.js";
 import type * as pageSettings from "../pageSettings.js";
+import type * as personas from "../personas.js";
 import type * as reflections from "../reflections.js";
 import type * as seed from "../seed.js";
 import type * as tasks from "../tasks.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   notes: typeof notes;
   notes_action: typeof notes_action;
   pageSettings: typeof pageSettings;
+  personas: typeof personas;
   reflections: typeof reflections;
   seed: typeof seed;
   tasks: typeof tasks;

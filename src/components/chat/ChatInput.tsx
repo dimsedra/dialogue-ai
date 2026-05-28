@@ -53,6 +53,28 @@ export const ChatInput = React.memo(function ChatInput({
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!activeSessionId || isUploading) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const filesToAttach: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          filesToAttach.push(file);
+        }
+      }
+    }
+
+    if (filesToAttach.length > 0) {
+      e.preventDefault();
+      setSelectedFiles(prev => [...prev, ...filesToAttach]);
+    }
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if ((!input.trim() && selectedFiles.length === 0) || !activeSessionId || isUploading) return;
@@ -217,6 +239,7 @@ export const ChatInput = React.memo(function ChatInput({
             setTimeout(handleInputResize, 0);
           }}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={!activeSessionId ? "Select a conversation" : isUploading ? "Uploading file..." : "Ask Dialogue..."}
           disabled={!activeSessionId || isUploading}
           style={{ minHeight: "56px" }}

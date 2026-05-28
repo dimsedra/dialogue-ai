@@ -232,7 +232,7 @@ export const MessageStream = React.memo(function MessageStream({
                   ))}
                   
                   {/* Typing Indicator */}
-                  {isTyping && <TypingIndicator />}
+                  {isTyping && <TypingIndicator agentName={agentName} />}
                 </AnimatePresence>
 
               {/* Ganjalan: Ensures last message is always pushed above the tray */}

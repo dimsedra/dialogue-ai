@@ -373,3 +373,199 @@ export const cronTriggerPyramid = internalMutation({
     }
   },
 });
+
+export const seedStressTestData = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    timezoneOffset: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    let userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) {
+      const firstUser = await ctx.db.query("users").first();
+      if (!firstUser) throw new Error("No user found in the database. Please sign up or create a user first.");
+      userId = firstUser._id;
+    }
+    const offset = args.timezoneOffset ?? 0;
+
+    // 1. Idempotency cleanup: Remove previously seeded stress-test tasks, events, habits, and logs
+    const existingTasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_user", (q) => q.eq("userId", userId!))
+      .collect();
+    for (const t of existingTasks) {
+      if (t.text === "Deploy Auth Service" || t.text === "Write Documentation") {
+        await ctx.db.delete(t._id);
+      }
+    }
+
+    const existingEvents = await ctx.db
+      .query("events")
+      .withIndex("by_user", (q) => q.eq("userId", userId!))
+      .collect();
+    for (const e of existingEvents) {
+      if (e.title === "Sprint Planning" || e.title === "Client Demo") {
+        await ctx.db.delete(e._id);
+      }
+    }
+
+    const existingHabits = await ctx.db
+      .query("habits")
+      .withIndex("by_user", (q) => q.eq("userId", userId!))
+      .collect();
+    for (const h of existingHabits) {
+      if (h.name === "Daily Gym") {
+        const logs = await ctx.db
+          .query("habitLogs")
+          .withIndex("by_habit", (q) => q.eq("habitId", h._id))
+          .collect();
+        for (const l of logs) {
+          await ctx.db.delete(l._id);
+        }
+        await ctx.db.delete(h._id);
+      }
+    }
+
+    // 2. Fetch or create workspaces (Dev Workspace and Personal)
+    const existingWorkspaces = await ctx.db
+      .query("workspaces")
+      .withIndex("by_user", (q) => q.eq("userId", userId!))
+      .collect();
+
+    let devWorkspace = existingWorkspaces.find((w) => w.name === "Dev Workspace");
+    if (!devWorkspace) {
+      const wId = await ctx.db.insert("workspaces", {
+        userId: userId!,
+        name: "Dev Workspace",
+        icon: "💻",
+        color: "blue",
+        createdAt: Date.now(),
+      });
+      devWorkspace = (await ctx.db.get(wId))!;
+    }
+
+    let personalWorkspace = existingWorkspaces.find((w) => w.name === "Personal");
+    if (!personalWorkspace) {
+      const wId = await ctx.db.insert("workspaces", {
+        userId: userId!,
+        name: "Personal",
+        icon: "🏠",
+        color: "green",
+        createdAt: Date.now(),
+      });
+      personalWorkspace = (await ctx.db.get(wId))!;
+    }
+
+    // 3. Compute relative timestamps
+    // Day 8 is "now"
+    const now = Date.now();
+    const day1 = now - 7 * 24 * 60 * 60 * 1000;
+    const day2 = now - 6 * 24 * 60 * 60 * 1000;
+    const day3 = now - 5 * 24 * 60 * 60 * 1000;
+    const day4 = now - 4 * 24 * 60 * 60 * 1000;
+    const day5 = now - 3 * 24 * 60 * 60 * 1000;
+    const day6 = now - 2 * 24 * 60 * 60 * 1000;
+    const day7 = now - 1 * 24 * 60 * 60 * 1000;
+
+    // Helper to format Date to YYYY-MM-DD in the target timezone
+    const formatDateString = (timestamp: number, tzOffset: number): string => {
+      const d = new Date(timestamp - tzOffset * 60000);
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    // 4. Seed Daily Gym Habit and logs
+    const gymHabitId = await ctx.db.insert("habits", {
+      userId: userId!,
+      name: "Daily Gym",
+      frequency: "daily",
+      frequencyConfig: {},
+      currentStreak: 3,
+      longestStreak: 3,
+      archived: false,
+      createdAt: day1,
+      workspaceId: personalWorkspace._id,
+    });
+
+    const logsToInsert = [
+      { timestamp: day1, status: "completed" as const, notes: "First day of the week, felt highly motivated." },
+      { timestamp: day2, status: "skipped" as const, notes: "Muscle soreness, forced rest day." },
+      { timestamp: day3, status: "completed" as const, notes: "Morning cardio, good stamina." },
+      // Day 4: left unlogged
+      { timestamp: day5, status: "completed" as const, notes: "Felt strong during heavy squats." },
+      { timestamp: day6, status: "completed" as const, notes: "Late night workout, low energy but completed." },
+      { timestamp: day7, status: "completed" as const, notes: "Bench press PR set! Felt excellent." },
+    ];
+
+    for (const log of logsToInsert) {
+      await ctx.db.insert("habitLogs", {
+        userId: userId!,
+        habitId: gymHabitId,
+        timestamp: log.timestamp,
+        dateString: formatDateString(log.timestamp, offset),
+        status: log.status,
+        notes: log.notes,
+      });
+    }
+
+    // 5. Seed Tasks
+    await ctx.db.insert("tasks", {
+      userId: userId!,
+      text: "Deploy Auth Service",
+      workspaceId: devWorkspace._id,
+      completed: false,
+      progress: 90,
+      statusHook: "Blocked by auth session leakage",
+      dueDate: now + 1 * 24 * 60 * 60 * 1000, // Due tomorrow
+      createdAt: day1,
+      notes: `[${formatDateString(day2, offset)} 09:00] OAuth session handling complexity exploded.\n[${formatDateString(day4, offset)} 14:00] Failing test cases in dev integration suite, blocker.\n[${formatDateString(day5, offset)} 10:00] Extended due date to allow session leakage fix.`,
+    });
+
+    await ctx.db.insert("tasks", {
+      userId: userId!,
+      text: "Write Documentation",
+      workspaceId: devWorkspace._id,
+      completed: true,
+      completedAt: day4 + 7 * 60 * 60 * 1000, // completed on Day 4 afternoon
+      progress: 100,
+      statusHook: "Documentation completed",
+      createdAt: day2,
+      notes: `[${formatDateString(day4, offset)} 16:00] All wiki documents written, reviewed, and published.`,
+    });
+
+    // 6. Seed Events
+    await ctx.db.insert("events", {
+      userId: userId!,
+      title: "Sprint Planning",
+      startTime: day1 + 1 * 60 * 60 * 1000,
+      endTime: day1 + 2.5 * 60 * 60 * 1000,
+      eventType: "interval",
+      notes: `[${formatDateString(day1, offset)} 10:00] Initial event setup. Outcome: Decided to drop support for legacy cookie auth.`,
+      outcome: "Decided to drop support for legacy cookie auth.",
+      statusHook: "Sprint planned",
+      workspaceId: devWorkspace._id,
+      createdAt: day1,
+    });
+
+    await ctx.db.insert("events", {
+      userId: userId!,
+      title: "Client Demo",
+      startTime: day4 + 6 * 60 * 60 * 1000,
+      endTime: day4 + 7 * 60 * 60 * 1000,
+      eventType: "interval",
+      cancelled: true,
+      notes: `[${formatDateString(day3, offset)} 11:00] Client postponed meeting due to internal calendar conflicts.`,
+      statusHook: "Meeting postponed",
+      workspaceId: devWorkspace._id,
+      createdAt: day1,
+    });
+
+    return {
+      userId,
+      devWorkspaceId: devWorkspace._id,
+      personalWorkspaceId: personalWorkspace._id,
+    };
+  },
+});

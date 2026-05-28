@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard, ChevronDown } from "lucide-react";
+import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard, ChevronDown, Bot } from "lucide-react";
 import { motion } from "framer-motion";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Doc } from "../../../convex/_generated/dataModel";
@@ -17,7 +17,7 @@ interface SessionSidebarProps {
   isLargeViewport: boolean;
   onSelectSession: (id: Id<"chatSessions">) => void;
   onSelectWorkspaceSession: (workspaceId: Id<"workspaces">, sessionId: Id<"chatSessions">) => void;
-  onNewChat: (workspaceId?: Id<"workspaces">) => void;
+  onNewChat: (workspaceId?: Id<"workspaces"> | null, agentPersonaId?: Id<"agentPersonas">) => void;
   onDeleteChat: (id: Id<"chatSessions">, e: React.MouseEvent) => void;
   onSelectWorkspace: (id: Id<"workspaces"> | undefined) => void;
   onOpenCreateWorkspace: () => void;
@@ -44,6 +44,13 @@ export function SessionSidebar({
   const [editTitle, setEditTitle] = useState("");
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
   const [selectedWsId, setSelectedWsId] = useState<Id<"workspaces"> | undefined>(undefined);
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<Id<"agentPersonas"> | undefined>(undefined);
+
+  const personas = useQuery(api.personas.list);
+  const activeSession = sessions?.find(s => s._id === activeSessionId);
+  const activeSessionPersona = personas?.find(p => p._id === activeSession?.agentPersonaId) || personas?.find(p => p.isDefault);
+  const activePersona = personas?.find(p => p._id === selectedPersonaId) || personas?.find(p => p.isDefault);
 
   const renameSession = useMutation(api.messages.renameSession);
   const togglePinSession = useMutation(api.messages.togglePinSession);
@@ -264,7 +271,7 @@ export function SessionSidebar({
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            <header className="p-3 lg:p-4 shrink-0 space-y-3">
+            <header className="pt-5 pb-3 px-4 shrink-0 flex flex-col justify-center">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
                   <div
@@ -275,7 +282,7 @@ export function SessionSidebar({
                         : "#d4a373"
                     }}
                   />
-                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#f2efeb]">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#f2efeb] flex items-center gap-1.5">
                     {activeWorkspaceId 
                       ? workspaces?.find(w => w._id === activeWorkspaceId)?.name 
                       : "Dashboard"}
@@ -289,79 +296,104 @@ export function SessionSidebar({
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
               </div>
-
-              {!activeWorkspaceId ? (
-              <div className="relative flex items-center w-full">
-                <button 
-                  onClick={() => {
-                    if (!selectedWsId && workspaces && workspaces.length > 0) {
-                      setWsDropdownOpen(true);
-                      return;
-                    }
-                    onNewChat(selectedWsId);
-                  }}
-                  className="flex items-center justify-center gap-2 py-2 flex-1 rounded-l-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  New Session
-                </button>
-                <button
-                  onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
-                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-r-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300 border-l border-[#1a1814]"
-                >
-                  {workspaces?.find(w => w._id === selectedWsId)?.name
-                    ? workspaces.find(w => w._id === selectedWsId)!.name.substring(0, 2).toUpperCase()
-                    : "A"}
-                  <ChevronDown className="w-3 h-3" />
-                </button>
-
-                {wsDropdownOpen && workspaces && workspaces.length > 0 && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setWsDropdownOpen(false)} />
-                    <div className="absolute right-0 top-full mt-1 w-full rounded-xl border border-[#2a2723] bg-[#1a1814] shadow-2xl z-50 overflow-hidden">
-                      {workspaces.map((ws) => (
-                        <button
-                          key={ws._id}
-                          onClick={() => {
-                            setSelectedWsId(ws._id);
-                            setWsDropdownOpen(false);
-                          }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[11px] font-bold transition-all hover:bg-[#2a2723] text-left"
-                          style={{ color: selectedWsId === ws._id ? "#d4a373" : "#a8a29e" }}
-                        >
-                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ws.color }} />
-                          {ws.name}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-              ) : (
-              <button 
-                onClick={() => onNewChat()}
-                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New Session
-              </button>
-              )}
-
-            {/* Workspace Settings Section */}
-            {activeWorkspaceId && (() => {
-              const ws = workspaces?.find(w => w._id === activeWorkspaceId);
-              if (!ws) return null;
-              return (
-                <Link
-                  href={`/workspace/${ws._id}`}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  Workspace Settings
-                </Link>
-              );
-            })()}
             </header>
+
+            <div className="px-4 pb-4 pt-1 shrink-0 bg-transparent">
+              {!activeWorkspaceId ? (
+                <div className="flex flex-col gap-2 w-full">
+                  <div className="relative flex items-center w-full">
+                    <button 
+                      onClick={() => {
+                        onNewChat(null, activePersona?._id);
+                      }}
+                      className="flex items-center justify-start gap-2.5 py-2 pl-4 flex-1 rounded-l-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      New Session
+                    </button>
+                    <button
+                      onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-r-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300 border-l border-[#1a1814] shrink-0"
+                      title="Select Agent Persona"
+                    >
+                      <span className="text-[10px] uppercase font-bold text-[#d4a373]">
+                        {activePersona ? activePersona.name.substring(0, 2) : "DI"}
+                      </span>
+                      <ChevronDown className="w-3 h-3 text-[#a8a29e]" />
+                    </button>
+                    
+                    {agentDropdownOpen && personas && personas.length > 0 && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setAgentDropdownOpen(false)} />
+                        <div className="absolute right-0 top-full mt-1 w-full rounded-xl border border-[#2a2723] bg-[#1a1814] shadow-2xl z-50 overflow-hidden">
+                          {personas.map((p) => (
+                            <button
+                              key={p._id}
+                              onClick={() => {
+                                setSelectedPersonaId(p._id);
+                                setAgentDropdownOpen(false);
+                                onNewChat(null, p._id);
+                              }}
+                              className="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-bold transition-all hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb] text-left"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <div className="w-5 h-5 rounded-md bg-[#2a2723] text-[#d4a373] flex items-center justify-center text-[9px] uppercase font-bold shrink-0">
+                                  {p.name.substring(0, 2)}
+                                </div>
+                                <span className="truncate">{p.name}</span>
+                              </div>
+                              {p.isDefault && (
+                                <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded-sm bg-[#2a2723] text-[#a8a29e]/50 shrink-0">
+                                  Default
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <Link
+                    href="/agent"
+                    className="w-full flex items-center justify-start gap-2.5 py-1.5 px-4 rounded-lg border border-[#2a2723]/50 hover:border-[#d4a373]/30 text-[#a8a29e] hover:text-[#d4a373] text-[10px] font-bold tracking-wider uppercase transition-all duration-300"
+                  >
+                    <Bot className="w-3.5 h-3.5" />
+                    Agent Personas
+                  </Link>
+                </div>
+              ) : (
+                (() => {
+                  const ws = workspaces?.find(w => w._id === activeWorkspaceId);
+                  return (
+                    <div className="flex flex-col gap-2 w-full">
+                      <button 
+                        onClick={() => onNewChat()}
+                        className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        New Session
+                      </button>
+                      <Link
+                        href="/agent"
+                        className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
+                      >
+                        <Bot className="w-3.5 h-3.5" />
+                        Agent Personas
+                      </Link>
+                      {ws && (
+                        <Link
+                          href={`/workspace/${ws._id}`}
+                          className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
+                        >
+                          <Settings className="w-3.5 h-3.5" />
+                          Settings
+                        </Link>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
 
           
           <style>{`

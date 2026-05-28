@@ -52,16 +52,20 @@ export const updateSettings = mutation({
     context: v.optional(v.string()),
     agentName: v.optional(v.string()),
     color: v.optional(v.string()),
+    defaultAgentPersonaId: v.optional(v.union(v.id("agentPersonas"), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
     const workspace = await ctx.db.get(args.id);
     if (!workspace || workspace.userId !== userId) throw new Error("Unauthorized");
 
-    const patch: Record<string, string> = {};
+    const patch: Record<string, any> = {};
     if (args.context !== undefined) patch.context = args.context;
     if (args.agentName !== undefined) patch.agentName = args.agentName;
     if (args.color !== undefined) patch.color = args.color;
+    if (args.defaultAgentPersonaId !== undefined) {
+      patch.defaultAgentPersonaId = args.defaultAgentPersonaId === null ? undefined : args.defaultAgentPersonaId;
+    }
     await ctx.db.patch(args.id, patch);
   },
 });

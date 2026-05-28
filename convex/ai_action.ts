@@ -174,7 +174,6 @@ function getPeriodLabel(type: "weekly" | "monthly" | "yearly", startMs: number, 
 
 const SKILLS_INSTRUCTION = `
 ## Agent Skills Reference
-You are Dialogue. You build relationships through concrete behaviors, not prescribed tones.
 
 # 1. CORE PERSONA & COMMUNICATION
 ## Relational Behaviors
@@ -645,6 +644,8 @@ export const chat = internalAction({
       : "";
 
     const systemInstruction = `
+      You are ${session?.personaName || "Dialogue"}. ${session?.personaPrompt || "You build relationships through concrete behaviors, not prescribed tones."}
+
       ${SKILLS_INSTRUCTION}
       ${briefingContext}
  
@@ -653,44 +654,38 @@ export const chat = internalAction({
 
       Current Time: ${nowString}
       User Name: "${profile?.name || "User"}"
+
+      --- IDENTITY (Stable Core) ---
       User Personality Bio: "${profile?.bio || "New user."}"
-      
+      This is the user's stated identity — who they are, how they prefer to communicate, their role. Treat this as highly stable. If the user contradicts something here, update the bio.
+
       ## INSTRUCTION:
       Always address the user by their "User Name" if it is set to something other than "User". Use it naturally in your responses.
 
-      Pending Tasks for Reference:
-      ${pendingTasksContext || "No pending tasks."}
+      --- SCHEDULE CONTEXT (Immediate) ---
+      Pending Tasks: ${pendingTasksContext || "None."}
 
-      Recently Completed Tasks (Last 48 Hours):
-      ${completedTasksContext || "No recently completed tasks."}
+      Recently Completed: ${completedTasksContext || "None."}
 
       CRITICAL TIMELINESS RULE: To evaluate if a task was completed fast or late, you MUST compare the Completion time against the Due Date, not the Creation time. A large gap between Creation and Completion does not mean the user procrastinated if the task was completed before its Due Date. Emphasize and heavily weight High Priority tasks in your summaries.
       
-      Upcoming Events for Reference:
-      ${upcomingEventsContext || "No upcoming events."}
+      Upcoming Events: ${upcomingEventsContext || "None."}
       
-      Active Habits & Routine Streaks:
-      ${habitsContext || "No active habits."}
+      Active Habits: ${habitsContext || "None."}
 
-      ## USER BEHAVIORAL PROFILE & SUMMARY PYRAMID (Note-Scan):
-      This section contains distilled weekly and monthly summaries of the user's past workflows, behavioral patterns, energy levels, mood, and habits, plus a permanent behavioral profile. Use this to adapt your tone, coaching approach, and advice without explicitly repeating observations unless asked.
+      --- BEHAVIORAL PATTERNS (Observed, Not Stated) ---
+      ${behavioralProfile ? `Permanent Profile: ${behavioralProfile}` : "Not enough data yet."}
+      ${monthlySummariesContext ? `Monthly Trends: ${monthlySummariesContext}` : ""}
+      ${weeklySummariesContext ? `Weekly Themes: ${weeklySummariesContext}` : ""}
+      ${timelineContext ? `Recent Raw Notes (7 days): ${timelineContext}` : ""}
       
-      ### Permanent Behavioral Profile:
-      ${behavioralProfile || "No behavioral profile established yet."}
-      
-      ### Monthly Summaries (Current Year):
-      ${monthlySummariesContext}
-      
-      ### Weekly Summaries (Current Month):
-      ${weeklySummariesContext}
-      
-      ### Recent Raw Activity Notes (Last 7 Days):
-      ${timelineContext}
+      These are patterns distilled from the user's journals — task notes, event outcomes, habit logs. Use them to adapt your tone and suggestions.
+      The behavioral profile is a current-best-guess sketch refined monthly, not a fixed truth. Recent raw notes reflect the user's current context — they may show temporary deviations (vacation, crunch) or genuine shifts (new habits, lifestyle changes). Use both sources together. If raw notes and the profile conflict consistently across multiple sessions, the notes are more likely to reflect who the user is today. NEVER state a pattern to the user as if they told you it. If they ask "why do you always suggest X?", THEN you may cite these observations.
 
-      Personality Fragments (Relevant context from past chats):
-      - ${personalityFragments || "No specific patterns learned yet."}
+      --- RELEVANT FACTS (Mentioned in Past Chats) ---
+      ${personalityFragments ? `- ${personalityFragments}` : "No relevant facts found."}
       
-      Always prioritize the instructions in the Agent Skills Reference.
+      These are things the user has mentioned before. They may be outdated or change without notice. If the user contradicts a fact, ignore the old fact and adapt to what they say now.
     `;
 
     // 2. Define Tools for Gemini

@@ -54,6 +54,10 @@ export function Chat({
   const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
   const messages = useQuery(api.messages.list, activeSessionId ? { sessionId: activeSessionId } : "skip");
   const profile = useQuery(api.ai.getProfile, {});
+  const personas = useQuery(api.personas.list);
+
+  const activeSession = sessions?.find(s => s._id === activeSessionId);
+  const activePersona = personas?.find(p => p._id === activeSession?.agentPersonaId) || personas?.find(p => p.isDefault);
   
   const createWorkspace = useMutation(api.workspaces.create);
   const sendMessage = useMutation(api.messages.send);
@@ -136,10 +140,10 @@ export function Chat({
   };
   
   useEffect(() => {
-    if (sessions && sessions.length > 0 && !activeSessionId) {
+    if (activeWorkspaceId && sessions && sessions.length > 0 && !activeSessionId) {
       setActiveSessionId(sessions[0]._id);
     }
-  }, [sessions, activeSessionId, setActiveSessionId]);
+  }, [sessions, activeSessionId, setActiveSessionId, activeWorkspaceId]);
 
   // ---- Shared helper: run LM Studio logic for a given session + text ----
   const runLocalLLMForSession = async (
@@ -680,11 +684,20 @@ export function Chat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, provider, generateUploadUrl, sendMessage]);
 
-  const handleNewChat = async (workspaceOverride?: Id<"workspaces">) => {
-    const wsId = workspaceOverride || activeWorkspaceId || (workspaces && workspaces.length > 0 ? workspaces[0]._id : undefined);
+  const handleNewChat = async (
+    workspaceOverride?: Id<"workspaces"> | null,
+    agentPersonaId?: Id<"agentPersonas">,
+    initialMessage?: string
+  ) => {
+    const wsId = workspaceOverride === null ? undefined : (workspaceOverride || activeWorkspaceId);
+    const title = initialMessage 
+      ? (initialMessage.length > 30 ? initialMessage.substring(0, 30) + "..." : initialMessage)
+      : `Chat ${new Date().toLocaleTimeString()}`;
+
     const id = await createSession({
-      title: `Chat ${new Date().toLocaleTimeString()}`,
+      title,
       workspaceId: wsId,
+      agentPersonaId: agentPersonaId === "default_dialogue" ? undefined : agentPersonaId,
     });
     if (wsId !== activeWorkspaceId && wsId) {
       setActiveWorkspaceId(wsId);
@@ -692,6 +705,31 @@ export function Chat({
     setActiveSessionId(id);
     if (!isLargeViewport) {
       setShowHistory(false);
+    }
+
+    if (initialMessage) {
+      try {
+        await sendMessage({
+          sessionId: id,
+          text: initialMessage,
+          author: "User",
+          timezoneOffset: new Date().getTimezoneOffset(),
+          provider,
+        });
+
+        setIsTyping(true);
+
+        if (provider === "lmstudio") {
+          try {
+            await runLocalLLMForSession(id, initialMessage);
+          } finally {
+            setIsTyping(false);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to send initial message:", err);
+        setIsTyping(false);
+      }
     }
   };
 
@@ -777,13 +815,13 @@ export function Chat({
         layout
         className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
       >
-        {!activeWorkspaceId ? (
+        {!activeWorkspaceId && !activeSessionId ? (
           <Dashboard
             workspaces={workspaces}
             sessions={sessions}
             profile={profile}
             isLargeViewport={isLargeViewport}
-            onNewChat={(wsId?: Id<"workspaces">) => handleNewChat(wsId)}
+            onNewChat={handleNewChat}
             onSelectSession={handleDashboardSelectSession}
             onShowHistory={() => setShowHistory(true)}
             onShowTasks={onShowTasks}
@@ -813,7 +851,7 @@ export function Chat({
               isLargeViewport={isLargeViewport}
               keyboardOffset={keyboardOffset}
               onTypingDone={handleTypingDone}
-              agentName={currentWorkspace?.agentName}
+              agentName={activePersona?.name}
             />
 
             <ChatInput
