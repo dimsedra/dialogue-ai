@@ -13,6 +13,8 @@ import type * as ai_action from "../ai_action.js";
 import type * as ai_providers from "../ai_providers.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
+import type * as dailySummary from "../dailySummary.js";
+import type * as dateMigration from "../dateMigration.js";
 import type * as encryption from "../encryption.js";
 import type * as events from "../events.js";
 import type * as habits from "../habits.js";
@@ -22,12 +24,14 @@ import type * as messages from "../messages.js";
 import type * as messages_internal from "../messages_internal.js";
 import type * as migrations from "../migrations.js";
 import type * as notes from "../notes.js";
-import type * as notes_action from "../notes_action.js";
+import type * as ocean from "../ocean.js";
+import type * as ocean_queries from "../ocean_queries.js";
 import type * as pageSettings from "../pageSettings.js";
 import type * as personas from "../personas.js";
 import type * as reflections from "../reflections.js";
 import type * as seed from "../seed.js";
 import type * as tasks from "../tasks.js";
+import type * as timezones from "../timezones.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -42,6 +46,8 @@ declare const fullApi: ApiFromModules<{
   ai_providers: typeof ai_providers;
   auth: typeof auth;
   crons: typeof crons;
+  dailySummary: typeof dailySummary;
+  dateMigration: typeof dateMigration;
   encryption: typeof encryption;
   events: typeof events;
   habits: typeof habits;
@@ -51,12 +57,14 @@ declare const fullApi: ApiFromModules<{
   messages_internal: typeof messages_internal;
   migrations: typeof migrations;
   notes: typeof notes;
-  notes_action: typeof notes_action;
+  ocean: typeof ocean;
+  ocean_queries: typeof ocean_queries;
   pageSettings: typeof pageSettings;
   personas: typeof personas;
   reflections: typeof reflections;
   seed: typeof seed;
   tasks: typeof tasks;
+  timezones: typeof timezones;
   workspaces: typeof workspaces;
 }>;
 

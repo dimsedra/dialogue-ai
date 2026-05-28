@@ -83,7 +83,6 @@ export function Chat({
   const deleteSemanticMemory = useMutation(api.ai.deleteMemory);
   const saveReflection = useMutation(api.reflections.saveReflection);
   const updatePreferences = useMutation(api.ai.updatePreferences);
-  const compileNotesPyramidAction = useAction(api.notes_action.compileNotesPyramidSegment);
 
   const convex = useConvex();
 
@@ -197,6 +196,7 @@ export function Chat({
                 progress: args.progress !== undefined ? Number(args.progress) : undefined,
                 statusHook: args.statusHook as string | undefined,
                 dueDate: args.dueDate ? parseLocal(args.dueDate as string) : undefined,
+                dueDateStr: args.dueDate ? (args.dueDate as string).split("T")[0] : undefined,
                 workspaceId: promptCtx.workspaceId ?? undefined,
               });
             } else {
@@ -209,7 +209,10 @@ export function Chat({
               if (args.notes) taskUpdates.notes = args.notes as string;
               if (args.progress !== undefined) taskUpdates.progress = Number(args.progress);
               if (args.statusHook !== undefined) taskUpdates.statusHook = args.statusHook as string;
-              if (args.dueDate) taskUpdates.dueDate = parseLocal(args.dueDate as string);
+              if (args.dueDate) {
+                taskUpdates.dueDate = parseLocal(args.dueDate as string);
+                taskUpdates.dueDateStr = (args.dueDate as string).split("T")[0];
+              }
 
               await updateTask({
                 id: args.taskId as Id<"tasks">,
@@ -543,6 +546,7 @@ export function Chat({
               dateString: args.dateString as string,
               status: args.status as "completed" | "skipped",
               notes: args.notes as string | undefined,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             });
             const habit = await convex.query(api.habits.get, { id: args.habitId as Id<"habits"> });
             enrichedArgs.logId = logId;
@@ -556,14 +560,6 @@ export function Chat({
               periodEndDate: args.periodEndDate as string,
             });
             enrichedArgs.report = report;
-          }
-          else if (name === "compileNotesPyramid") {
-            const res = await compileNotesPyramidAction({
-              segment: args.segment as number | undefined,
-              timezoneOffset: args.timezoneOffset as number | undefined,
-            });
-            enrichedArgs.weeklySummary = res.weeklySummary;
-            enrichedArgs.monthlySummary = res.monthlySummary;
           }
 
           const isOnlyContext = (name === "updateTask" && Object.keys(args).every(k => ["taskId", "notes", "progress", "statusHook"].includes(k)) && Object.keys(args).some(k => ["notes", "progress", "statusHook"].includes(k))) ||
@@ -617,6 +613,7 @@ export function Chat({
       author: "User",
       brief: true,
       timezoneOffset: new Date().getTimezoneOffset(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       provider,
     });
 
@@ -665,6 +662,7 @@ export function Chat({
         text: userText || (uploadedAttachments.length > 0 ? `Attached ${uploadedAttachments.length} files` : ""),
         author: "User",
         timezoneOffset: new Date().getTimezoneOffset(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         provider,
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         scope: scope || undefined,
@@ -716,6 +714,7 @@ export function Chat({
           text: initialMessage,
           author: "User",
           timezoneOffset: new Date().getTimezoneOffset(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           provider,
         });
 

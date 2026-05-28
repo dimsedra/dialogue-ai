@@ -217,6 +217,7 @@ export const getPromptContext = query({
   args: {
     sessionId: v.id("chatSessions"),
     timezoneOffset: v.optional(v.number()),
+    timezone: v.optional(v.string()),  // IANA timezone
     brief: v.optional(v.boolean()),
     userId: v.optional(v.id("users")),
     scope: v.optional(v.object({
@@ -241,8 +242,17 @@ export const getPromptContext = query({
 
     const personalityFragments = "";
 
+    // Resolve timezone: arg > session > fallback
+    const resolvedTimezone = args.timezone || (session as any)?.timezone || undefined;
+
     let nowString = "";
-    if (args.timezoneOffset !== undefined) {
+    if (resolvedTimezone) {
+      nowString = new Date().toLocaleString("en-US", {
+        timeZone: resolvedTimezone,
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      });
+    } else if (args.timezoneOffset !== undefined) {
       const now = new Date();
       const localTime = new Date(now.getTime() - (args.timezoneOffset * 60000));
       nowString = localTime.toLocaleString("en-US", {
@@ -310,8 +320,10 @@ export const getPromptContext = query({
       return dates;
     };
 
+    const fmtDate = (t: { dueDateStr?: string; dueDate?: number }) => t.dueDateStr || (t.dueDate ? formatTaskDate(t.dueDate) : "");
+
     const pendingTasksContext = sortedPendingTasks.map(t => {
-      const dateStr = t.dueDate ? ` | Due: ${formatTaskDate(t.dueDate)}` : "";
+      const dateStr = (t.dueDateStr || t.dueDate) ? ` | Due: ${fmtDate(t)}` : "";
       const progressStr = t.progress !== undefined ? ` | Progress: ${t.progress}%` : "";
       const hookStr = t.statusHook ? ` | Hook: "${t.statusHook}"` : "";
       const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
@@ -322,7 +334,7 @@ export const getPromptContext = query({
     const sortedCompletedTasks = [...completedTasks].sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
     const completedTasksContext = sortedCompletedTasks.map(t => {
       const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
-      const dueStr = t.dueDate ? `, Due: ${formatTaskDate(t.dueDate)}` : "";
+      const dueStr = (t.dueDateStr || t.dueDate) ? `, Due: ${fmtDate(t)}` : "";
       const completedStr = t.completedAt ? `, Completed: ${formatTaskDate(t.completedAt)}` : "";
       const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
       const resourcesStr = formatResources(t.resources);
@@ -409,23 +421,30 @@ export const getPromptContext = query({
     }));
     const habitsContext = habitsContextLines.join("\n");
 
-    // Fetch Note-Scan data
-    const weeklySummaries = profile?.weeklyNotesSummaries ?? [];
-    const monthlySummaries = profile?.monthlyNotesSummaries ?? [];
-    const behavioralProfile = profile?.behavioralProfile ?? "";
+    // Fetch OCEAN digest data
+    const latestWeeklyDigest = await ctx.db
+      .query("weeklyDigests")
+      .withIndex("by_user_week", (q) => q.eq("userId", userId))
+      .order("desc")
+      .first();
 
-    const weeklySummariesContext = weeklySummaries.length > 0
-      ? weeklySummaries.map((s, i) => `Week ${i + 1}:\n${s}`).join("\n\n")
-      : "No recent weekly summaries.";
+    const latestMonthlyDigest = profile?.monthlyNotesSummaries?.[0] || "";
 
-    const monthlySummariesContext = monthlySummaries.length > 0
-      ? monthlySummaries.map((s, i) => `Month ${i + 1}:\n${s}`).join("\n\n")
-      : "No recent monthly summaries.";
-
-    const notesTimeline = await recentActivityFeedHandler(ctx, { userId });
-    const timelineContext = notesTimeline.length > 0
-      ? notesTimeline.map((item: any) => `[${item.date}] [${item.entityType.toUpperCase()}] ${item.entityName} (${item.workspaceName || "No Workspace"}): ${item.noteText}`).join("\n")
-      : "No raw notes recorded in the last 7 days.";
+    // Session prolong inactivity check
+    const sessionLastActivity = (session as any)?.lastActivity ?? (session as any)?.updatedAt ?? 0;
+    let injectDigests = true;
+    if (latestWeeklyDigest || latestMonthlyDigest) {
+      const latestDigestTime = Math.max(
+        latestWeeklyDigest?.createdAt ?? 0,
+        latestMonthlyDigest ? sessionLastActivity : 0
+      );
+      if (sessionLastActivity > latestDigestTime) {
+        injectDigests = false;
+      }
+    }
+    if (!latestWeeklyDigest && !latestMonthlyDigest) {
+      injectDigests = true;
+    }
 
     let briefingContext = "";
     if (args.brief) {
@@ -486,14 +505,13 @@ export const getPromptContext = query({
       
       Active Habits: ${habitsContext || "None."}
 
-      --- BEHAVIORAL PATTERNS (Observed, Not Stated) ---
-      ${behavioralProfile ? `Permanent Profile: ${behavioralProfile}` : "Not enough data yet."}
-      ${monthlySummariesContext ? `Monthly Trends: ${monthlySummariesContext}` : ""}
-      ${weeklySummariesContext ? `Weekly Themes: ${weeklySummariesContext}` : ""}
-      ${timelineContext ? `Recent Raw Notes (7 days): ${timelineContext}` : ""}
+      --- BEHAVIORAL PATTERNS (OCEAN Digest) ---
+      ${injectDigests ? `
+      ${latestMonthlyDigest ? `Monthly OCEAN Digest:\n${latestMonthlyDigest}` : "No monthly OCEAN digest yet."}
+      ${latestWeeklyDigest ? `Weekly OCEAN Digest (${latestWeeklyDigest.weekLabel}):\n${latestWeeklyDigest.digest}` : "No weekly OCEAN digest yet."}
+      ` : "Digests up to date — not re-injected."}
       
-      These are patterns distilled from the user's journals — task notes, event outcomes, habit logs. Use them to adapt your tone and suggestions.
-      The behavioral profile is a current-best-guess sketch refined monthly, not a fixed truth. Recent raw notes reflect the user's current context — they may show temporary deviations (vacation, crunch) or genuine shifts (new habits, lifestyle changes). Use both sources together. If raw notes and the profile conflict consistently across multiple sessions, the notes are more likely to reflect who the user is today. NEVER state a pattern to the user as if they told you it. If they ask "why do you always suggest X?", THEN you may cite these observations.
+      These are behavioral patterns analyzed from the user's activity using the Big 5 (OCEAN) personality framework. They reflect observed behavior — not stated preferences. The agent uses these to adapt tone and suggestions. NEVER state a pattern to the user as if they told you it. If they ask "why do you always suggest X?", THEN you may cite these observations.
 
       --- RELEVANT FACTS (Mentioned in Past Chats) ---
       ${personalityFragments ? `- ${personalityFragments}` : "No relevant facts found."}
@@ -505,6 +523,17 @@ export const getPromptContext = query({
 
     return { systemInstruction, workspaceId, timezoneOffset: args.timezoneOffset };
   }
+});
+
+export const getLatestWeeklyDigest = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("weeklyDigests")
+      .withIndex("by_user_week", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .first();
+  },
 });
 
 export const getLatestMemories = query({
@@ -749,6 +778,7 @@ export const addTask = mutation({
     text: v.string(),
     workspaceId: v.optional(v.id("workspaces")),
     dueDate: v.optional(v.number()),
+    dueDateStr: v.optional(v.string()),
     priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
@@ -774,6 +804,7 @@ export const addTask = mutation({
       workspaceId: args.workspaceId,
       completed: false,
       dueDate: args.dueDate,
+      dueDateStr: args.dueDateStr,
       priority: args.priority || "medium",
       category: args.category || "General",
       notes: args.notes,

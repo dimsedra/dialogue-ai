@@ -136,7 +136,9 @@ export const saveReflection = mutation({
     workspaceId: v.optional(v.id("workspaces")),
     type: v.union(v.literal("weekly"), v.literal("monthly"), v.literal("yearly")),
     periodStart: v.number(),
+    periodStartStr: v.optional(v.string()),
     periodEnd: v.number(),
+    periodEndStr: v.optional(v.string()),
     periodLabel: v.string(),
     summary: v.string(),
     stats: v.object({
@@ -177,7 +179,9 @@ export const saveReflection = mutation({
       workspaceId: args.workspaceId,
       type: args.type,
       periodStart: args.periodStart,
+      periodStartStr: args.periodStartStr,
       periodEnd: args.periodEnd,
+      periodEndStr: args.periodEndStr,
       periodLabel: args.periodLabel,
       summary: args.summary,
       stats: args.stats,
@@ -377,9 +381,11 @@ export const compileReflectionStats = query({
       return new Date(ts).toLocaleString("en-US", { hour12: false });
     };
 
+    const fmtDate = (t: { dueDateStr?: string; dueDate?: number }) => t.dueDateStr || (t.dueDate ? formatTaskDate(t.dueDate) : "");
+
     const completedTasksDetails = tasksCompletedList.map((t) => {
       const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
-      const dueStr = t.dueDate ? `, Due: ${formatTaskDate(t.dueDate)}` : "";
+      const dueStr = (t.dueDateStr || t.dueDate) ? `, Due: ${fmtDate(t)}` : "";
       const completedStr = t.completedAt ? `, Completed: ${formatTaskDate(t.completedAt)}` : "";
       return `- [Task] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${t.notes ? `\n  Notes: ${t.notes.split("\n").join("\n  ")}` : ""}`;
     }).join("\n");
@@ -407,47 +413,147 @@ export const compileReflectionStats = query({
   },
 });
 
-export const cronTriggerWeekly = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const users = await ctx.db.query("users").collect();
-    for (const user of users) {
-      const lastSession = await ctx.db
-        .query("chatSessions")
-        .withIndex("by_user", (q) => q.eq("userId", user._id))
-        .order("desc")
-        .first();
-
-      if (lastSession) {
-        await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
-          userId: user._id,
-          sessionId: lastSession._id,
-          type: "weekly",
-        });
-      }
-    }
+/**
+ * Shared data collection for the Monday weekly cron.
+ * Returns a single payload used by both OCEAN and Reflections prompts.
+ */
+export const compileWeeklyData = internalQuery({
+  args: {
+    userId: v.id("users"),
+    periodStart: v.number(),
+    periodEnd: v.number(),
   },
-});
+  handler: async (ctx, args) => {
+    // 1. Tasks created/completed in this period
+    const rawTasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
 
-export const cronTriggerMonthly = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const users = await ctx.db.query("users").collect();
-    for (const user of users) {
-      const lastSession = await ctx.db
-        .query("chatSessions")
-        .withIndex("by_user", (q) => q.eq("userId", user._id))
-        .order("desc")
-        .first();
+    const tasksCreated = rawTasks.filter(
+      (t) => t.createdAt >= args.periodStart && t.createdAt <= args.periodEnd
+    );
+    const tasksCompleted = rawTasks.filter(
+      (t) => t.completed && t.completedAt !== undefined && t.completedAt >= args.periodStart && t.completedAt <= args.periodEnd
+    );
 
-      if (lastSession) {
-        await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
-          userId: user._id,
-          sessionId: lastSession._id,
-          type: "monthly",
-        });
+    // 2. Events in this period (with recurring expansion)
+    const rawEvents = await ctx.db
+      .query("events")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    const eventsList = expandRecurringEventsForWindow(rawEvents, args.periodStart, args.periodEnd);
+
+    // 3. Habit logs in this period
+    const rawHabits = await ctx.db
+      .query("habits")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    let habitLogsCompleted = 0;
+    let habitLogsSkipped = 0;
+    for (const h of rawHabits) {
+      if (!h.archived) {
+        const logs = await ctx.db
+          .query("habitLogs")
+          .withIndex("by_habit", (q) => q.eq("habitId", h._id))
+          .collect();
+        for (const l of logs) {
+          if (l.dateString >= new Date(args.periodStart).toISOString().slice(0, 10) && l.dateString <= new Date(args.periodEnd).toISOString().slice(0, 10)) {
+            if (l.status === "completed") habitLogsCompleted++;
+            else habitLogsSkipped++;
+          }
+        }
       }
     }
+
+    // 4. Daily session summaries for this period
+    const sessionSummaries = await ctx.db
+      .query("sessionSummaries")
+      .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    const filteredSummaries = sessionSummaries.filter((s) => {
+      const date = new Date(s.date + "T00:00:00");
+      const ts = date.getTime();
+      return ts >= args.periodStart && ts <= args.periodEnd;
+    });
+
+    // 5. Category count
+    const categoryCounts: Record<string, number> = {};
+    for (const t of tasksCompleted) {
+      if (t.category) {
+        categoryCounts[t.category] = (categoryCounts[t.category] || 0) + 1;
+      }
+    }
+    const topCategories = Object.entries(categoryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map((entry) => entry[0]);
+
+    // 6. Streak calculation
+    const thirtyDaysAgo = args.periodEnd - 30 * 24 * 3600 * 1000;
+    const recentCompleted = rawTasks.filter(
+      (t) => t.completed && t.completedAt !== undefined && t.completedAt >= thirtyDaysAgo && t.completedAt <= args.periodEnd
+    );
+    const activeDates = new Set<string>();
+    for (const t of recentCompleted) {
+      activeDates.add(new Date(t.completedAt!).toDateString());
+    }
+    for (const e of eventsList) {
+      activeDates.add(new Date(e.startTime).toDateString());
+    }
+    let streak = 0;
+    let checkDate = new Date(args.periodEnd);
+    while (activeDates.has(checkDate.toDateString())) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    // Build formatted details for LLM consumption
+    const formatTaskDate = (ts?: number) => {
+      if (!ts) return "N/A";
+      return new Date(ts).toLocaleString("en-US", { hour12: false });
+    };
+
+    const fmtDate = (t: { dueDateStr?: string; dueDate?: number }) => t.dueDateStr || (t.dueDate ? formatTaskDate(t.dueDate) : "");
+
+    const completedTasksDetails = tasksCompleted.map((t) => {
+      const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
+      const dueStr = (t.dueDateStr || t.dueDate) ? `, Due: ${fmtDate(t)}` : "";
+      const completedStr = t.completedAt ? `, Completed: ${formatTaskDate(t.completedAt)}` : "";
+      return `- [Task] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${t.notes ? `\n  Notes: ${t.notes.split("\n").join("\n  ")}` : ""}`;
+    }).join("\n");
+
+    const createdTasksDetails = tasksCreated.filter((t) => !t.completed).map((t) => {
+      const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
+      const dueStr = (t.dueDateStr || t.dueDate) ? `, Due: ${fmtDate(t)}` : "";
+      return `- [Task] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}]${t.notes ? `\n  Notes: ${t.notes.split("\n").join("\n  ")}` : ""}`;
+    }).join("\n");
+
+    const eventsDetails = eventsList.map((e: any) => {
+      return `- [Event] ${e.title} at ${new Date(e.startTime).toLocaleTimeString()}${e.outcome ? ` (Outcome: ${e.outcome})` : ""}${e.cancelled ? " [CANCELLED]" : ""}`;
+    }).join("\n");
+
+    const summariesText = filteredSummaries.map((s) => `[${s.date}]: ${s.summary}`).join("\n");
+
+    return {
+      tasksCompleted: tasksCompleted.length,
+      tasksCreated: tasksCreated.length,
+      eventsAttended: eventsList.filter((e: any) => !e.cancelled).length,
+      habitLogsCompleted,
+      habitLogsSkipped,
+      topCategories,
+      streakDays: streak,
+      rawDetails: [
+        `COMPLETED TASKS (${tasksCompleted.length}):\n${completedTasksDetails || "None."}`,
+        `PENDING/INCOMPLETE TASKS (${tasksCreated.length - tasksCompleted.length}):\n${createdTasksDetails || "None."}`,
+        `EVENTS (${eventsList.length}):\n${eventsDetails || "None."}`,
+        `HABITS: Completed: ${habitLogsCompleted} | Skipped: ${habitLogsSkipped}`,
+        `DAILY SESSION SUMMARIES:\n${summariesText || "No session summaries recorded."}`,
+      ].join("\n\n"),
+    };
   },
 });
 

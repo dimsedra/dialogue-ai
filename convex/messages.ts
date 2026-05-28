@@ -170,6 +170,7 @@ const sendArgs = {
   text: v.string(), 
   author: v.string(), 
   timezoneOffset: v.optional(v.number()),
+  timezone: v.optional(v.string()),  // IANA timezone (e.g. "Asia/Jakarta")
   brief: v.optional(v.boolean()),
   provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"), v.literal("openai"), v.literal("anthropic"))),
   toolCall: v.optional(v.object({
@@ -213,6 +214,7 @@ export const send = mutation({
         messageId,
         text: args.text, 
         author: args.author, 
+        timezone: args.timezone,
         timezoneOffset: args.timezoneOffset, 
         brief: args.brief,
         storageId: args.storageId,
@@ -221,6 +223,11 @@ export const send = mutation({
         attachments: args.attachments,
         scope: args.scope,
       });
+    }
+
+    // Update session timezone from user messages
+    if (args.author === "User" && args.timezone) {
+      await ctx.db.patch(args.sessionId, { timezone: args.timezone });
     }
 
     return messageId;

@@ -22,6 +22,7 @@ export interface TaskToolArgs {
     priority?: string;
     category?: string;
     dueDate?: number;
+    dueDateStr?: string;
     completed?: boolean;
   };
 }

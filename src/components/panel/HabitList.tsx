@@ -101,6 +101,8 @@ export function HabitList({
     return `${y}-${m}-${d}`;
   };
 
+  const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+
   const handleLog = async (habitId: Id<"habits">, status: "completed" | "skipped") => {
     const opId = `${habitId}-${status}`;
     setLoggingId(opId);
@@ -109,6 +111,7 @@ export function HabitList({
         habitId,
         dateString: todayDateString,
         status,
+        timezone: userTimezone,
       });
     } catch (error) {
       console.error("Failed to log habit:", error);
@@ -127,6 +130,7 @@ export function HabitList({
         dateString: todayDateString,
         status,
         notes,
+        timezone: userTimezone,
       });
       setNotesInput((prev) => ({ ...prev, [habitId]: "" }));
       setNoteSavedToast(habitId);

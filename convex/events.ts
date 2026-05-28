@@ -8,7 +8,9 @@ const recurrenceValidator = v.optional(v.union(v.object({
   interval: v.number(),
   daysOfWeek: v.optional(v.array(v.number())),
   until: v.optional(v.number()),
+  untilStr: v.optional(v.string()),
   exceptions: v.optional(v.array(v.number())),
+  exceptionsStr: v.optional(v.array(v.string())),
 }), v.null()));
 
 function expandRecurringEvents(events: Doc<"events">[], windowStart: number, windowEnd: number) {
@@ -27,13 +29,11 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
       const d = new Date(event.startTime);
       while (d.getTime() <= limit) {
         const timestamp = d.getTime();
-        if (timestamp >= windowStart) {
-          const isCancelled = exceptions.includes(timestamp);
+        if (timestamp >= windowStart && !exceptions.includes(timestamp)) {
           expanded.push({
             ...event,
             startTime: timestamp,
             endTime: event.endTime !== undefined ? timestamp + duration : undefined,
-            cancelled: isCancelled,
           });
         }
         d.setDate(d.getDate() + event.recurrence.interval);
@@ -58,13 +58,11 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
               targetDate.setHours(origTime.getHours(), origTime.getMinutes(), origTime.getSeconds(), origTime.getMilliseconds());
               
               const timestamp = targetDate.getTime();
-              if (timestamp >= event.startTime && timestamp <= limit && timestamp >= windowStart) {
-                const isCancelled = exceptions.includes(timestamp);
+              if (timestamp >= event.startTime && timestamp <= limit && timestamp >= windowStart && !exceptions.includes(timestamp)) {
                 expanded.push({
                   ...event,
                   startTime: timestamp,
                   endTime: event.endTime !== undefined ? timestamp + duration : undefined,
-                  cancelled: isCancelled,
                 });
               }
             }
@@ -223,6 +221,13 @@ export const update = mutation({
         }
       }
     }
+    // Preserve existing exceptions/until when updating recurrence (avoid overwriting)
+    if (args.recurrence !== undefined && event.recurrence) {
+      updates.recurrence = {
+        ...event.recurrence,
+        ...args.recurrence,
+      };
+    }
     if (args.notes !== undefined) {
       let incomingNote = args.notes.trim();
       const existingNotes = event.notes ? event.notes.trim() : "";
@@ -256,7 +261,7 @@ export const update = mutation({
 });
 
 export const cancelOccurrence = mutation({
-  args: { id: v.id("events"), timestamp: v.number(), userId: v.optional(v.id("users")) },
+  args: { id: v.id("events"), timestamp: v.number(), timezone: v.optional(v.string()), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const event = await ctx.db.get(args.id);
@@ -269,15 +274,23 @@ export const cancelOccurrence = mutation({
 
     if (event.recurrence) {
       const exceptions = event.recurrence.exceptions ?? [];
+      const exceptionsStr = event.recurrence.exceptionsStr ?? [];
+      const dateStr = new Date(args.timestamp).toLocaleDateString("en-CA", { timeZone: args.timezone || "UTC" });
+
       if (!exceptions.includes(args.timestamp)) {
         exceptions.push(args.timestamp);
-        await ctx.db.patch(args.id, {
-          recurrence: {
-            ...event.recurrence,
-            exceptions,
-          },
-        });
       }
+      if (!exceptionsStr.includes(dateStr)) {
+        exceptionsStr.push(dateStr);
+      }
+
+      await ctx.db.patch(args.id, {
+        recurrence: {
+          ...event.recurrence,
+          exceptions,
+          exceptionsStr,
+        },
+      });
     }
   },
 });
@@ -293,6 +306,7 @@ export const updateOccurrence = mutation({
     endTime: v.optional(v.number()),
     eventType: v.optional(v.union(v.literal("interval"), v.literal("point"))),
     cancelled: v.optional(v.boolean()),
+    timezone: v.optional(v.string()),
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -302,15 +316,23 @@ export const updateOccurrence = mutation({
 
     if (parent.recurrence) {
       const exceptions = parent.recurrence.exceptions ?? [];
+      const exceptionsStr = parent.recurrence.exceptionsStr ?? [];
+      const dateStr = new Date(args.originalStartTime).toLocaleDateString("en-CA", { timeZone: args.timezone || "UTC" });
+
       if (!exceptions.includes(args.originalStartTime)) {
         exceptions.push(args.originalStartTime);
-        await ctx.db.patch(args.seriesId, {
-          recurrence: {
-            ...parent.recurrence,
-            exceptions,
-          },
-        });
       }
+      if (!exceptionsStr.includes(dateStr)) {
+        exceptionsStr.push(dateStr);
+      }
+
+      await ctx.db.patch(args.seriesId, {
+        recurrence: {
+          ...parent.recurrence,
+          exceptions,
+          exceptionsStr,
+        },
+      });
     }
 
     const duration = parent.endTime !== undefined ? parent.endTime - parent.startTime : 0;

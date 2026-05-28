@@ -30,6 +30,7 @@ export default defineSchema({
     title: v.optional(v.string()),
     workspaceId: v.optional(v.id("workspaces")),
     agentPersonaId: v.optional(v.id("agentPersonas")),
+    timezone: v.optional(v.string()),  // IANA timezone (e.g. "Asia/Jakarta")
     createdAt: v.number(),
     lastActivity: v.number(),
     pinned: v.optional(v.boolean()),
@@ -83,6 +84,7 @@ export default defineSchema({
     workspaceId: v.optional(v.id("workspaces")),
     completed: v.boolean(),
     dueDate: v.optional(v.number()),
+    dueDateStr: v.optional(v.string()),       // YYYY-MM-DD
     priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
@@ -139,7 +141,9 @@ export default defineSchema({
       interval: v.number(),
       daysOfWeek: v.optional(v.array(v.number())),
       until: v.optional(v.number()),
+      untilStr: v.optional(v.string()),       // YYYY-MM-DD
       exceptions: v.optional(v.array(v.number())),
+      exceptionsStr: v.optional(v.array(v.string())), // YYYY-MM-DD[]
     })),
     createdAt: v.number(),
     seriesId: v.optional(v.id("events")),
@@ -153,7 +157,9 @@ export default defineSchema({
     workspaceId: v.optional(v.id("workspaces")),
     type: v.union(v.literal("weekly"), v.literal("monthly"), v.literal("yearly")),
     periodStart: v.number(),      // Epoch ms — start of the period
+    periodStartStr: v.optional(v.string()),  // YYYY-MM-DD
     periodEnd: v.number(),        // Epoch ms — end of the period
+    periodEndStr: v.optional(v.string()),    // YYYY-MM-DD
     periodLabel: v.string(),      // e.g. "Week 3, May 2026"
     summary: v.string(),          // Agent-synthesized narrative
     stats: v.object({
@@ -231,4 +237,29 @@ export default defineSchema({
       bubbleStyle: v.optional(v.string()),
     }),
   }).index("by_user_page", ["userId", "page"]),
+
+  sessionSummaries: defineTable({
+    userId: v.id("users"),
+    date: v.string(),         // "2026-05-22"
+    summary: v.string(),      // 2-line OCEAN-informed summary
+    createdAt: v.number(),
+  }).index("by_user_date", ["userId", "date"]),
+
+  weeklyDigests: defineTable({
+    userId: v.id("users"),
+    weekStart: v.number(),    // epoch ms
+    weekStartStr: v.optional(v.string()),  // YYYY-MM-DD
+    weekLabel: v.string(),    // "Week of May 22, 2026"
+    digest: v.string(),       // full OCEAN analysis text
+    createdAt: v.number(),
+  }).index("by_user_week", ["userId", "weekStart"]),
+
+  archivedSummaries: defineTable({
+    userId: v.id("users"),
+    type: v.union(v.literal("weekly"), v.literal("monthly")),
+    originalDate: v.number(), // when it was the active digest
+    originalDateStr: v.optional(v.string()),  // YYYY-MM-DD
+    content: v.string(),
+    archivedAt: v.number(),
+  }).index("by_user_type_date", ["userId", "type", "originalDate"]),
 });

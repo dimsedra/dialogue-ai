@@ -3,27 +3,28 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Run weekly reflection trigger every Sunday at 18:00 (6:00 PM) UTC/Local
+// Daily session summary: runs every hour, schedules users at their local 23:59
 crons.cron(
-  "weekly-reflections-trigger",
-  "0 18 * * 0",
-  internal.reflections.cronTriggerWeekly,
+  "daily-session-summary",
+  "0 * * * *",
+  internal.dailySummary.cronTriggerDaily,
   {}
 );
 
-// Run monthly reflection trigger on the 1st of every month at 00:01 (12:01 AM)
+// Weekly OCEAN + Reflections: runs every hour, schedules users at their local Monday
 crons.cron(
-  "monthly-reflections-trigger",
-  "1 0 1 * *",
-  internal.reflections.cronTriggerMonthly,
+  "weekly-ocean-reflections",
+  "5 * * * 1",
+  internal.ocean.cronTriggerWeekly,
   {}
 );
 
-// Run pyramid segment compilation on days 1, 8, 15, and 22 of every month at 00:05 UTC
+// Monthly OCEAN: runs on the 1st of every month at 00:05 UTC
+// (monthly is less timezone-sensitive — one global run is fine)
 crons.cron(
-  "pyramid-segment-compilation",
-  "5 0 1,8,15,22 * *",
-  internal.notes.cronTriggerPyramid,
+  "monthly-ocean",
+  "5 0 1 * *",
+  internal.ocean.cronTriggerMonthly,
   {}
 );
 

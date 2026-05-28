@@ -3,22 +3,37 @@ import { v } from "convex/values";
 import { auth } from "./auth";
 import { Id } from "./_generated/dataModel";
 
-// --- Streak Calculation Helper ---
-const parseDateString = (ds: string) => {
+// --- YYYY-MM-DD string helpers (no epoch ms) ---
+const dateParts = (ds: string) => {
   const [y, m, d] = ds.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  return { y, m: m - 1, d };
 };
 
+const utcDate = (ds: string) => {
+  const { y, m, d } = dateParts(ds);
+  return new Date(Date.UTC(y, m, d));
+};
+
+const formatYMD = (dt: Date) =>
+  `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+
+const addDays = (ds: string, n: number): string => {
+  const { y, m, d } = dateParts(ds);
+  return formatYMD(new Date(Date.UTC(y, m, d + n)));
+};
+
+const daysBetween = (a: string, b: string): number => {
+  const aMs = Date.UTC(...Object.values(dateParts(a)) as [number, number, number]);
+  const bMs = Date.UTC(...Object.values(dateParts(b)) as [number, number, number]);
+  return Math.round((aMs - bMs) / (24 * 60 * 60 * 1000));
+};
+
+const getDayOfWeek = (ds: string): number => utcDate(ds).getUTCDay();
+
 const getRolling7Days = (todayStr: string) => {
-  const [y, m, d] = todayStr.split("-").map(Number);
   const dates: string[] = [];
   for (let i = 0; i < 7; i++) {
-    const dt = new Date(y, m - 1, d);
-    dt.setDate(d - i);
-    const yyyy = dt.getFullYear();
-    const mm = String(dt.getMonth() + 1).padStart(2, "0");
-    const dd = String(dt.getDate()).padStart(2, "0");
-    dates.push(`${yyyy}-${mm}-${dd}`);
+    dates.push(addDays(todayStr, -i));
   }
   return dates;
 };
@@ -35,7 +50,6 @@ export function calculateNewStreak(
   logStatus: "completed" | "skipped",
   skippedDates: Set<string>
 ): { currentStreak: number; longestStreak: number } {
-  const current = parseDateString(logDateString);
   if (!habit.lastLoggedDate) {
     const initialStreak = logStatus === "completed" ? 1 : 0;
     return {
@@ -44,28 +58,23 @@ export function calculateNewStreak(
     };
   }
 
-  const prev = parseDateString(habit.lastLoggedDate);
-  const diffDays = Math.round((current.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+  const diffDays = daysBetween(logDateString, habit.lastLoggedDate);
 
   if (diffDays <= 0) {
-    // Back-logging or duplicate date, don't change streak
     return {
       currentStreak: habit.currentStreak,
       longestStreak: habit.longestStreak,
     };
   }
 
-  // Verify if the gap (> 1 day) was preserved (all intermediate active days were skipped/unscheduled)
   let preserved = true;
   if (diffDays > 1) {
     for (let i = 1; i < diffDays; i++) {
-      const cursor = new Date(prev);
-      cursor.setDate(prev.getDate() + i);
-      const cursorDateStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+      const cursorDateStr = addDays(habit.lastLoggedDate, i);
 
       let isScheduled = true;
       if (habit.frequency === "custom" && habit.frequencyConfig?.daysOfWeek) {
-        isScheduled = habit.frequencyConfig.daysOfWeek.includes(cursor.getDay());
+        isScheduled = habit.frequencyConfig.daysOfWeek.includes(getDayOfWeek(cursorDateStr));
       }
 
       if (isScheduled && !skippedDates.has(cursorDateStr)) {
@@ -76,14 +85,12 @@ export function calculateNewStreak(
   }
 
   if (logStatus === "skipped") {
-    // Skipped logs freeze the streak (0 if broken, otherwise currentStreak)
     const nextStreak = preserved ? habit.currentStreak : 0;
     return {
       currentStreak: nextStreak,
       longestStreak: Math.max(nextStreak, habit.longestStreak),
     };
   } else {
-    // Completed logs increment the streak (1 if broken, otherwise currentStreak + 1)
     const nextStreak = preserved ? habit.currentStreak + 1 : 1;
     return {
       currentStreak: nextStreak,
@@ -103,20 +110,16 @@ export function isStreakActive(
 ): boolean {
   if (!habit.lastLoggedDate) return true;
 
-  const prev = parseDateString(habit.lastLoggedDate);
-  const current = parseDateString(todayDateString);
-  const diffDays = Math.round((current.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
+  const diffDays = daysBetween(todayDateString, habit.lastLoggedDate);
 
   if (diffDays <= 1) return true;
 
   for (let i = 1; i < diffDays; i++) {
-    const cursor = new Date(prev);
-    cursor.setDate(prev.getDate() + i);
-    const cursorDateStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    const cursorDateStr = addDays(habit.lastLoggedDate, i);
 
     let isScheduled = true;
     if (habit.frequency === "custom" && habit.frequencyConfig?.daysOfWeek) {
-      isScheduled = habit.frequencyConfig.daysOfWeek.includes(cursor.getDay());
+      isScheduled = habit.frequencyConfig.daysOfWeek.includes(getDayOfWeek(cursorDateStr));
     }
 
     if (isScheduled && !skippedDates.has(cursorDateStr)) {
@@ -214,6 +217,7 @@ export const logHabit = mutation({
     dateString: v.string(), // "YYYY-MM-DD"
     status: v.union(v.literal("completed"), v.literal("skipped")),
     notes: v.optional(v.string()),
+    timezone: v.optional(v.string()),
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -233,10 +237,12 @@ export const logHabit = mutation({
       )
       .unique();
 
-    // Format timestamp prefix
+    // Format timestamp prefix using IANA timezone
     const now = new Date();
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    const ts = `[${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
+    const tz = args.timezone || "UTC";
+    const datePart = now.toLocaleDateString("en-CA", { timeZone: tz });
+    const timePart = now.toLocaleTimeString("en-US", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" });
+    const ts = `[${datePart} ${timePart}]`;
 
     let logId;
     if (existingLog) {
@@ -305,7 +311,7 @@ export const getHabits = query({
 
     const todayStr = args.todayDateString ?? (() => {
       const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      return now.toLocaleDateString("en-CA", { timeZone: "UTC" });
     })();
 
     // Jointly fetch the last 30 logs for each habit to avoid N+1 query loops
@@ -335,8 +341,7 @@ export const getHabits = query({
 
         for (const dateStr of last7Days) {
           const [y, m, d] = dateStr.split("-").map(Number);
-          const dt = new Date(y, m - 1, d);
-          const dayOfWeek = dt.getDay();
+          const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 
           let isScheduled = true;
           if (habit.frequency === "custom" && habit.frequencyConfig?.daysOfWeek) {

@@ -86,6 +86,7 @@ export function CalendarView({
         habitId,
         dateString: selectedDateStr,
         status,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
     } catch (error) {
       console.error("Failed to log habit from calendar view:", error);

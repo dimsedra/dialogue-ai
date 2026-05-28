@@ -315,11 +315,6 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 ### get_habit_consistency
 - Purpose: Queries consistency percentages, streak metadata, and log details. Executed silently.
 - Parameters: periodStartDate (string), periodEndDate (string).
-### compileNotesPyramid
-- Purpose: Compiles a weekly or monthly notes pyramid segment to distill behavioral patterns from user notes.
-- Parameters:
-  * segment: number (optional, the split-week segment 1, 2, 3, 4).
-  * timezoneOffset: number (optional, timezone offset in minutes).
 
 # 7. LIVING TASK CONTEXT & BACKEND-ENFORCED JOURNALING
 You maintain a "living chronological journal" on every task and event inside the 'notes' field.
@@ -398,6 +393,7 @@ export const chat = internalAction({
     messageId: v.optional(v.id("messages")),
     text: v.string(),
     author: v.string(),
+    timezone: v.optional(v.string()),
     timezoneOffset: v.optional(v.number()),
     brief: v.optional(v.boolean()),
     storageId: v.optional(v.id("_storage")),
@@ -537,8 +533,10 @@ export const chat = internalAction({
       return dt.toLocaleString("en-US", { hour12: false });
     };
 
+    const fmtDate = (t: { dueDateStr?: string; dueDate?: number }) => t.dueDateStr || (t.dueDate ? formatTaskDate(t.dueDate) : "");
+
     const pendingTasksContext = sortedTasks.map(t => {
-      const dateStr = t.dueDate ? ` | Due: ${formatTaskDate(t.dueDate)}` : "";
+      const dateStr = (t.dueDateStr || t.dueDate) ? ` | Due: ${fmtDate(t)}` : "";
       const progressStr = t.progress !== undefined ? ` | Progress: ${t.progress}%` : "";
       const hookStr = t.statusHook ? ` | Hook: "${t.statusHook}"` : "";
       const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
@@ -548,7 +546,7 @@ export const chat = internalAction({
     const sortedCompletedTasks = [...completedTasks].sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
     const completedTasksContext = sortedCompletedTasks.map(t => {
       const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
-      const dueStr = t.dueDate ? `, Due: ${formatTaskDate(t.dueDate)}` : "";
+      const dueStr = (t.dueDateStr || t.dueDate) ? `, Due: ${fmtDate(t)}` : "";
       const completedStr = t.completedAt ? `, Completed: ${formatTaskDate(t.completedAt)}` : "";
       const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
       return `- [${t._id}] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${notesStr}`;
@@ -602,23 +600,28 @@ export const chat = internalAction({
     });
     const habitsContext = habitsContextLines.join("\n");
 
-    // Fetch Note-Scan data
-    const weeklySummaries = profile?.weeklyNotesSummaries ?? [];
-    const monthlySummaries = profile?.monthlyNotesSummaries ?? [];
-    const behavioralProfile = profile?.behavioralProfile ?? "";
+    // Fetch OCEAN digest data
+    const latestWeeklyDigest = await ctx.runQuery(api.ai.getLatestWeeklyDigest, { userId: args.userId });
+    const latestMonthlyDigest = profile?.monthlyNotesSummaries?.[0] || "";
 
-    const weeklySummariesContext = weeklySummaries.length > 0
-      ? weeklySummaries.map((s, i) => `Week ${i + 1}:\n${s}`).join("\n\n")
-      : "No recent weekly summaries.";
+    // Session prolong inactivity check: compare digest timestamps vs session last activity
+    const sessionLastActivity = (session as any)?.lastActivity ?? (session as any)?.updatedAt ?? 0;
+    let injectDigests = true; // Default: inject on first message
+    if (latestWeeklyDigest || latestMonthlyDigest) {
+      const latestDigestTime = Math.max(
+        latestWeeklyDigest?.createdAt ?? 0,
+        latestMonthlyDigest ? sessionLastActivity : 0 // Monthly digest has no separate timestamp — use session check
+      );
+      // If session was active after the latest digest was created, no need to re-inject
+      if (sessionLastActivity > latestDigestTime) {
+        injectDigests = false;
+      }
+    }
 
-    const monthlySummariesContext = monthlySummaries.length > 0
-      ? monthlySummaries.map((s, i) => `Month ${i + 1}:\n${s}`).join("\n\n")
-      : "No recent monthly summaries.";
-
-    const notesTimeline = await ctx.runQuery(api.notes.recentActivityFeed, { userId: args.userId });
-    const timelineContext = notesTimeline.length > 0
-      ? notesTimeline.map(item => `[${item.date}] [${item.entityType.toUpperCase()}] ${item.entityName} (${item.workspaceName || "No Workspace"}): ${item.noteText}`).join("\n")
-      : "No raw notes recorded in the last 7 days.";
+    // Always inject if no digests exist yet (first week of usage)
+    if (!latestWeeklyDigest && !latestMonthlyDigest) {
+      injectDigests = true;
+    }
 
     let briefingContext = "";
     if (args.brief) {
@@ -673,14 +676,13 @@ export const chat = internalAction({
       
       Active Habits: ${habitsContext || "None."}
 
-      --- BEHAVIORAL PATTERNS (Observed, Not Stated) ---
-      ${behavioralProfile ? `Permanent Profile: ${behavioralProfile}` : "Not enough data yet."}
-      ${monthlySummariesContext ? `Monthly Trends: ${monthlySummariesContext}` : ""}
-      ${weeklySummariesContext ? `Weekly Themes: ${weeklySummariesContext}` : ""}
-      ${timelineContext ? `Recent Raw Notes (7 days): ${timelineContext}` : ""}
+      --- BEHAVIORAL PATTERNS (OCEAN Digest) ---
+      ${injectDigests ? `
+      ${latestMonthlyDigest ? `Monthly OCEAN Digest:\n${latestMonthlyDigest}` : "No monthly OCEAN digest yet."}
+      ${latestWeeklyDigest ? `Weekly OCEAN Digest (${latestWeeklyDigest.weekLabel}):\n${latestWeeklyDigest.digest}` : "No weekly OCEAN digest yet."}
+      ` : "Digests up to date — not re-injected."}
       
-      These are patterns distilled from the user's journals — task notes, event outcomes, habit logs. Use them to adapt your tone and suggestions.
-      The behavioral profile is a current-best-guess sketch refined monthly, not a fixed truth. Recent raw notes reflect the user's current context — they may show temporary deviations (vacation, crunch) or genuine shifts (new habits, lifestyle changes). Use both sources together. If raw notes and the profile conflict consistently across multiple sessions, the notes are more likely to reflect who the user is today. NEVER state a pattern to the user as if they told you it. If they ask "why do you always suggest X?", THEN you may cite these observations.
+      These are behavioral patterns analyzed from the user's activity using the Big 5 (OCEAN) personality framework. They reflect observed behavior — not stated preferences. The agent uses these to adapt tone and suggestions. NEVER state a pattern to the user as if they told you it. If they ask "why do you always suggest X?", THEN you may cite these observations.
 
       --- RELEVANT FACTS (Mentioned in Past Chats) ---
       ${personalityFragments ? `- ${personalityFragments}` : "No relevant facts found."}
@@ -942,18 +944,6 @@ export const chat = internalAction({
                 offsetYears: { type: SchemaType.NUMBER, description: "Offset years to look back (default 0)" },
               },
               required: ["type"],
-            },
-          },
-          {
-            name: "compileNotesPyramid",
-            description: "Compiles a weekly or monthly notes pyramid segment to distill behavioral patterns from user notes.",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                segment: { type: SchemaType.NUMBER, description: "The specific split-week segment to compile (1: days 1-7, 2: days 8-14, 3: days 15-21, 4: days 22-End). If omitted, compiles the current running segment." },
-                timezoneOffset: { type: SchemaType.NUMBER, description: "The user's local timezone offset in minutes." }
-              },
-              required: []
             },
           },
           {
@@ -1371,6 +1361,7 @@ export const chat = internalAction({
                 progress: taskArgs.progress,
                 statusHook: taskArgs.statusHook,
                 dueDate: taskArgs.dueDate ? parseLocal(taskArgs.dueDate) : undefined,
+                dueDateStr: taskArgs.dueDate ? taskArgs.dueDate.split("T")[0] : undefined,
                 resources,
                 workspaceId,
                 userId: args.userId
@@ -1391,7 +1382,10 @@ export const chat = internalAction({
               if (taskArgs.notes) taskUpdates.notes = taskArgs.notes;
               if (taskArgs.progress !== undefined) taskUpdates.progress = taskArgs.progress;
               if (taskArgs.statusHook !== undefined) taskUpdates.statusHook = taskArgs.statusHook;
-              if (taskArgs.dueDate) taskUpdates.dueDate = parseLocal(taskArgs.dueDate);
+              if (taskArgs.dueDate) {
+                taskUpdates.dueDate = parseLocal(taskArgs.dueDate);
+                taskUpdates.dueDateStr = taskArgs.dueDate.split("T")[0];
+              }
               if (taskArgs.resources) {
                 taskUpdates.resources = taskArgs.resources.map((r) => ({
                   type: r.type as "url" | "document",
@@ -1485,6 +1479,7 @@ export const chat = internalAction({
                 interval: eventArgs.recurrence.interval,
                 daysOfWeek: eventArgs.recurrence.daysOfWeek,
                 until: eventArgs.recurrence.until ? parseLocal(eventArgs.recurrence.until) : undefined,
+                untilStr: eventArgs.recurrence.until ? eventArgs.recurrence.until.split("T")[0] : undefined,
               } : undefined;
 
               const eventResources = eventArgs.resources?.map((r) => ({
@@ -1532,6 +1527,7 @@ export const chat = internalAction({
                   interval: eventArgs.recurrence.interval,
                   daysOfWeek: eventArgs.recurrence.daysOfWeek,
                   until: eventArgs.recurrence.until ? parseLocal(eventArgs.recurrence.until) : undefined,
+                  untilStr: eventArgs.recurrence.until ? eventArgs.recurrence.until.split("T")[0] : undefined,
                 };
               }
               if (eventArgs.resources) {
@@ -1590,6 +1586,7 @@ export const chat = internalAction({
             await ctx.runMutation(api.events.updateOccurrence, {
               seriesId: occArgs.seriesId as Id<"events">,
               userId: args.userId,
+              timezone: args.timezone,
               originalStartTime: parseLocal(occArgs.originalStartTime),
               startTime: occArgs.startTime ? parseLocal(occArgs.startTime) : undefined,
               endTime: occArgs.endTime ? parseLocal(occArgs.endTime) : undefined,
@@ -1754,11 +1751,14 @@ export const chat = internalAction({
               const summaryText = summaryRes.response.text();
               reflectionSummaryText = summaryText;
 
+              const tz = args.timezone || "UTC";
               const reflectionId = await ctx.runMutation(api.reflections.saveReflection, {
                 workspaceId,
                 type,
                 periodStart: startMs,
+                periodStartStr: new Date(startMs).toLocaleDateString("en-CA", { timeZone: tz }),
                 periodEnd: endMs,
+                periodEndStr: new Date(endMs).toLocaleDateString("en-CA", { timeZone: tz }),
                 periodLabel,
                 summary: summaryText,
                 stats: {
@@ -1793,38 +1793,6 @@ export const chat = internalAction({
                     streakDays: stats.streakDays,
                   }
                 }
-              });
-            }
-          } else if (call.name === "compileNotesPyramid") {
-            const compileArgs = call.args as {
-              segment?: number;
-              timezoneOffset?: number;
-            };
-            try {
-              const res = await ctx.runAction(api.notes_action.compileNotesPyramidSegment, {
-                userId: args.userId,
-                segment: compileArgs.segment,
-                timezoneOffset: compileArgs.timezoneOffset ?? args.timezoneOffset,
-              });
-              executedActionSummaries.push({
-                name: "compileNotesPyramid",
-                summary: `Successfully compiled notes pyramid segment. Weekly summary: "${res.weeklySummary}"`
-              });
-              activeToolCalls.push({
-                name: "compileNotesPyramid",
-                args: call.args as Record<string, unknown>,
-                result: { status: "success", summary: res.weeklySummary }
-              });
-            } catch (err: any) {
-              console.error("Failed to compile notes pyramid:", err);
-              executedActionSummaries.push({
-                name: "compileNotesPyramid",
-                summary: `Failed to compile notes pyramid: ${err.message}`
-              });
-              activeToolCalls.push({
-                name: "compileNotesPyramid",
-                args: call.args as Record<string, unknown>,
-                result: { status: "error", error: err.message }
               });
             }
           } else if (call.name === "searchHistoricalEntities") {
@@ -2125,6 +2093,7 @@ export const chat = internalAction({
               dateString,
               status,
               notes,
+              timezone: args.timezone,
               userId: args.userId,
             });
             const habit = await ctx.runQuery(api.habits.get, {
@@ -2384,10 +2353,12 @@ export const generateCronReflection = internalAction({
   args: {
     userId: v.id("users"),
     sessionId: v.id("chatSessions"),
-    type: v.union(v.literal("weekly"), v.literal("monthly")),
+    type: v.union(v.literal("weekly"), v.literal("monthly"), v.literal("yearly")),
+    timezone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
+    const tz = args.timezone || "UTC";
     const customConfigs = (profile?.preferences as any)?.customConfigs || {};
     const apiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
 
@@ -2463,7 +2434,9 @@ export const generateCronReflection = internalAction({
     const reflectionId = await ctx.runMutation(api.reflections.saveReflection, {
       type: args.type,
       periodStart: startMs,
+      periodStartStr: new Date(startMs).toLocaleDateString("en-CA", { timeZone: tz }),
       periodEnd: endMs,
+      periodEndStr: new Date(endMs).toLocaleDateString("en-CA", { timeZone: tz }),
       periodLabel,
       summary: summaryText,
       stats: {
@@ -2520,4 +2493,222 @@ export const generateCronReflection = internalAction({
       ]
     });
   }
+});
+
+/**
+ * Monday weekly cron: generates OCEAN digest from shared weekly data.
+ * Called by ocean.cronTriggerWeekly after compileWeeklyData.
+ */
+export const generateWeeklyOCEAN = internalAction({
+  args: {
+    userId: v.id("users"),
+    timezone: v.string(),
+    timezoneOffset: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
+
+    const now = new Date();
+    const localNow = new Date(now.getTime() - args.timezoneOffset * 60000);
+    const dayOfWeek = localNow.getUTCDay(); // 0=Sun, 1=Mon
+
+    // Calculate Monday of this week (most recent Monday before or on today)
+    const daysSinceMonday = (dayOfWeek + 6) % 7; // Mon=0, Sun=6
+    const localMonday = new Date(Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate() - daysSinceMonday));
+    const weekStartTime = localMonday.getTime() - args.timezoneOffset * 60000;
+    const weekEndTime = weekStartTime + 7 * 24 * 60 * 60 * 1000;
+
+    // Previous week (days 1-7 being analyzed)
+    const prevWeekStart = weekStartTime - 7 * 24 * 60 * 60 * 1000;
+    const prevWeekEnd = weekStartTime;
+
+    // Get shared data payload
+    const weeklyData = await ctx.runQuery(internal.reflections.compileWeeklyData, {
+      userId: args.userId,
+      periodStart: prevWeekStart,
+      periodEnd: prevWeekEnd,
+    });
+
+    if (!weeklyData) return;
+
+    // Get previous monthly digest for baseline comparison
+    const profileDoc = await ctx.runQuery(internal.ocean_queries.getUserProfileForOCEAN, {
+      userId: args.userId,
+    });
+
+    const monthlyDigest = (profileDoc?.monthlyNotesSummaries?.[0]) || "No monthly baseline yet.";
+
+    // Build week label
+    const weekLabelDate = new Date(localMonday);
+    const weekLabel = `Week of ${weekLabelDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+
+    // Generate OCEAN digest
+    const apiKey = (profile?.preferences as any)?.customConfigs?.gemini?.apiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) return;
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: getTaskModel(profile, "reflection") });
+
+    const prompt = `You are a behavioral analyst using the Big 5 (OCEAN) personality framework. Analyze the user's week and produce a structured OCEAN digest.
+
+## OCEAN Scoring Framework
+For each trait, provide a percentile band and bullet-pointed evidence:
+- Very Low: 0–10th | Low: 11–24th | Low-Average: 25–39th | True Average: 40–60th
+- High-Average: 61–75th | High: 76–89th | Very High: 90–100th
+
+## Traits
+- **O — Openness**: Curiosity, new approaches, imagination
+- **C — Conscientiousness**: Organization, goal-directed behavior, habit consistency
+- **E — Extraversion**: Energy sourcing, social vs solo preference
+- **A — Agreeableness**: Prosocial behavior, empathy-driven choices
+- **N — Neuroticism**: Stress response, emotional stability
+
+## Previous Month Baseline
+${monthlyDigest}
+
+## This Week's Data
+${weeklyData.rawDetails}
+
+## Instructions
+1. **Retrograde Analysis** (day 7 → 1): Read the week backwards. If behavior dipped at the end, trace back to find the cause (e.g., a late-night work crunch on Thursday explains Friday's low energy). Attribute WHY behavior happened.
+2. **Anterograde Analysis** (day 1 → 7): Read forwards. Detect trajectory — is each trait rising, falling, or stable? Note momentum (e.g., "Conscientiousness is in a growth phase, rising from 3→5→6→7").
+3. **Score each trait** with percentile band + evidence bullets.
+4. **No-Bias Rule**: If data is insufficient for a trait, say "Insufficient behavioral evidence to update [Trait] due to low logging activity" — do NOT penalize inactivity.
+5. Compare against the monthly baseline: is this week consistent with the established pattern, or is it a deviation?
+
+## Output Format
+Week of [date] — OCEAN Digest:
+
+- **Openness**: [Band] ([percentile]) — [evidence bullet points]
+- **Conscientiousness**: [Band] ([percentile]) — [evidence]
+  - Retrograde: [why the end-of-week pattern happened]
+  - Anterograde: [trajectory description]
+- **Extraversion**: [Band] ([percentile]) — [evidence]
+- **Agreeableness**: [Band] ([percentile]) — [evidence]
+- **Neuroticism**: [Band] ([percentile]) — [evidence]
+
+**Baseline Comparison**: [How this week compares to the monthly baseline]
+**Summary**: [2-3 sentence overall assessment]`;
+
+    const result = await model.generateContent(prompt);
+    const digest = result.response.text().trim();
+
+    // Compute weekStartStr for the previous week's Monday
+    const weekStartStr = new Date(prevWeekStart).toLocaleDateString("en-CA", { timeZone: args.timezone });
+
+    // Check if digest already exists for this week (idempotent)
+    const existing = await ctx.runQuery(internal.ocean_queries.getWeeklyDigestByWeek, {
+      userId: args.userId,
+      weekStart: prevWeekStart,
+    });
+    if (existing) return;
+
+    // Save to weeklyDigests
+    await ctx.runMutation(internal.ocean_queries.insertWeeklyDigest, {
+      userId: args.userId,
+      weekStart: prevWeekStart,
+      weekStartStr,
+      weekLabel,
+      digest,
+    });
+  },
+});
+
+/**
+ * Monthly cron: refine profile + archive weeklies.
+ * Called by ocean.cronTriggerMonthly.
+ */
+export const generateMonthlyOCEAN = internalAction({
+  args: {
+    userId: v.id("users"),
+    timezone: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
+    const tz = args.timezone || "UTC";
+
+    // Get the 4 most recent weekly digests
+    const weeklies = await ctx.runQuery(internal.ocean_queries.getWeeklyDigestsForMonthly, {
+      userId: args.userId,
+    });
+
+    if (weeklies.length === 0) return;
+
+    // Get existing profile for baseline comparison
+    const profileDoc = await ctx.runQuery(internal.ocean_queries.getUserProfileForOCEAN, {
+      userId: args.userId,
+    });
+
+    const existingProfile = profileDoc?.behavioralProfile || "No existing behavioral profile.";
+
+    // Generate monthly OCEAN summary
+    const apiKey = (profile?.preferences as any)?.customConfigs?.gemini?.apiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) return;
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: getTaskModel(profile, "reflection") });
+
+    const weeklyDigests = weeklies.map((w: any) => w.digest).reverse();
+    const weekLabels = weeklies.map((w: any) => w.weekLabel).reverse();
+
+    const prompt = `You are a behavioral analyst using the Big 5 (OCEAN) personality framework. Synthesize 4 weekly OCEAN digests into a monthly behavioral profile.
+
+## Existing Behavioral Profile
+${existingProfile}
+
+## Weekly OCEAN Digests (chronological order)
+${weeklyDigests.map((d: string, i: number) => `--- ${weekLabels[i]} ---\n${d}`).join("\n\n")}
+
+## Instructions
+1. **Cross-week pattern analysis**: Identify which OCEAN traits are consistent across all 4 weeks vs which are volatile. A trait that scores similarly in 3+ out of 4 weeks is a stable pattern.
+2. **Trait evolution**: Note if any trait shows a clear trend across the month (e.g., Neuroticism declining from High to High-Average = positive trajectory).
+3. **Refine the behavioral profile**: Compare the 4-week pattern against the existing profile. If traits are consistent, keep them. If a trait has shifted consistently for 4 weeks, update it. If only 1-2 weeks show deviation, it's situational — keep the old trait.
+4. **No-Bias Rule**: Inactivity across weeks does NOT lower scores. Only sustained behavioral change updates the profile.
+
+## Output Format
+Monthly OCEAN Profile — [Month Year]:
+
+- **Openness**: [Band] ([percentile]) — [stable/volatile] — [evidence from 4 weeks]
+- **Conscientiousness**: [Band] ([percentile]) — [stable/volatile] — [evidence]
+- **Extraversion**: [Band] ([percentile]) — [stable/volatile] — [evidence]
+- **Agreeableness**: [Band] ([percentile]) — [stable/volatile] — [evidence]
+- **Neuroticism**: [Band] ([percentile]) — [stable/volatile] — [evidence]
+
+**Profile Changes**: [What changed from the existing profile, or "No changes — consistent with established pattern"]
+**Summary**: [3-4 sentence overall monthly assessment]`;
+
+    const result = await model.generateContent(prompt);
+    const monthlyDigest = result.response.text().trim();
+
+    // 1. Archive the 4 weekly digests
+    for (const weekly of weeklies) {
+      await ctx.runMutation(internal.ocean_queries.insertArchivedSummary, {
+        userId: args.userId,
+        type: "weekly",
+        originalDate: weekly.weekStart,
+        originalDateStr: weekly.weekStartStr || new Date(weekly.weekStart).toLocaleDateString("en-CA", { timeZone: tz }),
+        content: weekly.digest,
+      });
+      await ctx.runMutation(internal.ocean_queries.deleteWeeklyDigest, {
+        id: weekly._id,
+      });
+    }
+
+    // 2. Archive previous monthly digest if exists
+    if (profileDoc?.monthlyNotesSummaries?.[0]) {
+      await ctx.runMutation(internal.ocean_queries.insertArchivedSummary, {
+        userId: args.userId,
+        type: "monthly",
+        originalDate: Date.now(),
+        originalDateStr: new Date().toLocaleDateString("en-CA", { timeZone: tz }),
+        content: profileDoc.monthlyNotesSummaries[0],
+      });
+    }
+
+    // 3. Update profile with new monthly digest and behavioral profile
+    await ctx.runMutation(internal.ocean_queries.updateUserProfileOCEAN, {
+      userId: args.userId,
+      monthlyDigest,
+    });
+  },
 });
