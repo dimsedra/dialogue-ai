@@ -36,9 +36,10 @@ Productivity isn't just about crossing items off a list; it is about recognizing
 
 ### Supporting Workspace Mechanics (Secondary Layer)
 
+* **Custom Agent Personas**: Mold your AI's personality, behavior, and instructions. Create specific agent profiles (e.g. Tech Lead, Fitness Coach, Life Mentor) with custom system prompt instructions and descriptive summaries managed in a mobile-optimized cards gallery.
 * **Multimodal Ingestion & Web Research**: Drag PDFs, images, or briefs directly into your chat. The agent reads the content and launches real-time web searches to fact-check, synthesize, and execute schedule updates in a single turn.
 * **Context-Aware Smart Notifications**: No more dismissible, timezone-broken reminders. Dialogue fires browser notifications packed with active workspace context, giving you instant shortcuts to the exact resources and designs you need.
-* **Context-Isolated Workspaces & Universal Center**: Silo chats, tasks, and memory context into dedicated project workspaces (e.g. "Work", "Sovereign"). Then, step back into the **Universal Space**—a dashboard that aggregates today's tasks, events, and journal summaries across all workspaces in a single view. The Universal Space runs its own neutral agent capable of cross-workspace queries ("what's my day look like?"), inline actions (mark done, reschedule, pin), and weekly reflections that draw from your entire activity, not just one silo. Full isolation when you need focus. Full visibility when you need the big picture.
+* **Context-Isolated Workspaces & Universal Center**: Silo chats, tasks, and memory context into dedicated project workspaces (e.g. "Work", "Sovereign"). Each workspace can be configured with its own default **Agent Persona** that automatically loads for new sessions in that context. Step back into the **Universal Space**—a dashboard that aggregates today's tasks, events, and journal summaries across all workspaces in a single view. The Universal Space runs its own neutral agent capable of cross-workspace queries ("what's my day look like?"), inline actions (mark done, reschedule, pin), and weekly reflections that draw from your entire activity, not just one silo. Full isolation when you need focus. Full visibility when you need the big picture.
 * **Task & Event Resource Tray**: A clean visual panel that aggregates external links, Figma specs, and PDF documents attached directly to your chronological logs, putting your active references a single click away.
 
 ---
@@ -185,7 +186,7 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 
 * **`users`**: Manages authenticated profiles.
 * **`userProfile`**: Stores user-specific settings, including `preferences` (selected AI provider, search engine configurations, memory sensitivity sliders) and profile bio summaries.
-* **`workspaces`**: Silos containing a workspace name, branding color, context details, and user ownership mapping.
+* **`workspaces`**: Silos containing a workspace name, branding color, default agent persona reference (`defaultAgentPersonaId`), context details, and user ownership mapping.
 * **`chatSessions`**: Conversation containers containing title, pinning status, workspace mapping, and creation stamps.
 * **`messages`**: Multi-turn chat message data. Stores text, author, attachments, extracted file contents, and tool call logs.
 * **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger incorporating chronological links and document storage references), progress percentage (0-100), `statusHook`, and time stamps (`dueDate`, `completedAt`).
