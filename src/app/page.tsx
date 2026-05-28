@@ -6,7 +6,6 @@ import { TaskPanel } from "@/components/TaskPanel";
 import { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { Authenticated, Unauthenticated, useQuery } from "convex/react";
-import { Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignInForm } from "@/components/auth/SignInForm";
 import { Scope } from "@/components/chat/types";
@@ -28,20 +27,9 @@ export default function Home() {
   const [isLargeViewport, setIsLargeViewport] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [initialHeight, setInitialHeight] = useState<number | null>(null);
-  const [showSplash, setShowSplash] = useState(true);
   const [chatInputOffset, setChatInputOffset] = useState(0);
 
   const workspaces = useQuery(api.workspaces.list, {});
-
-  // Minimum Loading Time for the Global Premium Splash Screen
-  useEffect(() => {
-    if (workspaces !== undefined) {
-      const timer = setTimeout(() => {
-        setShowSplash(false);
-      }, 1500); // 1.5s minimum splash time to "savor" the animation
-      return () => clearTimeout(timer);
-    }
-  }, [workspaces]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -228,29 +216,6 @@ export default function Home() {
               />
             </div>
           </motion.div>
-          {/* Global Loading Splash Screen */}
-          <AnimatePresence>
-            {showSplash && (
-              <motion.div 
-                key="global-splash"
-                initial={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5, ease: "easeInOut" }}
-                className="fixed inset-0 z-[10000] bg-[#0f0e0c] flex flex-col items-center justify-center space-y-6"
-              >
-                <div className="relative">
-                  <div className="absolute inset-0 bg-[#d4a373]/20 blur-3xl rounded-full animate-pulse" />
-                  <Bot className="w-12 h-12 text-[#d4a373] animate-bounce relative z-10" />
-                </div>
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-1 w-32 bg-[#1a1814] rounded-full overflow-hidden">
-                    <div className="h-full bg-[#d4a373] w-1/2 animate-[loading_1.5s_infinite_ease-in-out]" />
-                  </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#d4a373]/40">Initialising</p>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </main>
       </Authenticated>
     </>
