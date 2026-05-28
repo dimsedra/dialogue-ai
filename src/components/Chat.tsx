@@ -52,6 +52,8 @@ export function Chat({
 }) {
   const workspaces = useQuery(api.workspaces.list, {});
   const sessions = useQuery(api.messages.listSessions, { workspaceId: activeWorkspaceId });
+  // All sessions across every workspace — used only by the Dashboard landing view
+  const allSessions = useQuery(api.messages.listSessions, { allWorkspaces: true });
   const messages = useQuery(api.messages.list, activeSessionId ? { sessionId: activeSessionId } : "skip");
   const profile = useQuery(api.ai.getProfile, {});
   const personas = useQuery(api.personas.list);
@@ -770,7 +772,7 @@ export function Chat({
 
   // When selecting a session from the Dashboard, switch to its workspace if needed
   const handleDashboardSelectSession = useCallback((id: Id<"chatSessions">) => {
-    const session = sessions?.find((s: any) => s._id === id);
+    const session = allSessions?.find((s: any) => s._id === id);
     if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
       setActiveWorkspaceId(session.workspaceId);
     }
@@ -778,7 +780,7 @@ export function Chat({
     if (!isLargeViewport) {
       setShowHistory(false);
     }
-  }, [sessions, activeWorkspaceId, setActiveWorkspaceId, setActiveSessionId, isLargeViewport, setShowHistory]);
+  }, [allSessions, activeWorkspaceId, setActiveWorkspaceId, setActiveSessionId, isLargeViewport, setShowHistory]);
 
   return (
     <div className="flex-1 flex overflow-hidden h-full relative">
@@ -818,7 +820,7 @@ export function Chat({
         {!activeWorkspaceId && !activeSessionId ? (
           <Dashboard
             workspaces={workspaces}
-            sessions={sessions}
+            sessions={allSessions}
             profile={profile}
             isLargeViewport={isLargeViewport}
             onNewChat={handleNewChat}

@@ -23,7 +23,10 @@ export const list = query({
 });
 
 export const listSessions = query({
-  args: { workspaceId: v.optional(v.id("workspaces")) },
+  args: { 
+    workspaceId: v.optional(v.id("workspaces")),
+    allWorkspaces: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const userId = await auth.getUserId(ctx);
     if (!userId) return [];
@@ -39,6 +42,17 @@ export const listSessions = query({
         .order("desc")
         .collect();
     }
+
+    // allWorkspaces=true: return every session (used by Dashboard landing view)
+    if (args.allWorkspaces) {
+      return await ctx.db
+        .query("chatSessions")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .order("desc")
+        .collect();
+    }
+
+    // Default (sidebar dashboard view): only workspace-agnostic sessions
     return await ctx.db
       .query("chatSessions")
       .withIndex("by_user", (q) => q.eq("userId", userId))

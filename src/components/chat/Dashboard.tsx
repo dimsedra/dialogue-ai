@@ -70,7 +70,7 @@ export function Dashboard({
   const recentSessions = sessions
     ?.filter(s => !s.pinned)
     .sort((a, b) => (b.lastActivity || b.createdAt) - (a.lastActivity || a.createdAt))
-    .slice(0, 4) || [];
+    .slice(0, 1) || [];
 
   const timeOfDay = now.getHours() < 12 ? "morning" : now.getHours() < 18 ? "afternoon" : "evening";
   const userName = profile?.name || "there";
