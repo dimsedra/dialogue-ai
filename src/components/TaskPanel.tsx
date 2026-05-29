@@ -210,6 +210,7 @@ export function TaskPanel({
     dueDate?: number;
     workspaceId?: Id<"workspaces"> | null;
     resources?: any[];
+    reminderOffset: number | null;
   }) => {
     await createTask(updates);
     setIsCreateTaskOpen(false);
@@ -244,6 +245,7 @@ export function TaskPanel({
       workspaceId?: Id<"workspaces"> | null;
       resources?: any[];
       overwriteResources?: boolean;
+      reminderOffset?: number | null;
     }
   ) => {
     await updateTask({ id, ...updates });

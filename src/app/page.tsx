@@ -9,8 +9,10 @@ import { Authenticated, Unauthenticated, useQuery } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignInForm } from "@/components/auth/SignInForm";
 import { Scope } from "@/components/chat/types";
+import { usePushSync } from "@/hooks/usePushSync";
 
 export default function Home() {
+  usePushSync();
   const [activeSessionId, setActiveSessionId] = useState<Id<"chatSessions"> | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<Id<"workspaces"> | undefined>(undefined);
   const [activeScope, setActiveScope] = useState<Scope | null>(null);

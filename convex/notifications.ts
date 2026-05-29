@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
 import { auth } from "./auth";
+import { internal } from "./_generated/api";
 
 /**
  * Fetch unread notifications for the active user.
@@ -69,6 +70,7 @@ export const sendScheduledNotification = internalMutation({
     type: v.union(
       v.literal("event_remind"),
       v.literal("habit_remind"),
+      v.literal("task_remind"),
       v.literal("system")
     ),
     actionUrl: v.optional(v.string()),
@@ -82,6 +84,13 @@ export const sendScheduledNotification = internalMutation({
       read: false,
       actionUrl: args.actionUrl,
       createdAt: Date.now(),
+    });
+
+    await ctx.scheduler.runAfter(0, internal.push_actions.sendPushNotification, {
+      userId: args.userId,
+      title: args.title,
+      message: args.message,
+      actionUrl: args.actionUrl,
     });
   },
 });
@@ -120,14 +129,25 @@ export const triggerDailyHabitReminders = internalMutation({
       }
 
       if (pendingHabits.length > 0) {
+        const title = "Log Your Habits";
+        const message = `You still have pending habits today: ${pendingHabits.join(", ")}.`;
+        const actionUrl = "/?view=habits";
+
         await ctx.db.insert("notifications", {
           userId: user._id,
-          title: "Log Your Habits",
-          message: `You still have pending habits today: ${pendingHabits.join(", ")}.`,
+          title,
+          message,
           type: "habit_remind",
           read: false,
-          actionUrl: "/?view=habits",
+          actionUrl,
           createdAt: Date.now(),
+        });
+
+        await ctx.scheduler.runAfter(0, internal.push_actions.sendPushNotification, {
+          userId: user._id,
+          title,
+          message,
+          actionUrl,
         });
       }
     }

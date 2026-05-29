@@ -3,7 +3,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useRef, useEffect } from "react";
-import { Bell, Check, Calendar, CheckSquare, BellOff, Info } from "lucide-react";
+import { Bell, Check, Calendar, CheckSquare, BellOff, Info, ListTodo } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 
@@ -58,6 +58,8 @@ export function NotificationBell() {
         return <Calendar className="w-4 h-4 text-[#d4a373] shrink-0" />;
       case "habit_remind":
         return <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />;
+      case "task_remind":
+        return <ListTodo className="w-4 h-4 text-amber-400 shrink-0" />;
       default:
         return <Info className="w-4 h-4 text-blue-400 shrink-0" />;
     }

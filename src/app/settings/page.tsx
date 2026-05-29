@@ -20,12 +20,24 @@ import {
   Edit3,
   X,
   Eye,
-  EyeOff
+  EyeOff,
+  Bell
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthActions } from "@convex-dev/auth/react";
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 export default function SettingsPage() {
   const profile = useQuery(api.ai.getProfile, {});
@@ -35,6 +47,9 @@ export default function SettingsPage() {
   const deleteMemory = useMutation(api.ai.deleteMemory);
   const addMemory = useMutation(api.ai.saveMemory);
   const updatePreferences = useMutation(api.ai.updatePreferences);
+  const addSubscription = useMutation(api.push.addSubscription);
+  const removeSubscription = useMutation(api.push.removeSubscription);
+  const publicKey = useQuery(api.push.getPublicKey, {});
   const { signOut } = useAuthActions();
 
   useEffect(() => {
@@ -62,6 +77,7 @@ export default function SettingsPage() {
   const [editingMemoryId, setEditingMemoryId] = useState<Id<"memories"> | null>(null);
   const [editMemoryText, setEditMemoryText] = useState("");
   const [newMemoryText, setNewMemoryText] = useState("");
+  const [pushEnabled, setPushEnabled] = useState(false);
 
   // Sync state during render when profile loads/changes
   if (profile && profile._id !== prevProfileId) {
@@ -80,17 +96,86 @@ export default function SettingsPage() {
     if (profile.preferences?.searchProvider) {
       setSearchProvider(profile.preferences.searchProvider as "tavily" | "serper");
     }
+    if (profile.preferences?.pushEnabled !== undefined) {
+      setPushEnabled(!!profile.preferences.pushEnabled);
+    }
   }
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
     try {
-      await updateProfile({ name, bio });
+      await updateProfile({ name, bio, preferences: { pushEnabled } });
       await updatePreferences({ provider, searchProvider, customConfigs, taskModels });
     } catch (error) {
       console.error(error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTogglePush = async () => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      alert("Push notifications are not supported on this browser.");
+      return;
+    }
+
+    if (!publicKey) {
+      alert("Server push key is not loaded yet. Please try again.");
+      return;
+    }
+
+    if (!pushEnabled) {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          alert("Notification permission was denied.");
+          return;
+        }
+
+        await navigator.serviceWorker.register("/sw.js");
+        const registration = await navigator.serviceWorker.ready;
+
+        const cleanKey = publicKey.replace(/^["']|["']$/g, "").trim();
+        const convertedKey = urlBase64ToUint8Array(cleanKey);
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedKey,
+        });
+
+        const subJson = subscription.toJSON();
+        if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+          await addSubscription({
+            endpoint: subJson.endpoint,
+            expirationTime: subJson.expirationTime ?? null,
+            keys: {
+              p256dh: subJson.keys.p256dh,
+              auth: subJson.keys.auth,
+            },
+          });
+        }
+
+        setPushEnabled(true);
+        await updateProfile({ preferences: { pushEnabled: true } });
+      } catch (err) {
+        console.error("Failed to enable push notifications:", err);
+        alert("Failed to subscribe to push notifications.");
+      }
+    } else {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          const subscription = await registration.pushManager.getSubscription();
+          if (subscription) {
+            await removeSubscription({ endpoint: subscription.endpoint });
+            await subscription.unsubscribe();
+          }
+        }
+        setPushEnabled(false);
+        await updateProfile({ preferences: { pushEnabled: false } });
+      } catch (err) {
+        console.error("Failed to disable push notifications:", err);
+        alert("Failed to unsubscribe from push notifications.");
+      }
     }
   };
 
@@ -217,6 +302,40 @@ export default function SettingsPage() {
                           className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all resize-none"
                         />
                       </div>
+                    </div>
+                  </section>
+
+                  <section className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg">
+                    <div className="flex items-center gap-2.5 mb-4">
+                      <Bell className="w-4 h-4 text-[#d4a373]" />
+                      <div>
+                        <h2 className="text-base font-bold text-[#f2efeb]">System Notifications</h2>
+                        <p className="text-[#a8a29e] text-[11px]">Configure alerts sent directly to your device.</p>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] flex items-center justify-between">
+                      <div className="space-y-1 pr-4">
+                        <h3 className="text-xs font-bold text-[#f2efeb]">Closed-Tab Notifications</h3>
+                        <p className="text-xs text-[#a8a29e] leading-relaxed">
+                          Receive browser push alerts for scheduled reminders even when Dialogue is not open.
+                        </p>
+                        <p className="text-[11px] text-[#a8a29e]/60 leading-normal mt-1.5 max-w-md">
+                          💡 Brave users: Ensure <span className="text-[#d4a373]">"Use Google services for push messaging"</span> is enabled in <code className="bg-[#1a1814] px-1 py-0.5 rounded text-[10px]">brave://settings/privacy</code>.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleTogglePush}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          pushEnabled ? "bg-[#d4a373]" : "bg-[#2a2723]"
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-[#0f0e0c] shadow ring-0 transition duration-200 ease-in-out ${
+                            pushEnabled ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
                     </div>
                   </section>
                 </motion.div>

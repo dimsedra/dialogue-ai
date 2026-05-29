@@ -1,6 +1,73 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { auth } from "./auth";
+import { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
+
+/**
+ * Helper to cancel any existing scheduled notification and set a new one
+ * based on the task's due date and reminder offset.
+ */
+async function rescheduleTaskReminder(
+  ctx: any,
+  taskId: Id<"tasks">,
+  dueDate: number | undefined,
+  text: string,
+  userId: Id<"users">,
+  reminderOffset: number | undefined | null
+) {
+  const task = await ctx.db.get(taskId);
+  if (!task) return;
+
+  // 1. Cancel existing job if present
+  if (task.scheduledNotificationId) {
+    try {
+      await ctx.scheduler.cancel(task.scheduledNotificationId);
+    } catch (e) {
+      console.warn("Could not cancel existing task reminder job:", e);
+    }
+  }
+
+  // 2. Clear scheduled ID if completed, has no due date, or reminderOffset is null/negative/undefined
+  if (
+    task.completed ||
+    dueDate === undefined ||
+    reminderOffset === null ||
+    reminderOffset === undefined ||
+    reminderOffset < 0
+  ) {
+    await ctx.db.patch(taskId, { scheduledNotificationId: undefined });
+    return;
+  }
+
+  // 3. Calculate target trigger time
+  const reminderTime = dueDate - reminderOffset * 60 * 1000;
+  const triggerTime = Math.max(reminderTime, Date.now());
+
+  if (triggerTime > Date.now()) {
+    const timePhrase = reminderOffset === 0
+      ? "is due now"
+      : `is due in ${reminderOffset} minute${reminderOffset === 1 ? "" : "s"}`;
+
+    const scheduledId = await ctx.scheduler.runAt(
+      triggerTime,
+      internal.notifications.sendScheduledNotification,
+      {
+        userId,
+        title: `Task Reminder: ${text}`,
+        message: `"${text}" ${timePhrase}.`,
+        type: "task_remind",
+        actionUrl: "/?view=tasks",
+      }
+    );
+
+    // Save job ID reference
+    await ctx.db.patch(taskId, { scheduledNotificationId: scheduledId });
+  } else {
+    // Due date or reminder time is in the past, clear scheduled ID
+    await ctx.db.patch(taskId, { scheduledNotificationId: undefined });
+  }
+}
 
 export const list = query({
   args: { workspaceId: v.optional(v.id("workspaces")), userId: v.optional(v.id("users")) },
@@ -48,6 +115,18 @@ export const toggleCompleted = mutation({
       completed,
       completedAt: completed ? Date.now() : undefined
     });
+
+    const updatedTask = await ctx.db.get(args.id);
+    if (updatedTask) {
+      await rescheduleTaskReminder(
+        ctx,
+        args.id,
+        updatedTask.dueDate,
+        updatedTask.text,
+        userId,
+        updatedTask.reminderOffset
+      );
+    }
   },
 });
 
@@ -62,6 +141,18 @@ export const completeTask = mutation({
     }
 
     await ctx.db.patch(args.id, { completed: true, completedAt: Date.now() });
+
+    const updatedTask = await ctx.db.get(args.id);
+    if (updatedTask) {
+      await rescheduleTaskReminder(
+        ctx,
+        args.id,
+        updatedTask.dueDate,
+        updatedTask.text,
+        userId,
+        updatedTask.reminderOffset
+      );
+    }
   },
 });
 
@@ -75,6 +166,13 @@ export const deleteTask = mutation({
       throw new Error("Unauthorized");
     }
     
+    if (task.scheduledNotificationId) {
+      try {
+        await ctx.scheduler.cancel(task.scheduledNotificationId);
+      } catch (e) {
+        console.warn("Could not cancel existing task reminder job on deletion:", e);
+      }
+    }
     await ctx.db.delete(args.id);
   },
 });
@@ -103,6 +201,7 @@ export const updateTask = mutation({
     overwriteResources: v.optional(v.boolean()),
     userId: v.optional(v.id("users")),
     timezoneOffset: v.optional(v.number()),
+    reminderOffset: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
@@ -127,13 +226,17 @@ export const updateTask = mutation({
         key !== "timezoneOffset" && 
         key !== "resources" && 
         key !== "workspaceId" && 
-        key !== "overwriteResources"
+        key !== "overwriteResources" &&
+        key !== "reminderOffset"
       ) {
         updates[key] = value;
       }
     }
     if (args.workspaceId !== undefined) {
       updates.workspaceId = args.workspaceId === null ? undefined : args.workspaceId;
+    }
+    if (args.reminderOffset !== undefined) {
+      updates.reminderOffset = args.reminderOffset === null ? undefined : args.reminderOffset;
     }
     if (args.notes !== undefined) {
       let incomingNote = args.notes.trim();
@@ -173,6 +276,18 @@ export const updateTask = mutation({
       updates.completedAt = undefined;
     }
     await ctx.db.patch(args.id, updates);
+
+    const updatedTask = await ctx.db.get(args.id);
+    if (updatedTask) {
+      await rescheduleTaskReminder(
+        ctx,
+        args.id,
+        updatedTask.dueDate,
+        updatedTask.text,
+        userId,
+        updatedTask.reminderOffset
+      );
+    }
   },
 });
 
@@ -263,6 +378,7 @@ export const batchAdd = mutation({
       dueDate: v.optional(v.number()),
       dueDateStr: v.optional(v.string()),
       notes: v.optional(v.string()),
+      reminderOffset: v.optional(v.union(v.number(), v.null())),
     })),
     workspaceId: v.optional(v.id("workspaces")),
     userId: v.optional(v.id("users")),
@@ -273,6 +389,10 @@ export const batchAdd = mutation({
 
     const ids: string[] = [];
     for (const task of args.tasks) {
+      const reminderOffset = task.reminderOffset !== undefined
+        ? (task.reminderOffset === null ? undefined : task.reminderOffset)
+        : (task.dueDate !== undefined ? 15 : undefined);
+
       const id = await ctx.db.insert("tasks", {
         userId,
         text: task.text,
@@ -284,7 +404,9 @@ export const batchAdd = mutation({
         category: task.category || "General",
         notes: task.notes,
         createdAt: Date.now(),
+        reminderOffset,
       });
+      await rescheduleTaskReminder(ctx, id, task.dueDate, task.text, userId, reminderOffset);
       ids.push(id);
     }
     return ids;
@@ -311,10 +433,15 @@ export const add = mutation({
       linkedAt: v.number(),
     }))),
     userId: v.optional(v.id("users")),
+    reminderOffset: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) throw new Error("Unauthorized");
+
+    const reminderOffset = args.reminderOffset !== undefined
+      ? (args.reminderOffset === null ? undefined : args.reminderOffset)
+      : (args.dueDate !== undefined ? 15 : undefined);
 
     const taskId = await ctx.db.insert("tasks", {
       userId,
@@ -331,7 +458,11 @@ export const add = mutation({
       resources: args.resources,
       contextUpdatedAt: (args.notes || args.progress !== undefined || args.statusHook) ? Date.now() : undefined,
       createdAt: Date.now(),
+      reminderOffset,
     });
+
+    await rescheduleTaskReminder(ctx, taskId, args.dueDate, args.text, userId, reminderOffset);
+
     return taskId;
   },
 });

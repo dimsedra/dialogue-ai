@@ -12,7 +12,8 @@ import {
   Link as LinkIcon, 
   Plus, 
   FolderKanban,
-  FileText
+  FileText,
+  Bell
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -29,6 +30,7 @@ interface CreateTaskModalProps {
       dueDate?: number;
       workspaceId?: Id<"workspaces"> | null;
       resources?: any[];
+      reminderOffset: number | null;
     }
   ) => Promise<void>;
   onClose: () => void;
@@ -45,6 +47,7 @@ export function CreateTaskModal({
   const [taskCategory, setTaskCategory] = useState("");
   const [taskDueDate, setTaskDueDate] = useState("");
   const [taskWorkspaceId, setTaskWorkspaceId] = useState<string>("");
+  const [reminderOffset, setReminderOffset] = useState<string>("15");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Resources state
@@ -73,6 +76,7 @@ export function CreateTaskModal({
     setIsSubmitting(true);
     try {
       const finalDueDate = taskDueDate ? new Date(taskDueDate).getTime() : undefined;
+      const finalReminderOffset = reminderOffset === "none" ? null : parseInt(reminderOffset, 10);
       await onSave({
         text: taskText,
         priority: taskPriority,
@@ -80,6 +84,7 @@ export function CreateTaskModal({
         dueDate: finalDueDate,
         workspaceId: taskWorkspaceId ? (taskWorkspaceId as Id<"workspaces">) : null,
         resources: resources,
+        reminderOffset: finalReminderOffset,
       });
       onClose();
     } finally {
@@ -248,30 +253,51 @@ export function CreateTaskModal({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Priority Level</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {(["low", "medium", "high"] as const).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setTaskPriority(p)}
-                    className={`py-2 rounded-xl text-[10px] font-bold capitalize transition-all border flex items-center justify-center gap-1 ${
-                      taskPriority === p
-                        ? p === "low"
-                          ? "bg-blue-500/15 border-blue-500/50 text-blue-400"
-                          : p === "medium"
-                          ? "bg-amber-500/15 border-amber-500/50 text-amber-400"
-                          : "bg-red-500/15 border-red-500/50 text-red-400"
-                        : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
-                    }`}
-                  >
-                    <Circle className={`w-2 h-2 ${
-                      p === "low" ? "text-blue-400 fill-blue-400" : p === "medium" ? "text-amber-400 fill-amber-400" : "text-red-400 fill-red-400"
-                    }`} />
-                    {p}
-                  </button>
-                ))}
+              <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Reminder Alert</label>
+              <div className="relative flex items-center">
+                <Bell className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
+                <select
+                  value={reminderOffset}
+                  onChange={(e) => setReminderOffset(e.target.value)}
+                  className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all cursor-pointer appearance-none"
+                >
+                  <option value="none">No Reminder</option>
+                  <option value="0">At due time</option>
+                  <option value="5">5 minutes before</option>
+                  <option value="15">15 minutes before</option>
+                  <option value="30">30 minutes before</option>
+                  <option value="60">1 hour before</option>
+                  <option value="120">2 hours before</option>
+                  <option value="1440">1 day before</option>
+                </select>
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Priority Level</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["low", "medium", "high"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setTaskPriority(p)}
+                  className={`py-2 rounded-xl text-[10px] font-bold capitalize transition-all border flex items-center justify-center gap-1 ${
+                    taskPriority === p
+                      ? p === "low"
+                        ? "bg-blue-500/15 border-blue-500/50 text-blue-400"
+                        : p === "medium"
+                        ? "bg-amber-500/15 border-amber-500/50 text-amber-400"
+                        : "bg-red-500/15 border-red-500/50 text-red-400"
+                      : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
+                  }`}
+                >
+                  <Circle className={`w-2 h-2 ${
+                    p === "low" ? "text-blue-400 fill-blue-400" : p === "medium" ? "text-amber-400 fill-amber-400" : "text-red-400 fill-red-400"
+                  }`} />
+                  {p}
+                </button>
+              ))}
             </div>
           </div>
 

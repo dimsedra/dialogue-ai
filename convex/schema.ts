@@ -94,6 +94,8 @@ export default defineSchema({
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
     resources: v.optional(v.array(resourceValidator)),
+    reminderOffset: v.optional(v.number()),
+    scheduledNotificationId: v.optional(v.id("_scheduled_functions")),
   }).index("by_user", ["userId"])
     .index("by_workspace", ["workspaceId"]),
 
@@ -272,6 +274,7 @@ export default defineSchema({
     type: v.union(
       v.literal("event_remind"),
       v.literal("habit_remind"),
+      v.literal("task_remind"),
       v.literal("system")
     ),
     read: v.boolean(),
@@ -280,4 +283,16 @@ export default defineSchema({
   })
     .index("by_user_unread", ["userId", "read"])
     .index("by_user_created", ["userId", "createdAt"]),
+
+  pushSubscriptions: defineTable({
+    userId: v.id("users"),
+    endpoint: v.string(),
+    expirationTime: v.optional(v.union(v.number(), v.null())),
+    createdAt: v.optional(v.number()),
+    keys: v.object({
+      p256dh: v.string(),
+      auth: v.string(),
+    }),
+  }).index("by_user", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
 });

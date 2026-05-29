@@ -29,6 +29,8 @@ import type * as ocean from "../ocean.js";
 import type * as ocean_queries from "../ocean_queries.js";
 import type * as pageSettings from "../pageSettings.js";
 import type * as personas from "../personas.js";
+import type * as push from "../push.js";
+import type * as push_actions from "../push_actions.js";
 import type * as reflections from "../reflections.js";
 import type * as seed from "../seed.js";
 import type * as tasks from "../tasks.js";
@@ -63,6 +65,8 @@ declare const fullApi: ApiFromModules<{
   ocean_queries: typeof ocean_queries;
   pageSettings: typeof pageSettings;
   personas: typeof personas;
+  push: typeof push;
+  push_actions: typeof push_actions;
   reflections: typeof reflections;
   seed: typeof seed;
   tasks: typeof tasks;
