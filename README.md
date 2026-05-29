@@ -38,7 +38,8 @@ Productivity isn't just about crossing items off a list; it is about recognizing
 
 * **Custom Agent Personas**: Mold your AI's personality, behavior, and instructions. Create specific agent profiles (e.g. Tech Lead, Fitness Coach, Life Mentor) with custom system prompt instructions and descriptive summaries managed in a mobile-optimized cards gallery.
 * **Multimodal Ingestion & Web Research**: Drag PDFs, images, or briefs directly into your chat. The agent reads the content and launches real-time web searches to fact-check, synthesize, and execute schedule updates in a single turn.
-* **Context-Aware Smart Notifications**: No more dismissible, timezone-broken reminders. Dialogue fires browser notifications packed with active workspace context, giving you instant shortcuts to the exact resources and designs you need.
+* **Closed-Tab & Context-Aware Smart Notifications**: No more timezone-broken reminders that vanish when you close the tab. Dialogue utilizes background Service Workers and native Web Push APIs to deliver scheduled alerts (tasks, events, habits) even when the browser is shut. Each notification is packed with active workspace shortcuts to jump you directly to the correct tools.
+* **Contextual Scope Pinning**: Pin specific Tasks, Events, or Dates to the chat with a single click. Pinning displays a floating badge in the chat input and injects the target's exact metadata and ledger history into the agent's active system prompt, allowing you to run relative commands ("reschedule this," "resolve this blocker") with absolute precision.
 * **Context-Isolated Workspaces & Universal Center**: Silo chats, tasks, and memory context into dedicated project workspaces (e.g. "Work", "Sovereign"). Each workspace can be configured with its own default **Agent Persona** that automatically loads for new sessions in that context. Step back into the **Universal Space**—a dashboard that aggregates today's tasks, events, and journal summaries across all workspaces in a single view. The Universal Space runs its own neutral agent capable of cross-workspace queries ("what's my day look like?"), inline actions (mark done, reschedule, pin), and weekly reflections that draw from your entire activity, not just one silo. Full isolation when you need focus. Full visibility when you need the big picture.
 * **Task & Event Resource Tray**: A clean visual panel that aggregates external links, Figma specs, and PDF documents attached directly to your chronological logs, putting your active references a single click away.
 
@@ -123,10 +124,10 @@ Dialogue is structured around three key engineering decisions designed to put yo
 * **What it is**: Hot-swapping between any standard Cloud LLM provider (such as Google Gemini, OpenAI, or Anthropic) and fully offline local models (via LM Studio, Ollama, etc.) running on your own machine.
 * **Why it matters**: You shouldn't be locked into a single AI provider or forced to pay a monthly subscription. If you need hyper-fast, cloud-based reasoning, plug in your preferred API key. If you want absolute, offline privacy for sensitive data, switch to a local model running on your computer with a single click.
 
-### 2. Server-Blind Timezone Architecture
+### 2. Timezone-Aware Server Architecture (IANA Timezone Sync)
 
-* **What it is**: Storing all temporal values in raw Unix milliseconds and parsing relative dates ("tomorrow at 3 PM") at the client edge using your browser's local timezone offset.
-* **Why it matters**: Have you ever set a reminder in an app, traveled to another city, and had all your notifications go off at the wrong hour? Dialogue runs client-blind timezone matching. Your schedule moves with you, automatically calibrating to your local clock, resolving UTC timezone drift permanently.
+* **What it is**: Synchronizing the user's current browser IANA timezone (e.g., `America/New_York` or `Asia/Tokyo`) with active chat sessions, allowing the Convex backend to dynamically calculate offsets, local hours, and midnight boundaries.
+* **Why it matters**: Standard cloud databases calculate days based on UTC, causing daily habits to reset at the wrong time and background crons (like nightly OCEAN activity compilations) to fire in the middle of your workday depending on where you live. Dialogue runs server-side timezone calibration using `convex/timezones.ts`. Your timezone is dynamically synced from the client, ensuring server crons, timezone-locked habit logs, and scheduled push notification jobs update relative to your local clock, resolving UTC timezone drift permanently.
 
 ### 3. Human-in-the-Loop Consent Gate (Verification Protocol)
 
@@ -147,6 +148,7 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 * **`completeTask`**: Safely signs off on completed tasks, updating their status and storing their completion metadata.
 * **`deleteTask`**: Permanently deletes a task.
 * **`getTaskNotes`**: Retrieves the full, detailed chronological progress logs of a specific task only when requested, keeping the chat interface fast and lightweight.
+* **`getTaskResources`**: Retrieves the linked resources (external web links and file attachments) associated with a specific task.
 
 ### 2. Time & Calendar Scheduling
 
@@ -154,29 +156,35 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 * **`updateEvent`**: Modifies event metadata, prep instructions, location details, and summaries.
 * **`updateEventOccurrence`**: Targets and reschedules a single occurrence of a repeating event series without breaking the master recurrence pattern.
 * **`deleteEvent`**: Deletes calendar bookings.
+* **`getEventResources`**: Retrieves the linked resources (external web links and file attachments) associated with a specific calendar event.
 
 ### 3. Long-Term Memory & Search
 
 * **`saveSemanticMemory`**: Silently records persistent facts about the user (preferences, life context, technical stack, work details) on every turn, building a durable vector-indexed knowledge base that persists across sessions.
-* **`deleteMemory`**: Removes a specific fact from the semantic memory store, letting the user correct wrong memories.
-* **`updateUserBio`**: Refines and updates the user's permanent biography summary based on behavioral insights. Previous bio versions are retained for rollback via `revertBio`.
-* **`recentActivityFeed`**: Reads recent journal entries across all tasks, events, and habits with full entity and workspace context, giving the agent a cross-entity view of the user's recent activity and emotional arc.
+* **`deleteSemanticMemory`**: Removes a specific fact from the semantic memory store by its memory ID, letting the user correct wrong memories.
+* **`updateUserBio`**: Refines and updates the user's permanent biography summary based on behavioral insights. Previous bio versions are retained for rollback.
 * **`searchHistoricalEntities`**: Allows keyword and date range searches across completed tasks and past meetings, giving the agent a backward-looking historical perspective.
 * **`listWorkspaces`**: Reads all active workspaces to help users route, organize, and categorize items.
 
-### 4. Real-Time Research
+### 4. Real-Time Research & Reading
 
 * **`searchWeb`**: Executes parallel search queries across Tavily or Serper, feeding live internet search results directly into the conversation.
+* **`fetchUrl`**: Fetches and parses the text content of a user-shared URL link, letting the agent read articles or documents directly.
 
 ### 5. Periodic Reflections
 
-* **`triggerReflection`**: Aggregates workspace metrics (completed tasks, streaks, active categories) and narrative context from your chronological journals, then invokes the LLM to generate an engaging, Spotify-Wrapped style narrative summary for a given period (weekly, monthly, or yearly). Reflections pull from task notes, event outcomes, and habit logs to produce a personal narrative, not just a stats dashboard.
+* **`triggerReflection`**: Aggregates workspace metrics (completed tasks, streaks, active categories) and narrative context from your chronological journals, then invokes the LLM to generate an engaging, Spotify-Wrapped style narrative summary for a given period (weekly, monthly, or yearly).
 
 ### 6. Native Habits & Routine Tracking
 
-* **`createHabit`**: Creates a new habit routine with custom frequency structures (daily, weekly, specific days) isolated to a workspace context.
-* **`logHabit`**: Logs an execution instance (`completed` or `skipped`) for an active habit. This tool is exempt from confirmation gates, running instantly and silently when the user reports routine progress.
-* **`getHabitConsistency`**: Queries completion logs, streaks, and focus metrics for active habits across specific date ranges to generate consistency statistics.
+* **`create_habit`**: Creates a new habit routine with custom frequency structures (daily, weekly, specific days) isolated to a workspace context.
+* **`log_habit`**: Logs an execution instance (`completed` or `skipped`) for an active habit. This tool is exempt from confirmation gates, running instantly and silently when the user reports routine progress.
+* **`get_habit_consistency`**: Queries completion logs, streaks, and focus metrics for active habits across specific date ranges to generate consistency statistics.
+
+### 7. System Notifications & Custom Reminders
+
+* **`list_unread_notifications`**: Retrieves a list of unread notifications, reminders, or system alerts for the active user.
+* **`create_custom_reminder`**: Schedules a custom reminder message to trigger as a system notification at a specific future date and time.
 
 ---
 
@@ -188,13 +196,14 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 * **`userProfile`**: Stores user-specific settings, including `preferences` (selected AI provider, search engine configurations, memory sensitivity sliders) and profile bio summaries.
 * **`workspaces`**: Silos containing a workspace name, branding color, default agent persona reference (`defaultAgentPersonaId`), context details, and user ownership mapping.
 * **`chatSessions`**: Conversation containers containing title, pinning status, workspace mapping, and creation stamps.
-* **`messages`**: Multi-turn chat message data. Stores text, author, attachments, extracted file contents, and tool call logs.
-* **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger incorporating chronological links and document storage references), progress percentage (0-100), `statusHook`, and time stamps (`dueDate`, `completedAt`).
-* **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema) and chronological notes ledger.
+* **`messages`**: Multi-turn chat message data. Stores text, author, attachments, extracted file contents, tool call logs, and active `scope` references.
+* **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger incorporating chronological links and document storage references), progress percentage (0-100), `statusHook`, time stamps (`dueDate`, `completedAt`), and background notification tracking details (`reminderOffset`, `scheduledNotificationId`).
+* **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema), chronological notes ledger, and background notification tracking details (`reminderOffset`, `scheduledNotificationId`).
 * **`memories`**: Vector-indexed fact storage with automatic deduplication, time-decay weighting, and near-duplicate detection. Stores factual knowledge about the user (preferences, life context, tech stack).
 * **`reflections`**: Periodic summary logs containing the synthesized weekly, monthly, and yearly summaries, compiled focus statistics, behavioral observations, and optional user feedback comments.
 * **`habits`**: Habit definitions including name, workspace configuration mapping, target completion metrics, and cached streak stats.
 * **`habitLogs`**: Timezone-adjusted completion logs, recording exact timestamps, skipped/completed states, and contextual progress notes.
+* **`pushSubscriptions`**: Browser Web Push subscription registration endpoints and cryptographic keys (`p256dh`, `auth`) mapped to users for closed-tab background alerts.
 
 ---
 
@@ -207,7 +216,7 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 | **Styling** | Tailwind CSS v4 |
 | **Animations** | Framer Motion (Glassmorphic cards, slide sheets) |
 | **AI Providers** | Any Cloud LLM (Gemini, OpenAI, Anthropic, etc.) & Local LLM (LM Studio, Ollama, etc.) |
-| **Integrations** | Tavily / Serper (Web Research), Mammoth (Docx Extraction) |
+| **Integrations** | Tavily / Serper (Web Research), Mammoth (Docx Extraction), Web Push (Closed-Tab Encryption) |
 | **Auth** | Convex Auth (`@convex-dev/auth` for sovereign multi-device auth) |
 
 ---
@@ -247,6 +256,11 @@ LOCAL_LLM_BASE_URL=http://localhost:1234/v1
 # Web Search Integration (Optional)
 TAVILY_API_KEY=your_tavily_api_key
 SERPER_API_KEY=your_serper_api_key
+
+# Closed-Tab Web Push Notifications (Optional - VAPID keys)
+VAPID_PUBLIC_KEY=your_vapid_public_key
+VAPID_PRIVATE_KEY=your_vapid_private_key
+VAPID_CONTACT_EMAIL=mailto:admin@yourdomain.com
 ```
 
 ### 3. Running Locally
