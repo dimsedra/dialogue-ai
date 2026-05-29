@@ -6,14 +6,15 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { SignInForm } from "@/components/auth/SignInForm";
 
 export default function WorkspaceSettingsPage() {
   const params = useParams();
-  const workspaceId = params.id as Id<"workspaces">;
+  const router = useRouter();
+  const workspaceId = params.id as string;
 
   const workspace = useQuery(api.workspaces.get, { id: workspaceId });
   const personas = useQuery(api.personas.list);
@@ -22,8 +23,21 @@ export default function WorkspaceSettingsPage() {
   const [defaultAgentPersonaId, setDefaultAgentPersonaId] = useState<Id<"agentPersonas"> | "default_dialogue">("default_dialogue");
   const [workspaceColor, setWorkspaceColor] = useState("#d4a373");
   const [isSaving, setIsSaving] = useState(false);
-  const [prevId, setPrevId] = useState<Id<"workspaces"> | null>(null);
+  const [prevId, setPrevId] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    const views = ["calendar", "tasks", "events", "habits"];
+    if (views.includes(workspaceId)) {
+      router.replace(`/?view=${workspaceId}`);
+      return;
+    }
+
+    if (workspace === null) {
+      router.replace("/");
+    }
+  }, [workspaceId, workspace, router]);
 
   useEffect(() => {
     document.documentElement.classList.add("allow-scroll");
@@ -40,13 +54,19 @@ export default function WorkspaceSettingsPage() {
     setWorkspaceColor(workspace.color || "#d4a373");
   }
 
+  const isSpecialView = typeof workspaceId === "string" && ["calendar", "tasks", "events", "habits"].includes(workspaceId);
+
+  if (isSpecialView || workspace === null) {
+    return null;
+  }
+
   const currentPersona = personas?.find(p => p._id === defaultAgentPersonaId) || personas?.find(p => p.isDefault);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
       await updateSettings({
-        id: workspaceId,
+        id: workspaceId as Id<"workspaces">,
         color: workspaceColor,
         defaultAgentPersonaId: defaultAgentPersonaId === "default_dialogue" ? null : defaultAgentPersonaId,
       });

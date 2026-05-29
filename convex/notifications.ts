@@ -126,7 +126,7 @@ export const triggerDailyHabitReminders = internalMutation({
           message: `You still have pending habits today: ${pendingHabits.join(", ")}.`,
           type: "habit_remind",
           read: false,
-          actionUrl: "/workspace",
+          actionUrl: "/?view=habits",
           createdAt: Date.now(),
         });
       }

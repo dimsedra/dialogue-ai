@@ -7,6 +7,16 @@ import { Bell, Check, Calendar, CheckSquare, BellOff, Info } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 
+export const rewriteActionUrl = (url?: string) => {
+  if (!url) return undefined;
+  if (url === "/workspace/calendar") return "/?view=calendar";
+  if (url === "/workspace/tasks") return "/?view=tasks";
+  if (url === "/workspace/events") return "/?view=events";
+  if (url === "/workspace/habits") return "/?view=habits";
+  if (url === "/workspace") return "/";
+  return url;
+};
+
 export function NotificationBell() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -35,8 +45,9 @@ export function NotificationBell() {
   const handleItemClick = async (id: any, actionUrl?: string) => {
     await markRead({ ids: [id] });
     setIsOpen(false);
-    if (actionUrl) {
-      router.push(actionUrl);
+    const targetUrl = rewriteActionUrl(actionUrl);
+    if (targetUrl) {
+      router.push(targetUrl);
     }
   };
 

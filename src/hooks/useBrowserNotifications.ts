@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { rewriteActionUrl } from "@/components/notifications-bell";
 
 export function useBrowserNotifications() {
   const router = useRouter();
@@ -53,8 +54,9 @@ export function useBrowserNotifications() {
 
               notification.onclick = () => {
                 window.focus();
-                if (n.actionUrl) {
-                  router.push(n.actionUrl);
+                const targetUrl = rewriteActionUrl(n.actionUrl);
+                if (targetUrl) {
+                  router.push(targetUrl);
                 }
               };
             }

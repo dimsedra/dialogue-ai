@@ -37,10 +37,12 @@ export const list = query({
 });
 
 export const get = query({
-  args: { id: v.id("workspaces"), userId: v.optional(v.id("users")) },
+  args: { id: v.string(), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
-    const workspace = await ctx.db.get(args.id);
+    const workspaceId = ctx.db.normalizeId("workspaces", args.id);
+    if (!workspaceId) return null;
+    const workspace = await ctx.db.get(workspaceId);
     if (!workspace || workspace.userId !== userId) return null;
     return workspace;
   },

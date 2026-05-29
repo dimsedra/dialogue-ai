@@ -2179,7 +2179,7 @@ export const chat = internalAction({
                 title: "Reminder",
                 message: message,
                 type: "system",
-                actionUrl: "/workspace",
+                actionUrl: "/",
               }
             );
 

@@ -67,6 +67,16 @@ export function TaskPanel({
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isLargeViewport, setIsLargeViewport] = useState(true);
 
+  const currentSearch = typeof window !== "undefined" ? window.location.search : "";
+
+  useEffect(() => {
+    const params = new URLSearchParams(currentSearch);
+    const viewParam = params.get("view");
+    if (viewParam && ["tasks", "events", "calendar", "habits"].includes(viewParam)) {
+      setView(viewParam as "tasks" | "events" | "calendar" | "habits");
+    }
+  }, [currentSearch]);
+
   useEffect(() => {
     const checkViewport = () => setIsLargeViewport(window.innerWidth >= 1024);
     checkViewport();

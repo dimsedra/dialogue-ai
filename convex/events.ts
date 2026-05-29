@@ -51,7 +51,7 @@ async function rescheduleEventReminder(
         title: `Upcoming Event: ${title}`,
         message: `"${title}" ${timePhrase}.`,
         type: "event_remind",
-        actionUrl: "/workspace/calendar",
+        actionUrl: "/?view=calendar",
       }
     );
 
