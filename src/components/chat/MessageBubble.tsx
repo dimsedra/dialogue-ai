@@ -12,6 +12,10 @@ import { ToolCard } from "./ToolCard";
 
 const COLLAPSE_THRESHOLD = 3;
 
+const escapeCurrency = (text: string) => {
+  return text.replace(/(?<!\\)\$(\s*\d)/g, '\\$$$1');
+};
+
 const TOOL_BADGE_COLORS: Record<string, string> = {
   addTask: "bg-[#d4a373]", // Gold
   updateTask: "bg-orange-400", // Orange
@@ -309,7 +313,7 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
                 td: ({ children }) => <td className="px-3 py-2 text-[#a8a29e]">{children}</td>,
               }}
             >
-              {msg.text}
+              {escapeCurrency(msg.text)}
             </ReactMarkdown>
           </div>
         )}

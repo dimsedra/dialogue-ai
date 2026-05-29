@@ -225,6 +225,14 @@ export const send = mutation({
       });
     }
 
+    if (args.author === "User") {
+      await ctx.scheduler.runAfter(0, internal.ai_action.extractAndSaveMemory, {
+        sessionId: args.sessionId,
+        userId: userId!,
+        messageId,
+      });
+    }
+
     // Update session timezone from user messages
     if (args.author === "User" && args.timezone) {
       await ctx.db.patch(args.sessionId, { timezone: args.timezone });

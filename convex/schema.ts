@@ -148,6 +148,8 @@ export default defineSchema({
     createdAt: v.number(),
     seriesId: v.optional(v.id("events")),
     resources: v.optional(v.array(resourceValidator)),
+    reminderOffset: v.optional(v.number()), // custom offset in minutes (e.g. 0, 15, 30, 45, 60), null/omitted = no reminder
+    scheduledNotificationId: v.optional(v.id("_scheduled_functions")), // Convex scheduler job ID
   }).index("by_user", ["userId"])
     .index("by_workspace", ["workspaceId"])
     .index("by_series", ["seriesId"]),
@@ -262,4 +264,20 @@ export default defineSchema({
     content: v.string(),
     archivedAt: v.number(),
   }).index("by_user_type_date", ["userId", "type", "originalDate"]),
+
+  notifications: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    message: v.string(),
+    type: v.union(
+      v.literal("event_remind"),
+      v.literal("habit_remind"),
+      v.literal("system")
+    ),
+    read: v.boolean(),
+    actionUrl: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user_unread", ["userId", "read"])
+    .index("by_user_created", ["userId", "createdAt"]),
 });

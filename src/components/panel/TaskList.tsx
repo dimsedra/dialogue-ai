@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive, Paperclip, MessageSquarePlus, MoreVertical } from "lucide-react";
+import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive, Paperclip, MessageSquarePlus, Plus } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { TaskDoc } from "./types";
@@ -17,6 +17,7 @@ interface TaskListProps {
   onEditTask: (task: TaskDoc) => void;
   onDeleteTask: (id: Id<"tasks">) => void;
   onReferTask?: (task: TaskDoc) => void;
+  onCreateTask?: () => void;
 }
 
 export function TaskList({
@@ -30,24 +31,10 @@ export function TaskList({
   onEditTask,
   onDeleteTask,
   onReferTask,
+  onCreateTask,
 }: TaskListProps) {
   const [showCompleted, setShowCompleted] = useState(false);
-  const [dropdownTaskId, setDropdownTaskId] = useState<Id<"tasks"> | null>(null);
   const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!dropdownTaskId) return;
-    const handleClick = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest("[data-dropdown]")) {
-        setDropdownTaskId(null);
-      }
-    };
-    const id = setTimeout(() => document.addEventListener("mousedown", handleClick), 0);
-    return () => {
-      clearTimeout(id);
-      document.removeEventListener("mousedown", handleClick);
-    };
-  }, [dropdownTaskId]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -149,49 +136,16 @@ export function TaskList({
                       </button>
                     )}
                   </div>
-                  <div
-                    className="relative transition-all"
-                    style={dropdownTaskId === task._id ? { opacity: 1 } : undefined}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditTask(task as TaskDoc);
+                    }}
+                    className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+                    title="Edit Task"
                   >
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDropdownTaskId(dropdownTaskId === task._id ? null : task._id);
-                      }}
-                      className={`p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all ${dropdownTaskId !== task._id ? "opacity-100 lg:opacity-0 lg:group-hover:opacity-100" : ""}`}
-                    >
-                      <MoreVertical className="w-3.5 h-3.5" />
-                    </button>
-                    {dropdownTaskId === task._id && (
-                      <div
-                        className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-xl bg-[#1a1815] border border-[#2a2723] shadow-xl py-1 overflow-hidden"
-                        data-dropdown
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDropdownTaskId(null);
-                            onEditTask(task as TaskDoc);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDropdownTaskId(null);
-                            onDeleteTask(task._id);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#f2efeb] hover:bg-red-500/10 hover:text-red-400 transition-colors text-left"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
                   {expandedTaskId === task._id ? (
                     <ChevronUp className="w-3.5 h-3.5 text-[#a8a29e]/40" />
                   ) : (
@@ -292,8 +246,21 @@ export function TaskList({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={isLargeViewport ? undefined : { duration: 0 }}
-      className="space-y-2"
+      className="space-y-4"
     >
+      {/* Header Actions */}
+      <div className="flex items-center justify-between pb-2 px-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Active Tasks</span>
+        {onCreateTask && (
+          <button
+            onClick={onCreateTask}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] rounded-xl text-xs font-bold transition-all shadow-md shadow-[#d4a373]/10 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Task
+          </button>
+        )}
+      </div>
       <AnimatePresence mode="popLayout">
         {activeTasks.map((task) => renderTask(task, false))}
       </AnimatePresence>

@@ -1,5 +1,6 @@
 import { Menu, ClipboardList } from "lucide-react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { NotificationBell } from "../notifications-bell";
 
 interface ChatHeaderProps {
   activeSessionTitle: string | undefined;
@@ -65,8 +66,9 @@ export function ChatHeader(props: ChatHeaderProps) {
             </h1>
           </div>
 
-          {/* Column 3: Right (Planner Action Toggle) */}
-          <div className="flex items-center justify-end">
+          {/* Column 3: Right (Planner Action Toggle & Notification Bell) */}
+          <div className="flex items-center justify-end gap-2">
+            <NotificationBell />
             {onShowTasks && (
               <button
                 onClick={onShowTasks}

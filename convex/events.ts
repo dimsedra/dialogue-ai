@@ -1,7 +1,67 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { auth } from "./auth";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
+
+/**
+ * Helper to cancel any existing scheduled notification and set a new one
+ * based on the event's start time and reminder offset.
+ */
+async function rescheduleEventReminder(
+  ctx: any, 
+  eventId: Id<"events">, 
+  startTime: number, 
+  title: string, 
+  userId: Id<"users">
+) {
+  const event = await ctx.db.get(eventId);
+  if (!event) return;
+
+  // 1. Cancel existing job if present
+  if (event.scheduledNotificationId) {
+    try {
+      await ctx.scheduler.cancel(event.scheduledNotificationId);
+    } catch (e) {
+      console.warn("Could not cancel existing job (it may have already run or expired):", e);
+    }
+  }
+
+  // 2. Determine offset (default to 15m if not specified, null or negative means disabled)
+  const reminderOffset = event.reminderOffset !== undefined ? event.reminderOffset : 15;
+  if (reminderOffset === null || reminderOffset === undefined || reminderOffset < 0) {
+    await ctx.db.patch(eventId, { scheduledNotificationId: undefined });
+    return;
+  }
+
+  // 3. Calculate target trigger time
+  const reminderTime = startTime - reminderOffset * 60 * 1000;
+  const triggerTime = Math.max(reminderTime, Date.now());
+
+  if (triggerTime > Date.now()) {
+    const timePhrase = reminderOffset === 0 
+      ? "starts now" 
+      : `starts in ${reminderOffset} minute${reminderOffset === 1 ? "" : "s"}`;
+
+    const scheduledId = await ctx.scheduler.runAt(
+      triggerTime,
+      internal.notifications.sendScheduledNotification,
+      {
+        userId,
+        title: `Upcoming Event: ${title}`,
+        message: `"${title}" ${timePhrase}.`,
+        type: "event_remind",
+        actionUrl: "/workspace/calendar",
+      }
+    );
+
+    // Save job ID reference
+    await ctx.db.patch(eventId, { scheduledNotificationId: scheduledId });
+  } else {
+    // Event is in the past/starting now, clear scheduled ID
+    await ctx.db.patch(eventId, { scheduledNotificationId: undefined });
+  }
+}
 
 const recurrenceValidator = v.optional(v.union(v.object({
   frequency: v.union(v.literal("daily"), v.literal("weekly")),
@@ -137,12 +197,13 @@ export const add = mutation({
     }))),
     workspaceId: v.optional(v.id("workspaces")),
     userId: v.optional(v.id("users")),
+    reminderOffset: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) throw new Error("Unauthorized");
 
-    return await ctx.db.insert("events", {
+    const eventId = await ctx.db.insert("events", {
       title: args.title,
       startTime: args.startTime,
       endTime: args.endTime,
@@ -158,7 +219,11 @@ export const add = mutation({
       workspaceId: args.workspaceId,
       userId,
       createdAt: Date.now(),
+      reminderOffset: args.reminderOffset === null ? undefined : args.reminderOffset,
     });
+
+    await rescheduleEventReminder(ctx, eventId, args.startTime, args.title, userId);
+    return eventId;
   },
 });
 
@@ -174,9 +239,23 @@ export const remove = mutation({
       .withIndex("by_series", (q) => q.eq("seriesId", args.id))
       .collect();
     for (const inst of detachedInstances) {
+      if (inst.scheduledNotificationId) {
+        try {
+          await ctx.scheduler.cancel(inst.scheduledNotificationId);
+        } catch (e) {
+          console.warn("Could not cancel scheduled reminder for detached instance:", e);
+        }
+      }
       await ctx.db.delete(inst._id);
     }
 
+    if (event.scheduledNotificationId) {
+      try {
+        await ctx.scheduler.cancel(event.scheduledNotificationId);
+      } catch (e) {
+        console.warn("Could not cancel scheduled reminder for event:", e);
+      }
+    }
     await ctx.db.delete(args.id);
   },
 });
@@ -205,6 +284,9 @@ export const update = mutation({
     }))),
     userId: v.optional(v.id("users")),
     timezoneOffset: v.optional(v.number()),
+    reminderOffset: v.optional(v.union(v.number(), v.null())),
+    workspaceId: v.optional(v.union(v.id("workspaces"), v.null())),
+    overwriteResources: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
@@ -213,13 +295,25 @@ export const update = mutation({
 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
-      if (value !== undefined && key !== "id" && key !== "userId" && key !== "notes" && key !== "timezoneOffset" && key !== "resources") {
+      if (
+        value !== undefined && 
+        key !== "id" && 
+        key !== "userId" && 
+        key !== "notes" && 
+        key !== "timezoneOffset" && 
+        key !== "resources" && 
+        key !== "workspaceId" && 
+        key !== "overwriteResources"
+      ) {
         if (value === null) {
           updates[key] = undefined;
         } else {
           updates[key] = value;
         }
       }
+    }
+    if (args.workspaceId !== undefined) {
+      updates.workspaceId = args.workspaceId === null ? undefined : args.workspaceId;
     }
     // Preserve existing exceptions/until when updating recurrence (avoid overwriting)
     if (args.recurrence !== undefined && event.recurrence) {
@@ -247,16 +341,25 @@ export const update = mutation({
       }
     }
     if (args.resources !== undefined) {
-      const existingUrls = new Set((event.resources ?? []).map((r) => r.url));
-      const newResources = args.resources.filter((r) => !existingUrls.has(r.url));
-      if (newResources.length > 0) {
-        updates.resources = [...(event.resources ?? []), ...newResources];
+      if (args.overwriteResources) {
+        updates.resources = args.resources;
+      } else {
+        const existingUrls = new Set((event.resources ?? []).map((r) => r.url));
+        const newResources = args.resources.filter((r) => !existingUrls.has(r.url));
+        if (newResources.length > 0) {
+          updates.resources = [...(event.resources ?? []), ...newResources];
+        }
       }
     }
     if (args.notes !== undefined || args.outcome !== undefined || args.statusHook !== undefined) {
       updates.contextUpdatedAt = Date.now();
     }
     await ctx.db.patch(args.id, updates);
+
+    const updatedEvent = await ctx.db.get(args.id);
+    if (updatedEvent) {
+      await rescheduleEventReminder(ctx, args.id, updatedEvent.startTime, updatedEvent.title, userId);
+    }
   },
 });
 
@@ -268,6 +371,13 @@ export const cancelOccurrence = mutation({
     if (!event || event.userId !== userId) throw new Error("Unauthorized");
 
     if (event.seriesId) {
+      if (event.scheduledNotificationId) {
+        try {
+          await ctx.scheduler.cancel(event.scheduledNotificationId);
+        } catch (e) {
+          console.warn("Could not cancel scheduled reminder for series occurrence:", e);
+        }
+      }
       await ctx.db.delete(args.id);
       return;
     }
@@ -339,7 +449,7 @@ export const updateOccurrence = mutation({
     const finalStartTime = args.startTime ?? args.originalStartTime;
     const finalEndTime = parent.endTime !== undefined ? (args.endTime ?? (finalStartTime + duration)) : undefined;
 
-    return await ctx.db.insert("events", {
+    const newEventId = await ctx.db.insert("events", {
       title: args.title ?? parent.title,
       description: args.description ?? parent.description,
       location: args.location ?? parent.location,
@@ -355,7 +465,11 @@ export const updateOccurrence = mutation({
       workspaceId: parent.workspaceId,
       userId: parent.userId,
       createdAt: Date.now(),
+      reminderOffset: parent.reminderOffset,
     });
+
+    await rescheduleEventReminder(ctx, newEventId, finalStartTime, args.title ?? parent.title, parent.userId);
+    return newEventId;
   },
 });
 

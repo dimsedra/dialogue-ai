@@ -463,3 +463,89 @@ export const get = query({
     };
   },
 });
+
+export const updateHabit = mutation({
+  args: {
+    id: v.id("habits"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    frequency: v.optional(v.union(v.literal("daily"), v.literal("custom"))),
+    frequencyConfig: v.optional(v.object({
+      daysOfWeek: v.optional(v.array(v.number())),
+    })),
+    workspaceId: v.optional(v.union(v.id("workspaces"), v.null())),
+    archived: v.optional(v.boolean()),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+
+    const habit = await ctx.db.get(args.id);
+    if (!habit || habit.userId !== userId) {
+      throw new Error("Habit not found or unauthorized");
+    }
+
+    const updates: Record<string, any> = {};
+    if (args.name !== undefined) updates.name = args.name;
+    if (args.description !== undefined) updates.description = args.description;
+    if (args.frequency !== undefined) updates.frequency = args.frequency;
+    if (args.frequencyConfig !== undefined) updates.frequencyConfig = args.frequencyConfig;
+    if (args.workspaceId !== undefined) {
+      updates.workspaceId = args.workspaceId === null ? undefined : args.workspaceId;
+    }
+    if (args.archived !== undefined) updates.archived = args.archived;
+
+    await ctx.db.patch(args.id, updates);
+
+    if (args.frequency !== undefined || args.frequencyConfig !== undefined) {
+      await recalculateHabitStreak(ctx, args.id);
+    }
+  },
+});
+
+export const archiveHabit = mutation({
+  args: {
+    id: v.id("habits"),
+    archived: v.boolean(),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+
+    const habit = await ctx.db.get(args.id);
+    if (!habit || habit.userId !== userId) {
+      throw new Error("Habit not found or unauthorized");
+    }
+
+    await ctx.db.patch(args.id, { archived: args.archived });
+  },
+});
+
+export const deleteHabit = mutation({
+  args: {
+    id: v.id("habits"),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+
+    const habit = await ctx.db.get(args.id);
+    if (!habit || habit.userId !== userId) {
+      throw new Error("Habit not found or unauthorized");
+    }
+
+    const logs = await ctx.db
+      .query("habitLogs")
+      .withIndex("by_habit", (q) => q.eq("habitId", args.id))
+      .collect();
+
+    for (const log of logs) {
+      await ctx.db.delete(log._id);
+    }
+
+    await ctx.db.delete(args.id);
+  },
+});

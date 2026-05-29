@@ -24,6 +24,7 @@ import type * as messages from "../messages.js";
 import type * as messages_internal from "../messages_internal.js";
 import type * as migrations from "../migrations.js";
 import type * as notes from "../notes.js";
+import type * as notifications from "../notifications.js";
 import type * as ocean from "../ocean.js";
 import type * as ocean_queries from "../ocean_queries.js";
 import type * as pageSettings from "../pageSettings.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   messages_internal: typeof messages_internal;
   migrations: typeof migrations;
   notes: typeof notes;
+  notifications: typeof notifications;
   ocean: typeof ocean;
   ocean_queries: typeof ocean_queries;
   pageSettings: typeof pageSettings;

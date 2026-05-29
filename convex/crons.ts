@@ -28,4 +28,12 @@ crons.cron(
   {}
 );
 
+// Daily scan for unlogged habits: runs every day at 8:00 PM (20:00) UTC
+crons.cron(
+  "daily-habit-reminders",
+  "0 20 * * *",
+  internal.notifications.triggerDailyHabitReminders,
+  {}
+);
+
 export default crons;

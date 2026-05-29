@@ -24,6 +24,8 @@ import {
   EventList,
   CalendarView,
   HabitList,
+  CreateTaskModal,
+  CreateEventModal,
 } from "./panel";
 
 export function TaskPanel({
@@ -57,6 +59,8 @@ export function TaskPanel({
   const updateEvent = useMutation(api.events.update);
   const updateOccurrence = useMutation(api.events.updateOccurrence);
   const cancelEventOccurrence = useMutation(api.events.cancelOccurrence);
+  const createTask = useMutation(api.tasks.add);
+  const createEvent = useMutation(api.events.add);
 
   const [expandedTaskId, setExpandedTaskId] = useState<Id<"tasks"> | null>(null);
   const [view, setView] = useState<"tasks" | "events" | "calendar" | "habits">("tasks");
@@ -75,6 +79,8 @@ export function TaskPanel({
   const [editingEventData, setEditingEventData] = useState<{ id: Id<"events">; event: EventDoc; timestamp: number } | null>(null);
   const [confirmEditRecurring, setConfirmEditRecurring] = useState<ConfirmEditRecurringData | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDeleteData | null>(null);
+  const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
 
   // Filtering & Sorting State
   const [searchQuery, setSearchQuery] = useState("");
@@ -187,9 +193,48 @@ export function TaskPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [confirmDelete, confirmEditRecurring]);
 
+  const handleCreateTask = async (updates: {
+    text: string;
+    priority: "low" | "medium" | "high";
+    category: string;
+    dueDate?: number;
+    workspaceId?: Id<"workspaces"> | null;
+    resources?: any[];
+  }) => {
+    await createTask(updates);
+    setIsCreateTaskOpen(false);
+  };
+
+  const handleCreateEvent = async (updates: {
+    title: string;
+    description?: string;
+    startTime: number;
+    endTime?: number;
+    eventType: "interval" | "point";
+    location?: string;
+    recurrence: any;
+    workspaceId?: Id<"workspaces"> | null;
+    reminderOffset: number | null;
+    resources?: any[];
+  }) => {
+    await createEvent({
+      ...updates,
+      workspaceId: updates.workspaceId === null ? undefined : updates.workspaceId,
+    });
+    setIsCreateEventOpen(false);
+  };
+
   const handleUpdateTask = async (
     id: Id<"tasks">,
-    updates: { text: string; priority: "low" | "medium" | "high"; category: string; dueDate?: number }
+    updates: {
+      text: string;
+      priority: "low" | "medium" | "high";
+      category: string;
+      dueDate?: number;
+      workspaceId?: Id<"workspaces"> | null;
+      resources?: any[];
+      overwriteResources?: boolean;
+    }
   ) => {
     await updateTask({ id, ...updates });
     setEditingTaskObj(null);
@@ -253,6 +298,7 @@ export function TaskPanel({
               onEditTask={(task) => setEditingTaskObj(task)}
               onDeleteTask={handleDeleteTask}
               onReferTask={onRefer ? (task) => onRefer({ type: "task", id: task._id, title: task.text }) : undefined}
+              onCreateTask={() => setIsCreateTaskOpen(true)}
             />
           ) : view === "events" ? (
             <EventList
@@ -263,6 +309,7 @@ export function TaskPanel({
               onEditEvent={setEditingEventData}
               onDeleteEvent={handleDeleteEvent}
               onReferEvent={onRefer ? (event) => onRefer({ type: "event", id: event._id, title: event.title }) : undefined}
+              onCreateEvent={() => setIsCreateEventOpen(true)}
             />
           ) : view === "calendar" ? (
             <CalendarView
@@ -371,6 +418,24 @@ export function TaskPanel({
               setEditingEventData(null);
             }}
             onClose={() => setEditingEventData(null)}
+          />
+        )}
+
+        {isCreateTaskOpen && (
+          <CreateTaskModal
+            activeWorkspaceId={activeWorkspaceId}
+            isLargeViewport={isLargeViewport}
+            onSave={handleCreateTask}
+            onClose={() => setIsCreateTaskOpen(false)}
+          />
+        )}
+
+        {isCreateEventOpen && (
+          <CreateEventModal
+            activeWorkspaceId={activeWorkspaceId}
+            isLargeViewport={isLargeViewport}
+            onSave={handleCreateEvent}
+            onClose={() => setIsCreateEventOpen(false)}
           />
         )}
       </AnimatePresence>

@@ -5,7 +5,7 @@ import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { GoogleGenerativeAI, SchemaType, Tool, Part } from "@google/generative-ai";
 import mammoth from "mammoth";
-import { runChatEngine, executeChatFollowUp, PROVIDER_CAPABILITIES } from "./ai_providers";
+import { runChatEngine, executeChatFollowUp, PROVIDER_CAPABILITIES, runSimpleTask } from "./ai_providers";
 
 function isMultimodalProvider(provider: string): boolean {
   return PROVIDER_CAPABILITIES[provider]?.multimodal ?? false;
@@ -380,10 +380,17 @@ function getTaskModel(profile: any, task: string): string {
   const models = (profile?.preferences as any)?.taskModels;
   const taskModel = models?.[task];
   if (taskModel) return taskModel;
+  
   const configs = (profile?.preferences as any)?.customConfigs || {};
   const provider = (profile?.preferences as any)?.provider || "gemini";
   const mainModel = configs[provider]?.modelId;
-  return mainModel || "gemini-2.0-flash-lite";
+  if (mainModel) return mainModel;
+
+  // Provider-aware default fallbacks
+  if (provider === "openai") return "gpt-4o-mini";
+  if (provider === "anthropic") return "claude-3-5-haiku-latest";
+  if (provider === "lmstudio") return ""; // LM Studio automatically resolves local models
+  return "gemini-2.0-flash-lite"; // Default to Gemini
 }
 
 export const chat = internalAction({
@@ -1091,6 +1098,27 @@ export const chat = internalAction({
                 periodEndDate: { type: SchemaType.STRING, description: "The end date in YYYY-MM-DD format" },
               },
               required: ["periodStartDate", "periodEndDate"],
+            },
+          },
+          {
+            name: "list_unread_notifications",
+            description: "Retrieves a list of unread notifications and alerts for the active user. Use when the user asks what notifications, reminders, or alerts they have pending.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {},
+              required: [],
+            },
+          },
+          {
+            name: "create_custom_reminder",
+            description: "Schedules a custom reminder message to trigger as a system notification at a specific future date and time.",
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                message: { type: SchemaType.STRING, description: "The text of the reminder (e.g. 'Submit draft')" },
+                dueDate: { type: SchemaType.STRING, description: "ISO-8601 reminder date/time in 24-hour format (e.g., '2026-05-15T14:00:00'). DO NOT append 'Z'." },
+              },
+              required: ["message", "dueDate"],
             },
           },
         ],
@@ -2129,6 +2157,41 @@ export const chat = internalAction({
               args: call.args as Record<string, unknown>,
               result: { status: "success", report }
             });
+          } else if (call.name === "list_unread_notifications") {
+            const unread = await ctx.runQuery(api.notifications.listUnread, {});
+            executedActionSummaries.push({
+              name: "list_unread_notifications",
+              summary: `Retrieved ${unread.length} unread notification(s)`
+            });
+            activeToolCalls.push({
+              name: "list_unread_notifications",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success", notifications: unread }
+            });
+          } else if (call.name === "create_custom_reminder") {
+            const { message, dueDate } = call.args as { message: string; dueDate: string };
+            const triggerTime = parseLocal(dueDate);
+            const scheduledId = await ctx.scheduler.runAt(
+              triggerTime,
+              internal.notifications.sendScheduledNotification,
+              {
+                userId: args.userId,
+                title: "Reminder",
+                message: message,
+                type: "system",
+                actionUrl: "/workspace",
+              }
+            );
+
+            executedActionSummaries.push({
+              name: "create_custom_reminder",
+              summary: `Scheduled reminder '${message}' for ${dueDate}`
+            });
+            activeToolCalls.push({
+              name: "create_custom_reminder",
+              args: call.args as Record<string, unknown>,
+              result: { status: "success", reminderId: scheduledId }
+            });
           }
         }
 
@@ -2712,3 +2775,89 @@ Monthly OCEAN Profile — [Month Year]:
     });
   },
 });
+
+export const extractAndSaveMemory = internalAction({
+  args: {
+    sessionId: v.id("chatSessions"),
+    userId: v.id("users"),
+    messageId: v.id("messages"),
+  },
+  handler: async (ctx, args) => {
+    const { sessionId, userId, messageId } = args;
+
+    // 1. Fetch user profile
+    const profile = await ctx.runQuery(api.ai.getProfile, { userId, revealKeys: true });
+    
+    // Check if we have a Gemini key for vector embedding creation (which is mandatory for vector search)
+    const customConfigs = (profile?.preferences as any)?.customConfigs || {};
+    const geminiApiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      console.warn("Skipping background memory extraction because GEMINI_API_KEY is not available (needed for vector embedding generation).");
+      return;
+    }
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+
+    // 2. Fetch session messages to build context
+    const messages = await ctx.runQuery(api.messages.list, { sessionId, userId });
+    const msgIdx = messages.findIndex((m: any) => m._id === messageId);
+    if (msgIdx === -1) {
+      console.log(`Trigger message ${messageId} not found in session.`);
+      return;
+    }
+
+    const currentMsg = messages[msgIdx];
+    if (currentMsg.author !== "User") {
+      console.log("Trigger message is not from User. Skipping memory extraction.");
+      return;
+    }
+
+    // Get up to 3 preceding messages for context
+    const recentMsgs = messages.slice(Math.max(0, msgIdx - 3), msgIdx + 1);
+    const historyText = recentMsgs
+      .map((m: any) => `${m.author === "User" ? "User" : "Dialogue"}: ${m.text}`)
+      .join("\n");
+
+    const prompt = `You are a background cognitive agent. Your task is to identify and extract any durable, long-term personal facts, technology preferences, work contexts, skills, hobbies, or stable life details that the user revealed in their last message, using the chat history for context.
+
+Chat History:
+${historyText}
+
+Guidelines:
+1. ONLY extract things that are long-term or relatively stable (e.g., "User uses React for frontend development", "User likes to discuss the technology industry landscape", "User works from home").
+2. DO NOT extract transient details, temporary tasks, or immediate plans (e.g., "User has a meeting tomorrow", "User is tired tonight", "User is testing the chat").
+3. DO NOT repeat facts that have already been established or are already obvious from the conversation history.
+4. Output the extracted fact in the USER'S ORIGINAL LANGUAGE as a clear, third-person declarative statement (e.g., "User suka membahas landskap industri teknologi.").
+5. If no new durable personal facts are revealed in the user's last message, output ONLY the word "null" (without quotes).
+6. Do not include any introductory text, explanation, or markdown formatting. Output ONLY the statement or "null".`;
+
+    const providerStr = (profile?.preferences as any)?.provider || "gemini";
+    const resolvedModelId = getTaskModel(profile, "memory");
+
+    let extractedFact = "";
+    try {
+      extractedFact = await runSimpleTask({
+        provider: providerStr,
+        customConfigs,
+        prompt,
+        modelId: resolvedModelId,
+      });
+      extractedFact = extractedFact.trim();
+    } catch (err) {
+      console.error("Failed to run background memory extraction model:", err);
+      return;
+    }
+
+    if (extractedFact && extractedFact.toLowerCase() !== "null") {
+      console.log(`[Memory Extractor] Extracted new fact: "${extractedFact}"`);
+      try {
+        const saveResult = await saveSemanticMemoryInternal(ctx, genAI, extractedFact, userId);
+        console.log(`[Memory Extractor] Save result:`, saveResult);
+      } catch (err) {
+        console.error("Failed to save background memory:", err);
+      }
+    } else {
+      console.log("[Memory Extractor] No new durable fact detected.");
+    }
+  },
+});
+

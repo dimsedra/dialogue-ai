@@ -359,6 +359,17 @@ export default function SettingsPage() {
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
                       </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">Memory Extraction</label>
+                        <input 
+                          type="text"
+                          value={taskModels["memory"] || ""}
+                          onChange={(e) => setTaskModels(prev => ({ ...prev, memory: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSaveProfile()}
+                          placeholder={customConfigs[provider]?.modelId || "gemini-2.0-flash-lite"}
+                          className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                        />
+                      </div>
                     </div>
 
                     <div className="mt-6 pt-5 border-t border-[#2a2723]">

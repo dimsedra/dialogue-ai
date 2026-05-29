@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { 
   Calendar as CalendarIcon, 
@@ -10,56 +10,64 @@ import {
   X, 
   Zap, 
   Bell, 
-  Paperclip, 
   Upload, 
-  Link, 
+  Link as LinkIcon, 
   Plus, 
-  Check, 
   FolderKanban,
   FileText 
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { ConfirmEditRecurringData, EventDoc, EventUpdateData } from "./types";
 
-interface EditEventModalProps {
-  editingData: { id: Id<"events">; event: EventDoc; timestamp: number };
+interface CreateEventModalProps {
+  activeWorkspaceId: Id<"workspaces"> | undefined;
   isLargeViewport: boolean;
-  onSave: (id: Id<"events">, updates: EventUpdateData) => Promise<void>;
-  onSaveRecurring: (data: ConfirmEditRecurringData) => void;
-  onDelete: (event: EventDoc) => void;
+  onSave: (updates: {
+    title: string;
+    description?: string;
+    startTime: number;
+    endTime?: number;
+    eventType: "interval" | "point";
+    location?: string;
+    recurrence: any;
+    workspaceId?: Id<"workspaces"> | null;
+    reminderOffset: number | null;
+    resources?: any[];
+  }) => Promise<void>;
   onClose: () => void;
 }
 
-export function EditEventModal({
-  editingData,
+export function CreateEventModal({
+  activeWorkspaceId,
   isLargeViewport,
   onSave,
-  onSaveRecurring,
-  onDelete,
   onClose,
-}: EditEventModalProps) {
-  const { id, event, timestamp } = editingData;
-
-  const [editEventTitle, setEditEventTitle] = useState("");
-  const [editEventDesc, setEditEventDesc] = useState("");
-  const [editEventLocation, setEditEventLocation] = useState("");
-  const [editEventStartTime, setEditEventStartTime] = useState("");
-  const [editEventEndTime, setEditEventEndTime] = useState("");
-  const [editEventType, setEditEventType] = useState<"interval" | "point">("interval");
-  const [editEventFreq, setEditEventFreq] = useState<"none" | "daily" | "weekly">("none");
-  const [editEventInterval, setEditEventInterval] = useState<number>(1);
-  const [editEventDays, setEditEventDays] = useState<number[]>([]);
-  const [editEventUntil, setEditEventUntil] = useState<string>("");
-  const [editEventWorkspaceId, setEditEventWorkspaceId] = useState<string>("");
-  const [editReminderOffset, setEditReminderOffset] = useState<string>("none");
+}: CreateEventModalProps) {
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventDesc, setEventDesc] = useState("");
+  const [eventLocation, setEventLocation] = useState("");
+  
+  // Default start to next full hour, end to 1 hour after start
+  const [eventStartTime, setEventStartTime] = useState(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + 1, 0, 0, 0);
+    return format(d, "yyyy-MM-dd'T'HH:mm");
+  });
+  const [eventEndTime, setEventEndTime] = useState(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + 2, 0, 0, 0);
+    return format(d, "yyyy-MM-dd'T'HH:mm");
+  });
+  
+  const [eventType, setEventType] = useState<"interval" | "point">("interval");
+  const [eventFreq, setEventFreq] = useState<"none" | "daily" | "weekly">("none");
+  const [eventInterval, setEventInterval] = useState<number>(1);
+  const [eventDays, setEventDays] = useState<number[]>([]);
+  const [eventUntil, setEventUntil] = useState<string>("");
+  const [eventWorkspaceId, setEventWorkspaceId] = useState<string>("");
+  const [reminderOffset, setReminderOffset] = useState<string>("none");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Notes state
-  const [newNote, setNewNote] = useState("");
-  const [isAddingNote, setIsAddingNote] = useState(false);
-  const [noteAddedToast, setNoteAddedToast] = useState(false);
 
   // Resources state
   const [resources, setResources] = useState<any[]>([]);
@@ -71,124 +79,64 @@ export function EditEventModal({
 
   // Convex queries & mutations
   const workspaces = useQuery(api.workspaces.list, {});
-  const updateEventMutation = useMutation(api.events.update);
   const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
 
+  // Pre-select active workspace
   useEffect(() => {
-    if (event) {
-      const timer = setTimeout(() => {
-        setEditEventTitle(event.title);
-        setEditEventDesc(event.description || "");
-        setEditEventLocation(event.location || "");
-        setEditEventStartTime(format(new Date(event.startTime), "yyyy-MM-dd'T'HH:mm"));
-        setEditEventEndTime(
-          event.endTime
-            ? format(new Date(event.endTime), "yyyy-MM-dd'T'HH:mm")
-            : format(new Date(event.startTime + 3600000), "yyyy-MM-dd'T'HH:mm")
-        );
-        setEditEventType(event.eventType || (event.endTime ? "interval" : "point"));
-        setEditEventWorkspaceId(event.workspaceId || "");
-        setResources(event.resources || []);
-        
-        if (event.reminderOffset === undefined || event.reminderOffset === null) {
-          setEditReminderOffset("none");
-        } else {
-          setEditReminderOffset(String(event.reminderOffset));
-        }
-
-        if (event.recurrence) {
-          setEditEventFreq(event.recurrence.frequency);
-          setEditEventInterval(event.recurrence.interval || 1);
-          setEditEventDays(event.recurrence.daysOfWeek || []);
-          setEditEventUntil(
-            event.recurrence.until ? format(new Date(event.recurrence.until), "yyyy-MM-dd") : ""
-          );
-        } else {
-          setEditEventFreq("none");
-          setEditEventInterval(1);
-          setEditEventDays([]);
-          setEditEventUntil("");
-        }
-      }, 0);
-      return () => clearTimeout(timer);
+    if (activeWorkspaceId) {
+      setEventWorkspaceId(activeWorkspaceId);
+    } else {
+      setEventWorkspaceId("");
     }
-  }, [event]);
+  }, [activeWorkspaceId]);
 
   const handleSave = async () => {
-    if (isSubmitting || !editEventTitle.trim()) return;
+    if (isSubmitting || !eventTitle.trim()) return;
     setIsSubmitting(true);
     try {
       let finalStartTime = 0;
       let finalEndTime = 0;
 
-      if (editEventStartTime) {
-        finalStartTime = new Date(editEventStartTime).getTime();
+      if (eventStartTime) {
+        finalStartTime = new Date(eventStartTime).getTime();
       }
 
-      if (editEventType === "interval" && editEventEndTime) {
-        finalEndTime = new Date(editEventEndTime).getTime();
+      if (eventType === "interval" && eventEndTime) {
+        finalEndTime = new Date(eventEndTime).getTime();
       }
 
       const recurrenceRule =
-        editEventFreq !== "none"
+        eventFreq !== "none"
           ? {
-              frequency: editEventFreq as "daily" | "weekly",
-              interval: editEventInterval,
+              frequency: eventFreq as "daily" | "weekly",
+              interval: eventInterval,
               daysOfWeek:
-                editEventFreq === "weekly"
-                  ? editEventDays.length > 0
-                    ? editEventDays
+                eventFreq === "weekly"
+                  ? eventDays.length > 0
+                    ? eventDays
                     : [new Date(finalStartTime).getDay()]
                   : undefined,
-              until: editEventUntil ? new Date(editEventUntil).getTime() : undefined,
+              until: eventUntil ? new Date(eventUntil).getTime() : undefined,
             }
           : null;
 
-      const finalReminderOffset = editReminderOffset === "none" ? null : parseInt(editReminderOffset, 10);
+      const finalReminderOffset = reminderOffset === "none" ? null : parseInt(reminderOffset, 10);
 
-      const updates: EventUpdateData = {
-        title: editEventTitle,
-        description: editEventDesc,
-        location: editEventLocation,
-        startTime: finalStartTime || undefined,
-        endTime: editEventType === "interval" && finalEndTime ? finalEndTime : undefined,
-        eventType: editEventType,
+      await onSave({
+        title: eventTitle,
+        description: eventDesc || undefined,
+        location: eventLocation || undefined,
+        startTime: finalStartTime,
+        endTime: eventType === "interval" && finalEndTime ? finalEndTime : undefined,
+        eventType,
         recurrence: recurrenceRule,
-        workspaceId: editEventWorkspaceId ? (editEventWorkspaceId as Id<"workspaces">) : null,
+        workspaceId: eventWorkspaceId ? (eventWorkspaceId as Id<"workspaces">) : null,
         reminderOffset: finalReminderOffset,
         resources: resources,
-        overwriteResources: true,
-      };
-
-      if (event && event.recurrence && timestamp) {
-        onSaveRecurring({ id, event, updates, timestamp });
-        onClose();
-        return;
-      }
-
-      await onSave(id, updates);
+      });
       onClose();
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleAddNote = async () => {
-    if (!newNote.trim() || isAddingNote) return;
-    setIsAddingNote(true);
-    try {
-      await updateEventMutation({
-        id: id,
-        notes: newNote.trim(),
-        timezoneOffset: new Date().getTimezoneOffset(),
-      });
-      setNewNote("");
-      setNoteAddedToast(true);
-      setTimeout(() => setNoteAddedToast(false), 2000);
-    } catch (err) {
-      console.error("Failed to append note:", err);
-    } finally {
-      setIsAddingNote(false);
     }
   };
 
@@ -239,16 +187,6 @@ export function EditEventModal({
     }
   };
 
-  const parseNoteLine = (line: string) => {
-    const match = line.match(/^\[(.*?)\]\s*(.*)$/);
-    if (match) {
-      return { timestamp: match[1], content: match[2] };
-    }
-    return { timestamp: null, content: line };
-  };
-
-  const noteLines = event.notes ? event.notes.split("\n").filter(Boolean) : [];
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -272,8 +210,8 @@ export function EditEventModal({
               <CalendarIcon className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Edit Event</h3>
-              <span className="text-[10px] text-[#a8a29e]">Modify timing, settings, notes, and attachments</span>
+              <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">New Event</h3>
+              <span className="text-[10px] text-[#a8a29e]">Create a scheduled event, select intervals, and set reminders</span>
             </div>
           </div>
           <button
@@ -292,14 +230,14 @@ export function EditEventModal({
             <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Event Title</label>
             <input
               autoFocus
-              name="panel-event-title"
+              name="panel-create-event-title"
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
               className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-3 text-sm font-bold text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none transition-all"
-              value={editEventTitle}
-              onChange={(e) => setEditEventTitle(e.target.value)}
+              value={eventTitle}
+              onChange={(e) => setEventTitle(e.target.value)}
               placeholder="Event title..."
             />
           </div>
@@ -308,15 +246,15 @@ export function EditEventModal({
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Description</label>
             <textarea
-              name="panel-event-desc"
+              name="panel-create-event-desc"
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
               rows={2}
               className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-3 text-xs text-[#a8a29e] placeholder:text-[#a8a29e]/30 outline-none resize-none transition-all"
-              value={editEventDesc}
-              onChange={(e) => setEditEventDesc(e.target.value)}
+              value={eventDesc}
+              onChange={(e) => setEventDesc(e.target.value)}
               placeholder="Event notes or details..."
             />
           </div>
@@ -328,8 +266,8 @@ export function EditEventModal({
               <div className="relative flex items-center">
                 <FolderKanban className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                 <select
-                  value={editEventWorkspaceId}
-                  onChange={(e) => setEditEventWorkspaceId(e.target.value)}
+                  value={eventWorkspaceId}
+                  onChange={(e) => setEventWorkspaceId(e.target.value)}
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all cursor-pointer appearance-none"
                 >
                   <option value="">No Workspace</option>
@@ -347,14 +285,14 @@ export function EditEventModal({
               <div className="relative flex items-center">
                 <Tag className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                 <input
-                  name="panel-event-loc"
+                  name="panel-create-event-loc"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck={false}
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all"
-                  value={editEventLocation}
-                  onChange={(e) => setEditEventLocation(e.target.value)}
+                  value={eventLocation}
+                  onChange={(e) => setEventLocation(e.target.value)}
                   placeholder="Add location or link..."
                 />
               </div>
@@ -368,9 +306,9 @@ export function EditEventModal({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setEditEventType("interval")}
+                  onClick={() => setEventType("interval")}
                   className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-1 ${
-                    editEventType === "interval"
+                    eventType === "interval"
                       ? "bg-[#d4a373]/15 border-[#d4a373] text-[#d4a373]"
                       : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
                   }`}
@@ -379,9 +317,9 @@ export function EditEventModal({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditEventType("point")}
+                  onClick={() => setEventType("point")}
                   className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-1 ${
-                    editEventType === "point"
+                    eventType === "point"
                       ? "bg-amber-500/15 border-amber-500 text-amber-400"
                       : "bg-[#0f0e0c] border-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb]"
                   }`}
@@ -396,8 +334,8 @@ export function EditEventModal({
               <div className="relative flex items-center">
                 <Bell className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                 <select
-                  value={editReminderOffset}
-                  onChange={(e) => setEditReminderOffset(e.target.value)}
+                  value={reminderOffset}
+                  onChange={(e) => setReminderOffset(e.target.value)}
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all cursor-pointer appearance-none"
                 >
                   <option value="none">No Reminder</option>
@@ -417,28 +355,28 @@ export function EditEventModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">
-                {editEventType === "point" ? "Moment" : "Start Time"}
+                {eventType === "point" ? "Moment" : "Start Time"}
               </label>
               <input
                 type="datetime-local"
-                name="panel-event-start"
+                name="panel-create-event-start"
                 autoComplete="off"
                 className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
-                value={editEventStartTime}
-                onChange={(e) => setEditEventStartTime(e.target.value)}
+                value={eventStartTime}
+                onChange={(e) => setEventStartTime(e.target.value)}
                 onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
               />
             </div>
-            {editEventType === "interval" && (
+            {eventType === "interval" && (
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">End Time</label>
                 <input
                   type="datetime-local"
-                  name="panel-event-end"
+                  name="panel-create-event-end"
                   autoComplete="off"
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
-                  value={editEventEndTime}
-                  onChange={(e) => setEditEventEndTime(e.target.value)}
+                  value={eventEndTime}
+                  onChange={(e) => setEventEndTime(e.target.value)}
                   onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
                 />
               </div>
@@ -451,47 +389,47 @@ export function EditEventModal({
             <div className="flex items-center gap-3">
               <select
                 className="bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl px-3 py-2 text-xs text-[#f2efeb] outline-none cursor-pointer flex-1"
-                value={editEventFreq}
-                onChange={(e) => setEditEventFreq(e.target.value as "none" | "daily" | "weekly")}
+                value={eventFreq}
+                onChange={(e) => setEventFreq(e.target.value as "none" | "daily" | "weekly")}
               >
                 <option value="none">Does not repeat</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
               </select>
-              {editEventFreq !== "none" && (
+              {eventFreq !== "none" && (
                 <div className="flex items-center gap-2 bg-[#0f0e0c] border border-[#2a2723] rounded-xl px-3 py-2">
                   <span className="text-xs text-[#a8a29e]">Every</span>
                   <input
                     type="number"
-                    name="panel-event-interval"
+                    name="panel-create-event-interval"
                     autoComplete="off"
                     min={1}
                     max={30}
                     className="w-12 bg-transparent text-xs text-[#f2efeb] font-bold outline-none text-center"
-                    value={editEventInterval}
-                    onChange={(e) => setEditEventInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                    value={eventInterval}
+                    onChange={(e) => setEventInterval(Math.max(1, parseInt(e.target.value) || 1))}
                   />
                   <span className="text-xs text-[#a8a29e]">
-                    {editEventFreq === "daily" ? "days" : "weeks"}
+                    {eventFreq === "daily" ? "days" : "weeks"}
                   </span>
                 </div>
               )}
             </div>
-            {editEventFreq === "weekly" && (
+            {eventFreq === "weekly" && (
               <div className="flex justify-between gap-1.5 pt-2">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => {
-                      if (editEventDays.includes(idx)) {
-                        setEditEventDays(editEventDays.filter((d) => d !== idx));
+                      if (eventDays.includes(idx)) {
+                        setEventDays(eventDays.filter((d) => d !== idx));
                       } else {
-                        setEditEventDays([...editEventDays, idx]);
+                        setEventDays([...eventDays, idx]);
                       }
                     }}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center ${
-                      editEventDays.includes(idx)
+                      eventDays.includes(idx)
                         ? "bg-[#d4a373] text-[#0f0e0c]"
                         : "bg-[#0f0e0c] text-[#a8a29e] border border-[#2a2723] hover:border-[#d4a373]/30"
                     }`}
@@ -501,91 +439,22 @@ export function EditEventModal({
                 ))}
               </div>
             )}
-            {editEventFreq !== "none" && (
+            {eventFreq !== "none" && (
               <div className="space-y-1.5 pt-3 border-t border-[#2a2723]">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">End Repeat (Optional)</label>
                 <div className="relative flex items-center">
                   <CalendarIcon className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                   <input
                     type="date"
-                    name="panel-event-until"
+                    name="panel-create-event-until"
                     autoComplete="off"
                     className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2 text-xs text-[#f2efeb] outline-none transition-all cursor-pointer appearance-none"
-                    value={editEventUntil}
-                    onChange={(e) => setEditEventUntil(e.target.value)}
+                    value={eventUntil}
+                    onChange={(e) => setEventUntil(e.target.value)}
                   />
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Notes Logs History */}
-          <div className="space-y-2 pt-3 border-t border-[#2a2723] relative">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Notes & Logs History</label>
-              <AnimatePresence>
-                {noteAddedToast && (
-                  <motion.span
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"
-                  >
-                    Note added!
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </div>
-            
-            {noteLines.length > 0 ? (
-              <div className="space-y-3 max-h-36 overflow-y-auto pr-1 scrollbar-thin bg-[#0f0e0c]/40 border border-[#2a2723]/30 rounded-2xl p-3">
-                {noteLines.map((line, idx) => {
-                  const { timestamp, content } = parseNoteLine(line);
-                  return (
-                    <div key={idx} className="flex gap-2 text-xs">
-                      <div className="flex flex-col items-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373] mt-1 shrink-0" />
-                        {idx < noteLines.length - 1 && <div className="w-0.5 flex-1 bg-[#2a2723] my-1" />}
-                      </div>
-                      <div className="flex-1 space-y-0.5">
-                        {timestamp && (
-                          <span className="text-[8px] font-mono text-[#a8a29e]/40 font-bold">{timestamp}</span>
-                        )}
-                        <p className="text-[#a8a29e] leading-relaxed break-words text-[11px]">{content}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-[10px] text-[#a8a29e]/40 italic pl-1">No logs or notes recorded yet.</p>
-            )}
-
-            {/* Note Appender */}
-            <div className="flex gap-2 items-end mt-2">
-              <textarea
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                placeholder="Log progress or write a note..."
-                rows={1}
-                className="flex-1 bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-2 text-xs text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none resize-none min-h-[36px] max-h-[100px]"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleAddNote();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleAddNote}
-                disabled={isAddingNote || !newNote.trim()}
-                className="px-3 py-2 bg-[#d4a373]/10 hover:bg-[#d4a373]/20 border border-[#d4a373]/30 text-[#d4a373] hover:text-[#f2efeb] rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add
-              </button>
-            </div>
           </div>
 
           {/* Resources & Attachments Manager */}
@@ -599,7 +468,7 @@ export function EditEventModal({
                   <div key={i} className="flex items-center justify-between p-2 rounded-xl bg-[#0f0e0c]/50 border border-[#2a2723] group/res">
                     <div className="flex items-center gap-2 min-w-0">
                       {r.type === "url" ? (
-                        <Link className="w-3.5 h-3.5 text-[#d4a373]/60 shrink-0" />
+                        <LinkIcon className="w-3.5 h-3.5 text-[#d4a373]/60 shrink-0" />
                       ) : (
                         <FileText className="w-3.5 h-3.5 text-[#d4a373]/60 shrink-0" />
                       )}
@@ -709,38 +578,28 @@ export function EditEventModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-[#2a2723] mt-2">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#2a2723] mt-2">
           <button
             type="button"
-            onClick={() => onDelete(event)}
+            onClick={onClose}
             disabled={isSubmitting}
-            className="p-2.5 rounded-xl text-red-500/70 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#a8a29e] hover:text-[#f2efeb] transition-all"
           >
-            <Trash2 className="w-4 h-4" /> Delete Event
+            Cancel
           </button>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#a8a29e] hover:text-[#f2efeb] transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSubmitting}
-              className="px-6 py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/20 flex items-center gap-2 disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              Save Event
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSubmitting || !eventTitle.trim()}
+            className="px-6 py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/20 flex items-center gap-2 disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Create Event
+          </button>
         </div>
       </motion.div>
     </motion.div>

@@ -11,4 +11,8 @@ export * from "./EventList";
 export * from "./CalendarView";
 export * from "./ResourceTray";
 export * from "./HabitList";
+export * from "./CreateHabitModal";
+export * from "./EditHabitModal";
+export * from "./CreateTaskModal";
+export * from "./CreateEventModal";
 

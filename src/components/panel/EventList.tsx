@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
-import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, ChevronDown, ChevronUp, MessageSquarePlus, Paperclip, MoreVertical } from "lucide-react";
+import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, ChevronDown, ChevronUp, MessageSquarePlus, Paperclip, Plus } from "lucide-react";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { EventDoc } from "./types";
 import { formatRecurrenceText } from "./utils";
@@ -15,6 +15,7 @@ interface EventListProps {
   onEditEvent: (data: { id: Id<"events">; event: EventDoc; timestamp: number }) => void;
   onDeleteEvent: (event: EventDoc) => void;
   onReferEvent?: (event: EventDoc) => void;
+  onCreateEvent?: () => void;
 }
 
 export function EventList({
@@ -25,25 +26,11 @@ export function EventList({
   onEditEvent,
   onDeleteEvent,
   onReferEvent,
+  onCreateEvent,
 }: EventListProps) {
   const [showPast, setShowPast] = useState(false);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
-  const [dropdownEventId, setDropdownEventId] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!dropdownEventId) return;
-    const handleClick = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest("[data-dropdown]")) {
-        setDropdownEventId(null);
-      }
-    };
-    const id = setTimeout(() => document.addEventListener("mousedown", handleClick), 0);
-    return () => {
-      clearTimeout(id);
-      document.removeEventListener("mousedown", handleClick);
-    };
-  }, [dropdownEventId]);
   const sevenDaysAgo = useMemo(() => now - 7 * 24 * 60 * 60 * 1000, [now]);
 
   const { upcoming, past } = useMemo(() => {
@@ -123,49 +110,16 @@ export function EventList({
                 </button>
               )}
             </div>
-            <div
-              className="relative transition-all"
-              style={dropdownEventId === event._id ? { opacity: 1 } : undefined}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditEvent({ id: event._id, event: event as EventDoc, timestamp: event.startTime });
+              }}
+              className="p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+              title="Edit Event"
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDropdownEventId(dropdownEventId === event._id ? null : event._id);
-                }}
-                className={`p-1 rounded-lg hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all ${dropdownEventId !== event._id ? "opacity-100 lg:opacity-0 lg:group-hover:opacity-100" : ""}`}
-              >
-                <MoreVertical className="w-3.5 h-3.5" />
-              </button>
-              {dropdownEventId === event._id && (
-                <div
-                  className="absolute right-0 top-full mt-1 z-50 min-w-[120px] rounded-xl bg-[#1a1815] border border-[#2a2723] shadow-xl py-1 overflow-hidden"
-                  data-dropdown
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDropdownEventId(null);
-                      onEditEvent({ id: event._id, event: event as EventDoc, timestamp: event.startTime });
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                    Edit
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDropdownEventId(null);
-                      onDeleteEvent(event as EventDoc);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-[#f2efeb] hover:bg-red-500/10 hover:text-red-400 transition-colors text-left"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
             <div className="flex items-center gap-1">
               {isCancelled ? (
                 <span className="text-[9px] font-bold uppercase tracking-widest text-red-400/60">Cancelled</span>
@@ -244,6 +198,19 @@ export function EventList({
       transition={isLargeViewport ? undefined : { duration: 0 }}
       className="space-y-6"
     >
+      {/* Header Actions */}
+      <div className="flex items-center justify-between pb-2 px-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Schedule & Timeline</span>
+        {onCreateEvent && (
+          <button
+            onClick={onCreateEvent}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] rounded-xl text-xs font-bold transition-all shadow-md shadow-[#d4a373]/10 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Event
+          </button>
+        )}
+      </div>
       {/* Upcoming Section */}
       {upcoming.length > 0 && (
         <div className="space-y-3">

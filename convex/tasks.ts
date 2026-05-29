@@ -99,6 +99,8 @@ export const updateTask = mutation({
       summary: v.optional(v.string()),
       linkedAt: v.number(),
     }))),
+    workspaceId: v.optional(v.union(v.id("workspaces"), v.null())),
+    overwriteResources: v.optional(v.boolean()),
     userId: v.optional(v.id("users")),
     timezoneOffset: v.optional(v.number()),
   },
@@ -117,9 +119,21 @@ export const updateTask = mutation({
 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
-      if (value !== undefined && key !== "id" && key !== "userId" && key !== "notes" && key !== "timezoneOffset" && key !== "resources") {
+      if (
+        value !== undefined && 
+        key !== "id" && 
+        key !== "userId" && 
+        key !== "notes" && 
+        key !== "timezoneOffset" && 
+        key !== "resources" && 
+        key !== "workspaceId" && 
+        key !== "overwriteResources"
+      ) {
         updates[key] = value;
       }
+    }
+    if (args.workspaceId !== undefined) {
+      updates.workspaceId = args.workspaceId === null ? undefined : args.workspaceId;
     }
     if (args.notes !== undefined) {
       let incomingNote = args.notes.trim();
@@ -140,10 +154,14 @@ export const updateTask = mutation({
       }
     }
     if (args.resources !== undefined) {
-      const existingUrls = new Set((task.resources ?? []).map((r) => r.url));
-      const newResources = args.resources.filter((r) => !existingUrls.has(r.url));
-      if (newResources.length > 0) {
-        updates.resources = [...(task.resources ?? []), ...newResources];
+      if (args.overwriteResources) {
+        updates.resources = args.resources;
+      } else {
+        const existingUrls = new Set((task.resources ?? []).map((r) => r.url));
+        const newResources = args.resources.filter((r) => !existingUrls.has(r.url));
+        if (newResources.length > 0) {
+          updates.resources = [...(task.resources ?? []), ...newResources];
+        }
       }
     }
     if (args.notes !== undefined || args.progress !== undefined || args.statusHook !== undefined) {
@@ -270,5 +288,50 @@ export const batchAdd = mutation({
       ids.push(id);
     }
     return ids;
+  },
+});
+
+export const add = mutation({
+  args: {
+    text: v.string(),
+    workspaceId: v.optional(v.union(v.id("workspaces"), v.null())),
+    dueDate: v.optional(v.number()),
+    dueDateStr: v.optional(v.string()),
+    priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
+    category: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    progress: v.optional(v.number()),
+    statusHook: v.optional(v.string()),
+    resources: v.optional(v.array(v.object({
+      type: v.union(v.literal("url"), v.literal("document")),
+      title: v.string(),
+      url: v.string(),
+      storageId: v.optional(v.id("_storage")),
+      summary: v.optional(v.string()),
+      linkedAt: v.number(),
+    }))),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId ?? (await auth.getUserId(ctx));
+    if (!userId) throw new Error("Unauthorized");
+
+    const taskId = await ctx.db.insert("tasks", {
+      userId,
+      text: args.text,
+      workspaceId: args.workspaceId === null ? undefined : args.workspaceId,
+      completed: false,
+      dueDate: args.dueDate,
+      dueDateStr: args.dueDateStr,
+      priority: args.priority || "medium",
+      category: args.category || "General",
+      notes: args.notes,
+      progress: args.progress,
+      statusHook: args.statusHook,
+      resources: args.resources,
+      contextUpdatedAt: (args.notes || args.progress !== undefined || args.statusHook) ? Date.now() : undefined,
+      createdAt: Date.now(),
+    });
+    return taskId;
   },
 });

@@ -11,6 +11,10 @@ export interface EventUpdateData {
   endTime?: number;
   eventType?: "interval" | "point";
   recurrence?: { frequency: "daily" | "weekly"; interval: number; daysOfWeek?: number[]; until?: number } | null;
+  workspaceId?: Id<"workspaces"> | null;
+  reminderOffset?: number | null;
+  resources?: any[];
+  overwriteResources?: boolean;
 }
 
 export interface ConfirmEditRecurringData {

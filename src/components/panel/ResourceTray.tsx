@@ -37,9 +37,9 @@ export function ResourceTray({ resources }: { resources: Resource[] }) {
           return (
             <a
               key={i}
-              href={r.type === "url" ? r.url : undefined}
-              target={r.type === "url" ? "_blank" : undefined}
-              rel={r.type === "url" ? "noopener noreferrer" : undefined}
+              href={r.url || undefined}
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-start gap-2 px-2 py-1.5 rounded-xl bg-[#0f0e0c] border border-[#2a2723] hover:border-[#d4a373]/30 hover:bg-[#d4a373]/5 transition-all group cursor-pointer"
             >
               <div className="p-1 rounded-lg bg-[#d4a373]/10 text-[#d4a373]/60 group-hover:text-[#d4a373] transition-colors shrink-0 mt-0.5">

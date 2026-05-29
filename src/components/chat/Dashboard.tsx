@@ -7,6 +7,7 @@ import { useState } from "react";
 import { PageCustomizer } from "./PageCustomizer";
 import { usePageSettings } from "../../hooks/usePageSettings";
 import { DASHBOARD_DEFAULTS, getCardBgStyle } from "../../utils/color";
+import { NotificationBell } from "../notifications-bell";
 
 interface DashboardProps {
   workspaces: Doc<"workspaces">[] | undefined;
@@ -79,7 +80,7 @@ export function Dashboard({
   const dateStr = now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
   return (
-    <div className="flex-1 flex flex-col items-center min-h-0 overflow-y-auto relative">
+    <div className="flex-1 flex flex-col items-center min-h-0 relative overflow-hidden w-full">
       {/* Background Image Overlay */}
       {bgUrl && (
         <>
@@ -105,7 +106,7 @@ export function Dashboard({
           )}
         </>
       )}
-      <div className="relative z-10 flex flex-col items-center w-full min-h-0 flex-1">
+      <div className="relative z-10 flex flex-col items-center w-full min-h-0 flex-1 overflow-y-auto">
         {/* Push greeting to vertical center */}
         <div className="flex-1 min-h-12" />
 
@@ -330,7 +331,7 @@ export function Dashboard({
       </div>
 
       {/* Mobile Top Navigation */}
-      <div className="fixed top-6 left-6 z-50 flex items-center gap-2 lg:hidden">
+      <div className="absolute top-6 left-6 z-30 flex items-center gap-2 lg:hidden">
         <button
           onClick={onShowHistory}
           className="w-9 h-9 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all flex items-center justify-center shadow-lg"
@@ -340,20 +341,24 @@ export function Dashboard({
         </button>
       </div>
 
-      {onShowTasks && (
-        <button
-          onClick={onShowTasks}
-          className="fixed top-6 right-6 z-50 w-9 h-9 lg:w-11 lg:h-11 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all flex items-center justify-center shadow-lg"
-          title="Planner"
-        >
-          <ClipboardList className="w-4 h-4 lg:w-5 lg:h-5" />
-        </button>
-      )}
+      {/* Floating Notifications & Planner */}
+      <div className="absolute top-6 right-6 z-30 flex items-center gap-2">
+        <NotificationBell />
+        {onShowTasks && (
+          <button
+            onClick={onShowTasks}
+            className="w-9 h-9 lg:w-11 lg:h-11 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all flex items-center justify-center shadow-lg"
+            title="Planner"
+          >
+            <ClipboardList className="w-4 h-4 lg:w-5 lg:h-5" />
+          </button>
+        )}
+      </div>
 
       {/* Background Edit Button */}
       <button
         onClick={() => setShowBgEditor(true)}
-        className="fixed bottom-6 right-6 z-50 w-9 h-9 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all flex items-center justify-center shadow-lg"
+        className="absolute bottom-6 right-6 z-30 w-9 h-9 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all flex items-center justify-center shadow-lg"
         title="Edit background"
       >
         <Brush className="w-4 h-4" />

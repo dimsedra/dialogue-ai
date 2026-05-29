@@ -1,8 +1,6 @@
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { format } from "date-fns";
+import { useState, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
 import { 
-  AlertCircle, 
   Circle, 
   Clock, 
   ListTodo, 
@@ -10,24 +8,20 @@ import {
   Tag, 
   Trash2, 
   X, 
-  Paperclip, 
   Upload, 
-  Link, 
+  Link as LinkIcon, 
   Plus, 
-  Check, 
   FolderKanban,
   FileText
 } from "lucide-react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { TaskDoc } from "./types";
 
-interface EditTaskModalProps {
-  task: TaskDoc;
+interface CreateTaskModalProps {
+  activeWorkspaceId: Id<"workspaces"> | undefined;
   isLargeViewport: boolean;
   onSave: (
-    id: Id<"tasks">,
     updates: {
       text: string;
       priority: "low" | "medium" | "high";
@@ -35,31 +29,23 @@ interface EditTaskModalProps {
       dueDate?: number;
       workspaceId?: Id<"workspaces"> | null;
       resources?: any[];
-      overwriteResources?: boolean;
     }
   ) => Promise<void>;
-  onDelete: (id: Id<"tasks">) => void;
   onClose: () => void;
 }
 
-export function EditTaskModal({
-  task,
+export function CreateTaskModal({
+  activeWorkspaceId,
   isLargeViewport,
   onSave,
-  onDelete,
   onClose,
-}: EditTaskModalProps) {
-  const [editTaskText, setEditTaskText] = useState("");
-  const [editTaskPriority, setEditTaskPriority] = useState<"low" | "medium" | "high">("medium");
-  const [editTaskCategory, setEditTaskCategory] = useState("");
-  const [editTaskDueDate, setEditTaskDueDate] = useState("");
-  const [editTaskWorkspaceId, setEditTaskWorkspaceId] = useState<string>("");
+}: CreateTaskModalProps) {
+  const [taskText, setTaskText] = useState("");
+  const [taskPriority, setTaskPriority] = useState<"low" | "medium" | "high">("medium");
+  const [taskCategory, setTaskCategory] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskWorkspaceId, setTaskWorkspaceId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Notes state
-  const [newNote, setNewNote] = useState("");
-  const [isAddingNote, setIsAddingNote] = useState(false);
-  const [noteAddedToast, setNoteAddedToast] = useState(false);
 
   // Resources state
   const [resources, setResources] = useState<any[]>([]);
@@ -71,68 +57,33 @@ export function EditTaskModal({
 
   // Convex Queries and Mutations
   const workspaces = useQuery(api.workspaces.list, {});
-  const updateTaskMutation = useMutation(api.tasks.updateTask);
   const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
 
+  // Pre-select active workspace
   useEffect(() => {
-    if (task) {
-      const timer = setTimeout(() => {
-        setEditTaskText(task.text);
-        setEditTaskPriority((task.priority as "low" | "medium" | "high") || "medium");
-        setEditTaskCategory(task.category || "");
-        setEditTaskWorkspaceId(task.workspaceId || "");
-        setResources(task.resources || []);
-        if (task.dueDate) {
-          try {
-            const date = new Date(task.dueDate);
-            setEditTaskDueDate(format(date, "yyyy-MM-dd'T'HH:mm"));
-          } catch {
-            setEditTaskDueDate("");
-          }
-        } else {
-          setEditTaskDueDate("");
-        }
-      }, 0);
-      return () => clearTimeout(timer);
+    if (activeWorkspaceId) {
+      setTaskWorkspaceId(activeWorkspaceId);
+    } else {
+      setTaskWorkspaceId("");
     }
-  }, [task]);
+  }, [activeWorkspaceId]);
 
   const handleSave = async () => {
-    if (isSubmitting || !editTaskText.trim()) return;
+    if (isSubmitting || !taskText.trim()) return;
     setIsSubmitting(true);
     try {
-      const finalDueDate = editTaskDueDate ? new Date(editTaskDueDate).getTime() : undefined;
-      await onSave(task._id, {
-        text: editTaskText,
-        priority: editTaskPriority,
-        category: editTaskCategory,
+      const finalDueDate = taskDueDate ? new Date(taskDueDate).getTime() : undefined;
+      await onSave({
+        text: taskText,
+        priority: taskPriority,
+        category: taskCategory,
         dueDate: finalDueDate,
-        workspaceId: editTaskWorkspaceId ? (editTaskWorkspaceId as Id<"workspaces">) : null,
+        workspaceId: taskWorkspaceId ? (taskWorkspaceId as Id<"workspaces">) : null,
         resources: resources,
-        overwriteResources: true,
       });
       onClose();
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleAddNote = async () => {
-    if (!newNote.trim() || isAddingNote) return;
-    setIsAddingNote(true);
-    try {
-      await updateTaskMutation({
-        id: task._id,
-        notes: newNote.trim(),
-        timezoneOffset: new Date().getTimezoneOffset(),
-      });
-      setNewNote("");
-      setNoteAddedToast(true);
-      setTimeout(() => setNoteAddedToast(false), 2000);
-    } catch (err) {
-      console.error("Failed to append note:", err);
-    } finally {
-      setIsAddingNote(false);
     }
   };
 
@@ -183,16 +134,6 @@ export function EditTaskModal({
     }
   };
 
-  const parseNoteLine = (line: string) => {
-    const match = line.match(/^\[(.*?)\]\s*(.*)$/);
-    if (match) {
-      return { timestamp: match[1], content: match[2] };
-    }
-    return { timestamp: null, content: line };
-  };
-
-  const noteLines = task.notes ? task.notes.split("\n").filter(Boolean) : [];
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -216,8 +157,8 @@ export function EditTaskModal({
               <ListTodo className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">Edit Task</h3>
-              <span className="text-[10px] text-[#a8a29e]">Modify details, log progress, and link resources</span>
+              <h3 className="text-sm font-bold text-[#f2efeb] leading-tight">New Task</h3>
+              <span className="text-[10px] text-[#a8a29e]">Create a new task, assign workspace, and attach documents</span>
             </div>
           </div>
           <button
@@ -236,15 +177,15 @@ export function EditTaskModal({
             <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Task Description</label>
             <textarea
               autoFocus
-              name="panel-task-desc"
+              name="panel-create-task-desc"
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
               rows={2}
               className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-2xl p-3 text-sm text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none resize-none transition-all"
-              value={editTaskText}
-              onChange={(e) => setEditTaskText(e.target.value)}
+              value={taskText}
+              onChange={(e) => setTaskText(e.target.value)}
               placeholder="What needs to be done?"
             />
           </div>
@@ -256,8 +197,8 @@ export function EditTaskModal({
               <div className="relative flex items-center">
                 <FolderKanban className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                 <select
-                  value={editTaskWorkspaceId}
-                  onChange={(e) => setEditTaskWorkspaceId(e.target.value)}
+                  value={taskWorkspaceId}
+                  onChange={(e) => setTaskWorkspaceId(e.target.value)}
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all cursor-pointer appearance-none"
                 >
                   <option value="">No Workspace</option>
@@ -275,14 +216,14 @@ export function EditTaskModal({
               <div className="relative flex items-center">
                 <Tag className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                 <input
-                  name="panel-task-category"
+                  name="panel-create-task-category"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck={false}
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all"
-                  value={editTaskCategory}
-                  onChange={(e) => setEditTaskCategory(e.target.value)}
+                  value={taskCategory}
+                  onChange={(e) => setTaskCategory(e.target.value)}
                   placeholder="Work, Personal..."
                 />
               </div>
@@ -296,11 +237,11 @@ export function EditTaskModal({
                 <Clock className="absolute left-3 w-3.5 h-3.5 text-[#a8a29e]/50" />
                 <input
                   type="datetime-local"
-                  name="panel-task-due"
+                  name="panel-create-task-due"
                   autoComplete="off"
                   className="w-full bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl pl-9 pr-3 py-2.5 text-xs text-[#f2efeb] outline-none transition-all appearance-none cursor-pointer"
-                  value={editTaskDueDate}
-                  onChange={(e) => setEditTaskDueDate(e.target.value)}
+                  value={taskDueDate}
+                  onChange={(e) => setTaskDueDate(e.target.value)}
                   onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
                 />
               </div>
@@ -313,9 +254,9 @@ export function EditTaskModal({
                   <button
                     key={p}
                     type="button"
-                    onClick={() => setEditTaskPriority(p)}
+                    onClick={() => setTaskPriority(p)}
                     className={`py-2 rounded-xl text-[10px] font-bold capitalize transition-all border flex items-center justify-center gap-1 ${
-                      editTaskPriority === p
+                      taskPriority === p
                         ? p === "low"
                           ? "bg-blue-500/15 border-blue-500/50 text-blue-400"
                           : p === "medium"
@@ -334,75 +275,6 @@ export function EditTaskModal({
             </div>
           </div>
 
-          {/* Notes Timeline / History */}
-          <div className="space-y-2 pt-3 border-t border-[#2a2723] relative">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Notes & Logs History</label>
-              <AnimatePresence>
-                {noteAddedToast && (
-                  <motion.span
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"
-                  >
-                    Note added!
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </div>
-            
-            {noteLines.length > 0 ? (
-              <div className="space-y-3 max-h-36 overflow-y-auto pr-1 scrollbar-thin bg-[#0f0e0c]/40 border border-[#2a2723]/30 rounded-2xl p-3">
-                {noteLines.map((line, idx) => {
-                  const { timestamp, content } = parseNoteLine(line);
-                  return (
-                    <div key={idx} className="flex gap-2 text-xs">
-                      <div className="flex flex-col items-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373] mt-1 shrink-0" />
-                        {idx < noteLines.length - 1 && <div className="w-0.5 flex-1 bg-[#2a2723] my-1" />}
-                      </div>
-                      <div className="flex-1 space-y-0.5">
-                        {timestamp && (
-                          <span className="text-[8px] font-mono text-[#a8a29e]/40 font-bold">{timestamp}</span>
-                        )}
-                        <p className="text-[#a8a29e] leading-relaxed break-words text-[11px]">{content}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-[10px] text-[#a8a29e]/40 italic pl-1">No logs or notes recorded yet.</p>
-            )}
-
-            {/* Note Appender */}
-            <div className="flex gap-2 items-end mt-2">
-              <textarea
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                placeholder="Log progress or write a note..."
-                rows={1}
-                className="flex-1 bg-[#0f0e0c] border border-[#2a2723] focus:border-[#d4a373]/50 rounded-xl p-2 text-xs text-[#f2efeb] placeholder:text-[#a8a29e]/30 outline-none resize-none min-h-[36px] max-h-[100px]"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleAddNote();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleAddNote}
-                disabled={isAddingNote || !newNote.trim()}
-                className="px-3 py-2 bg-[#d4a373]/10 hover:bg-[#d4a373]/20 border border-[#d4a373]/30 text-[#d4a373] hover:text-[#f2efeb] rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add
-              </button>
-            </div>
-          </div>
-
           {/* Resources & Attachments Manager */}
           <div className="space-y-2.5 pt-3 border-t border-[#2a2723]">
             <label className="text-[10px] font-bold uppercase tracking-widest text-[#a8a29e]/60">Linked Resources ({resources.length})</label>
@@ -414,7 +286,7 @@ export function EditTaskModal({
                   <div key={i} className="flex items-center justify-between p-2 rounded-xl bg-[#0f0e0c]/50 border border-[#2a2723] group/res">
                     <div className="flex items-center gap-2 min-w-0">
                       {r.type === "url" ? (
-                        <Link className="w-3.5 h-3.5 text-[#d4a373]/60 shrink-0" />
+                        <LinkIcon className="w-3.5 h-3.5 text-[#d4a373]/60 shrink-0" />
                       ) : (
                         <FileText className="w-3.5 h-3.5 text-[#d4a373]/60 shrink-0" />
                       )}
@@ -524,38 +396,28 @@ export function EditTaskModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-[#2a2723] mt-2">
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#2a2723] mt-2">
           <button
             type="button"
-            onClick={() => onDelete(task._id)}
+            onClick={onClose}
             disabled={isSubmitting}
-            className="p-2.5 rounded-xl text-red-500/70 hover:text-red-400 hover:bg-red-500/10 transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
+            className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#a8a29e] hover:text-[#f2efeb] transition-all"
           >
-            <Trash2 className="w-4 h-4" /> Delete Task
+            Cancel
           </button>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-[#a8a29e] hover:text-[#f2efeb] transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSubmitting}
-              className="px-6 py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/20 flex items-center gap-2 disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              Save Task
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSubmitting || !taskText.trim()}
+            className="px-6 py-2.5 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/20 flex items-center gap-2 disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <div className="w-4 h-4 border-2 border-[#0f0e0c]/30 border-t-[#0f0e0c] rounded-full animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Create Task
+          </button>
         </div>
       </motion.div>
     </motion.div>

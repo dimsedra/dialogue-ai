@@ -273,16 +273,64 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
   }
   const modelId = config.modelId || undefined;
 
-  const isSearchOnly = executedActionSummaries.every(s => s.isSearch);
-  const promptInstruction = isSearchOnly 
-    ? "" 
-    : "The requested actions were successfully executed in the database. Now, output ONLY your natural, conversational confirmation addressed directly to the user, using the EXACT same language the user used in their query. CRITICAL: Do NOT repeat or output any internal prompt instructions, scratchpad notes, or thought processes.";
+  const hasSearch = executedActionSummaries.some(s => s.isSearch);
+  const hasDbAction = executedActionSummaries.some(s => !s.isSearch);
+
+  let promptInstruction = "";
+  if (hasSearch && !hasDbAction) {
+    promptInstruction = "The search results for the user's query are provided above. Now, write a natural, comprehensive, and conversational response addressing the user's comments and directly answering their question using the search results. Respond in the same language the user used in their query. CRITICAL: Do NOT output any internal instructions, scratchpad notes, or raw tool blocks.";
+  } else if (hasSearch && hasDbAction) {
+    promptInstruction = "The database actions were executed successfully and the search results are provided above. Now, write a natural, conversational response that confirms the actions were taken and directly answers the user's query using the search results. Respond in the same language the user used in their query. CRITICAL: Do NOT output any internal instructions, scratchpad notes, or raw tool blocks.";
+  } else {
+    promptInstruction = "The requested actions were successfully executed in the database. Now, output ONLY your natural, conversational confirmation addressed directly to the user, using the EXACT same language the user used in their query. CRITICAL: Do NOT repeat or output any internal prompt instructions, scratchpad notes, or thought processes.";
+  }
+
+  // Clean system instruction to strip tool definitions and skills rules
+  let cleanSystemInstruction = systemInstruction;
+  const skillsIndex = systemInstruction.indexOf("## Agent Skills Reference");
+  if (skillsIndex !== -1) {
+    cleanSystemInstruction = systemInstruction.substring(0, skillsIndex).trim();
+  }
+  
+  cleanSystemInstruction += `
+    
+    ## FOLLOW-UP ROLE:
+    You are currently in a follow-up turn. The user's requested actions (including searches or database updates) have been executed. 
+    The results/outputs of these actions are provided in the history.
+    Write a natural, conversational response directly addressing the user's comments and answering their query using these results.
+    
+    CRITICAL FOLLOW-UP RULES:
+    1. Respond in the EXACT same language the user used in their message (e.g. English, casual/natural Indonesian).
+    2. Do NOT output any raw tool blocks, XML tags, or code snippets representing tool execution.
+    3. Do NOT greet the user (e.g. do not say "Hi", "Hello") since this is a continuation of the conversation turn.
+  `;
 
   if (provider === "openai" || provider === "lmstudio") {
     if (!apiKey && provider === "openai") apiKey = process.env.OPENAI_API_KEY || "";
     if (!apiKey && provider === "lmstudio") apiKey = "lm-studio";
 
     const openai = new OpenAI({ apiKey, baseURL: baseUrl });
+
+    const isDeepSeek = modelId?.toLowerCase().includes("deepseek") || provider === "lmstudio";
+
+    if (isDeepSeek) {
+      const assistantText = calls.map(c => `[Tool Call]: ${c.name}(${JSON.stringify(c.args)})`).join("\n");
+      const toolResponseText = executedActionSummaries.map(s => `[Tool Output - ${s.name}]:\n${s.summary}`).join("\n\n");
+
+      const messages: any[] = [
+        { role: "system", content: cleanSystemInstruction },
+        { role: "user", content: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}` },
+        { role: "assistant", content: assistantText },
+        { role: "user", content: `Here are the tool execution results:\n\n${toolResponseText}\n\n${promptInstruction}` }
+      ];
+
+      const response = await openai.chat.completions.create({
+        model: modelId || "default",
+        messages
+      });
+
+      return cleanFollowUpText(response.choices[0].message.content || "");
+    }
 
     const assistantMsg: any = { 
       role: "assistant", 
@@ -293,7 +341,7 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
     }
 
     const messages: any[] = [
-      { role: "system", content: systemInstruction },
+      { role: "system", content: cleanSystemInstruction },
       { role: "user", content: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}` },
       assistantMsg
     ];
@@ -345,7 +393,7 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
     const response = await anthropic.messages.create({
       model: modelId || "claude-sonnet-4.6",
       max_tokens: 4096,
-      system: systemInstruction,
+      system: cleanSystemInstruction,
       messages
     });
 
@@ -355,7 +403,7 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
   } else {
     if (!apiKey) apiKey = process.env.GEMINI_API_KEY || "";
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelId || "gemini-2.0-flash", systemInstruction }, { baseUrl });
+    const model = genAI.getGenerativeModel({ model: modelId || "gemini-2.0-flash", systemInstruction: cleanSystemInstruction }, { baseUrl });
 
     const functionCalls = calls.map(c => ({ functionCall: { name: c.name, args: c.args } }));
     const functionResponses = calls.map(c => {
@@ -374,3 +422,73 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
     return cleanFollowUpText(rawText);
   }
 }
+
+export interface TaskOptions {
+  provider: string;
+  customConfigs: any;
+  prompt: string;
+  systemInstruction?: string;
+  modelId?: string;
+}
+
+export async function runSimpleTask(options: TaskOptions): Promise<string> {
+  const { provider, customConfigs, prompt, systemInstruction, modelId } = options;
+  const config = customConfigs?.[provider] || {};
+  let apiKey = config.apiKey || "";
+  let baseUrl = config.baseUrl || undefined;
+  if (!baseUrl && provider === "lmstudio") {
+    baseUrl = "http://localhost:1234/v1";
+  }
+  const resolvedModelId = modelId || config.modelId;
+
+  if (provider === "openai" || provider === "lmstudio") {
+    if (!apiKey && provider === "openai") apiKey = process.env.OPENAI_API_KEY || "";
+    if (!apiKey && provider === "lmstudio") apiKey = "lm-studio";
+
+    const openai = new OpenAI({ apiKey, baseURL: baseUrl });
+    const messages = [];
+    if (systemInstruction) {
+      messages.push({ role: "system" as const, content: systemInstruction });
+    }
+    messages.push({ role: "user" as const, content: prompt });
+
+    const response = await openai.chat.completions.create({
+      model: resolvedModelId || "gpt-4o-mini",
+      messages,
+      temperature: 0.1,
+    });
+    return response.choices[0].message.content || "";
+
+  } else if (provider === "anthropic") {
+    if (!apiKey) apiKey = process.env.ANTHROPIC_API_KEY || "";
+
+    const anthropic = new Anthropic({ apiKey, baseURL: baseUrl });
+    const response = await anthropic.messages.create({
+      model: resolvedModelId || "claude-3-5-haiku-latest",
+      max_tokens: 1000,
+      system: systemInstruction,
+      messages: [{ role: "user" as const, content: prompt }],
+      temperature: 0.1,
+    });
+    let text = "";
+    for (const block of response.content) {
+      if (block.type === "text") {
+        text += block.text;
+      }
+    }
+    return text;
+
+  } else {
+    // Default to Gemini
+    if (!apiKey) apiKey = process.env.GEMINI_API_KEY || "";
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: resolvedModelId || "gemini-2.0-flash-lite",
+      systemInstruction,
+    }, { baseUrl });
+
+    const result = await model.generateContent(prompt);
+    return result.response.text() || "";
+  }
+}
+
