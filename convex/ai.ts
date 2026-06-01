@@ -2,7 +2,28 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { auth } from "./auth";
 import { encrypt, decrypt } from "./encryption";
-import { recentActivityFeedHandler } from "./notes";
+import { Doc } from "./_generated/dataModel";
+
+type SessionWithTimezone = Doc<"chatSessions"> & {
+  timezone?: string;
+  updatedAt?: number;
+};
+
+type CustomProviderConfig = {
+  apiKey?: string;
+  baseUrl?: string;
+  modelId?: string;
+};
+
+type PreferencesRecord = Record<string, unknown> & {
+  customConfigs?: Record<string, CustomProviderConfig>;
+  taskModels?: Record<string, string>;
+  searchProvider?: "tavily" | "serper";
+  pushEnabled?: boolean;
+};
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
 
 const SKILLS_INSTRUCTION = `
 ## Agent Skills Reference
@@ -104,11 +125,6 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 ### deleteSemanticMemory
 - Purpose: Delete a specific long-term semantic memory/fact if the user explicitly corrects a previously remembered fact or requests that it be forgotten.
 - Verification Protocol: You MUST ask for confirmation/verification before calling this tool, unless the user's message is an explicit instruction to delete/forget it (e.g., "Forget that I have a cat").
-### triggerReflection
-- Purpose: Use to trigger a Spotify-Wrapped style periodic reflection summary of the user's tasks, events, categories, and streaks over a specific period. Use when the user asks how they are doing, requests a summary/reflection of their week/month/year, or says "How is my week going?"
-- Parameters:
-  * type: "weekly", "monthly", or "yearly".
-  * offsetWeeks, offsetMonths, offsetYears: number (optional, default 0 for current week/month/year. Use positive numbers to look back in history).
 ### searchHistoricalEntities
 - Purpose: Search the user's completed tasks and past events on demand. Use when the user asks retrospective questions about what they've done, finished, or attended.
 - Parameters: type ("tasks", "events", or "all"), optional query (keyword filter), optional startTime/endTime (date range in UTC ms), optional limit (max results).
@@ -217,21 +233,25 @@ export const getPromptContext = query({
   args: {
     sessionId: v.id("chatSessions"),
     timezoneOffset: v.optional(v.number()),
-    timezone: v.optional(v.string()),  // IANA timezone
+    timezone: v.optional(v.string()), // IANA timezone
     brief: v.optional(v.boolean()),
     userId: v.optional(v.id("users")),
-    scope: v.optional(v.object({
-      type: v.string(),
-      id: v.string(),
-      title: v.string(),
-    })),
+    scope: v.optional(
+      v.object({
+        type: v.string(),
+        id: v.string(),
+        title: v.string(),
+      }),
+    ),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
-    if (!userId) return { systemInstruction: "Unauthorized", workspaceId: null };
+    if (!userId)
+      return { systemInstruction: "Unauthorized", workspaceId: null };
 
     const session = await ctx.db.get(args.sessionId);
-    if (!session || session.userId !== userId) return { systemInstruction: "Unauthorized", workspaceId: null };
+    if (!session || session.userId !== userId)
+      return { systemInstruction: "Unauthorized", workspaceId: null };
 
     const workspaceId = session?.workspaceId;
 
@@ -243,26 +263,47 @@ export const getPromptContext = query({
     const personalityFragments = "";
 
     // Resolve timezone: arg > session > fallback
-    const resolvedTimezone = args.timezone || (session as any)?.timezone || undefined;
+    const sessionWithTimezone = session as SessionWithTimezone;
+    const resolvedTimezone =
+      args.timezone || sessionWithTimezone.timezone || undefined;
 
     let nowString = "";
     if (resolvedTimezone) {
       nowString = new Date().toLocaleString("en-US", {
         timeZone: resolvedTimezone,
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
       });
     } else if (args.timezoneOffset !== undefined) {
       const now = new Date();
-      const localTime = new Date(now.getTime() - (args.timezoneOffset * 60000));
+      const localTime = new Date(now.getTime() - args.timezoneOffset * 60000);
       nowString = localTime.toLocaleString("en-US", {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
       });
     } else {
       nowString = new Date().toLocaleString("en-US", {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short', hour12: false
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZoneName: "short",
+        hour12: false,
       });
     }
 
@@ -276,11 +317,33 @@ export const getPromptContext = query({
       : "";
 
     const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
-    const allTasks = workspaceId 
-      ? await ctx.db.query("tasks").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).filter((q) => q.or(q.eq(q.field("completed"), false), q.gte(q.field("completedAt"), fortyEightHoursAgo))).collect()
-      : await ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).filter((q) => q.or(q.eq(q.field("completed"), false), q.gte(q.field("completedAt"), fortyEightHoursAgo))).collect();
+    const allTasks = workspaceId
+      ? await ctx.db
+          .query("tasks")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .filter((q) =>
+            q.or(
+              q.eq(q.field("completed"), false),
+              q.gte(q.field("completedAt"), fortyEightHoursAgo),
+            ),
+          )
+          .collect()
+      : await ctx.db
+          .query("tasks")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .filter((q) =>
+            q.or(
+              q.eq(q.field("completed"), false),
+              q.gte(q.field("completedAt"), fortyEightHoursAgo),
+            ),
+          )
+          .collect();
 
-    const priorityWeight: Record<string, number> = { high: 1, medium: 2, low: 3 };
+    const priorityWeight: Record<string, number> = {
+      high: 1,
+      medium: 2,
+      low: 3,
+    };
     const pendingTasks = allTasks.filter((t) => !t.completed);
     const completedTasks = allTasks.filter((t) => t.completed);
 
@@ -296,13 +359,25 @@ export const getPromptContext = query({
 
     const formatTaskDate = (ts?: number) => {
       if (!ts) return "N/A";
-      const dt = args.timezoneOffset !== undefined ? new Date(ts - (args.timezoneOffset * 60000)) : new Date(ts);
+      const dt =
+        args.timezoneOffset !== undefined
+          ? new Date(ts - args.timezoneOffset * 60000)
+          : new Date(ts);
       return dt.toLocaleString("en-US", { hour12: false });
     };
 
-    const formatResources = (resources: { title: string; type: string; url?: string; summary?: string }[] | undefined) => {
+    const formatResources = (
+      resources:
+        | { title: string; type: string; url?: string; summary?: string }[]
+        | undefined,
+    ) => {
       if (!resources || resources.length === 0) return "";
-      const summary = resources.map(r => `    - ${r.type === "url" ? "URL" : "File"}: "${r.title}" (${r.url || ""})${r.summary ? ` — ${r.summary}` : ""}`).join("\n");
+      const summary = resources
+        .map(
+          (r) =>
+            `    - ${r.type === "url" ? "URL" : "File"}: "${r.title}" (${r.url || ""})${r.summary ? ` — ${r.summary}` : ""}`,
+        )
+        .join("\n");
       return `\n  Resources (${resources.length}):\n${summary}`;
     };
 
@@ -320,105 +395,147 @@ export const getPromptContext = query({
       return dates;
     };
 
-    const fmtDate = (t: { dueDateStr?: string; dueDate?: number }) => t.dueDateStr || (t.dueDate ? formatTaskDate(t.dueDate) : "");
+    const fmtDate = (t: { dueDateStr?: string; dueDate?: number }) =>
+      t.dueDateStr || (t.dueDate ? formatTaskDate(t.dueDate) : "");
 
-    const pendingTasksContext = sortedPendingTasks.map(t => {
-      const dateStr = (t.dueDateStr || t.dueDate) ? ` | Due: ${fmtDate(t)}` : "";
-      const progressStr = t.progress !== undefined ? ` | Progress: ${t.progress}%` : "";
-      const hookStr = t.statusHook ? ` | Hook: "${t.statusHook}"` : "";
-      const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
-      const resourcesStr = formatResources(t.resources);
-      return `- [${t._id}] ${t.text}${dateStr}${progressStr}${hookStr} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"})${notesStr}${resourcesStr}`;
-    }).join("\n");
+    const pendingTasksContext = sortedPendingTasks
+      .map((t) => {
+        const dateStr =
+          t.dueDateStr || t.dueDate ? ` | Due: ${fmtDate(t)}` : "";
+        const progressStr =
+          t.progress !== undefined ? ` | Progress: ${t.progress}%` : "";
+        const hookStr = t.statusHook ? ` | Hook: "${t.statusHook}"` : "";
+        const notesStr = t.notes
+          ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}`
+          : "";
+        const resourcesStr = formatResources(t.resources);
+        return `- [${t._id}] ${t.text}${dateStr}${progressStr}${hookStr} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"})${notesStr}${resourcesStr}`;
+      })
+      .join("\n");
 
-    const sortedCompletedTasks = [...completedTasks].sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
-    const completedTasksContext = sortedCompletedTasks.map(t => {
-      const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
-      const dueStr = (t.dueDateStr || t.dueDate) ? `, Due: ${fmtDate(t)}` : "";
-      const completedStr = t.completedAt ? `, Completed: ${formatTaskDate(t.completedAt)}` : "";
-      const notesStr = t.notes ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}` : "";
-      const resourcesStr = formatResources(t.resources);
-      return `- [${t._id}] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${notesStr}${resourcesStr}`;
-    }).join("\n");
+    const sortedCompletedTasks = [...completedTasks].sort(
+      (a, b) => (b.completedAt || 0) - (a.completedAt || 0),
+    );
+    const completedTasksContext = sortedCompletedTasks
+      .map((t) => {
+        const createdStr = `Created: ${formatTaskDate(t._creationTime)}`;
+        const dueStr = t.dueDateStr || t.dueDate ? `, Due: ${fmtDate(t)}` : "";
+        const completedStr = t.completedAt
+          ? `, Completed: ${formatTaskDate(t.completedAt)}`
+          : "";
+        const notesStr = t.notes
+          ? `\n  Notes:\n  ${t.notes.split("\n").join("\n  ")}`
+          : "";
+        const resourcesStr = formatResources(t.resources);
+        return `- [${t._id}] ${t.text} (Priority: ${t.priority || "medium"}, Category: ${t.category || "General"}) [${createdStr}${dueStr}${completedStr}]${notesStr}${resourcesStr}`;
+      })
+      .join("\n");
 
     const events = workspaceId
-      ? await ctx.db.query("events").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect()
-      : await ctx.db.query("events").withIndex("by_user", (q) => q.eq("userId", userId)).collect();
+      ? await ctx.db
+          .query("events")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .collect()
+      : await ctx.db
+          .query("events")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .collect();
     const upcomingEventsContext = events
-      .filter(e => e.startTime > Date.now() - 3600000)
-      .map(e => {
-        const eventDate = args.timezoneOffset !== undefined
-          ? new Date(e.startTime - (args.timezoneOffset * 60000))
-          : new Date(e.startTime);
+      .filter((e) => e.startTime > Date.now() - 3600000)
+      .map((e) => {
+        const eventDate =
+          args.timezoneOffset !== undefined
+            ? new Date(e.startTime - args.timezoneOffset * 60000)
+            : new Date(e.startTime);
         const hookStr = e.statusHook ? ` | Hook: "${e.statusHook}"` : "";
         const outcomeStr = e.outcome ? ` | Outcome: "${e.outcome}"` : "";
-        const notesStr = e.notes ? `\n  Notes:\n  ${e.notes.split("\n").join("\n  ")}` : "";
+        const notesStr = e.notes
+          ? `\n  Notes:\n  ${e.notes.split("\n").join("\n  ")}`
+          : "";
         const resourcesStr = formatResources(e.resources);
         return `- [${e._id}] ${e.title} (${eventDate.toLocaleString("en-US", { hour12: false })}) [Type: ${e.eventType || "interval"}]${hookStr}${outcomeStr}${notesStr}${resourcesStr}`;
       })
       .join("\n");
 
     const activeHabits = workspaceId
-      ? await ctx.db.query("habits").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect()
-      : await ctx.db.query("habits").withIndex("by_user", (q) => q.eq("userId", userId)).collect();
+      ? await ctx.db
+          .query("habits")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .collect()
+      : await ctx.db
+          .query("habits")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .collect();
 
-    const nonArchivedHabits = activeHabits.filter(h => !h.archived);
+    const nonArchivedHabits = activeHabits.filter((h) => !h.archived);
 
     let todayDateString = "";
     if (args.timezoneOffset !== undefined) {
       const now = new Date();
-      const localTime = new Date(now.getTime() - (args.timezoneOffset * 60000));
+      const localTime = new Date(now.getTime() - args.timezoneOffset * 60000);
       todayDateString = `${localTime.getFullYear()}-${String(localTime.getMonth() + 1).padStart(2, "0")}-${String(localTime.getDate()).padStart(2, "0")}`;
     } else {
       const now = new Date();
       todayDateString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     }
 
-    const habitsContextLines = await Promise.all(nonArchivedHabits.map(async (h) => {
-      const todayLog = await ctx.db
-        .query("habitLogs")
-        .withIndex("by_habit_dateString", (q) => q.eq("habitId", h._id).eq("dateString", todayDateString))
-        .unique();
-      const statusStr = todayLog ? `Today: ${todayLog.status.toUpperCase()}` : "Today: PENDING (Not logged yet)";
-      const schedStr = h.frequency === "daily" ? "Daily" : `Days: [${h.frequencyConfig?.daysOfWeek?.join(",")}]`;
-      const lastLoggedStr = h.lastLoggedDate ? ` | Last Logged: ${h.lastLoggedDate}` : "";
+    const habitsContextLines = await Promise.all(
+      nonArchivedHabits.map(async (h) => {
+        const todayLog = await ctx.db
+          .query("habitLogs")
+          .withIndex("by_habit_dateString", (q) =>
+            q.eq("habitId", h._id).eq("dateString", todayDateString),
+          )
+          .unique();
+        const statusStr = todayLog
+          ? `Today: ${todayLog.status.toUpperCase()}`
+          : "Today: PENDING (Not logged yet)";
+        const schedStr =
+          h.frequency === "daily"
+            ? "Daily"
+            : `Days: [${h.frequencyConfig?.daysOfWeek?.join(",")}]`;
+        const lastLoggedStr = h.lastLoggedDate
+          ? ` | Last Logged: ${h.lastLoggedDate}`
+          : "";
 
-      // Fetch the logs for the current habit to compute the weekly rate
-      const logs = await ctx.db
-        .query("habitLogs")
-        .withIndex("by_habit", (q) => q.eq("habitId", h._id))
-        .order("desc")
-        .take(30);
+        // Fetch the logs for the current habit to compute the weekly rate
+        const logs = await ctx.db
+          .query("habitLogs")
+          .withIndex("by_habit", (q) => q.eq("habitId", h._id))
+          .order("desc")
+          .take(30);
 
-      const last7Days = getRolling7Days(todayDateString);
-      let completedCount = 0;
-      let scheduledCount = 0;
+        const last7Days = getRolling7Days(todayDateString);
+        let completedCount = 0;
+        let scheduledCount = 0;
 
-      for (const dateStr of last7Days) {
-        const [y, m, d] = dateStr.split("-").map(Number);
-        const dt = new Date(y, m - 1, d);
-        const dayOfWeek = dt.getDay();
+        for (const dateStr of last7Days) {
+          const [y, m, d] = dateStr.split("-").map(Number);
+          const dt = new Date(y, m - 1, d);
+          const dayOfWeek = dt.getDay();
 
-        let isScheduled = true;
-        if (h.frequency === "custom" && h.frequencyConfig?.daysOfWeek) {
-          isScheduled = h.frequencyConfig.daysOfWeek.includes(dayOfWeek);
-        }
+          let isScheduled = true;
+          if (h.frequency === "custom" && h.frequencyConfig?.daysOfWeek) {
+            isScheduled = h.frequencyConfig.daysOfWeek.includes(dayOfWeek);
+          }
 
-        if (isScheduled) {
-          scheduledCount++;
-          const log = logs.find((l) => l.dateString === dateStr);
-          if (log && log.status === "completed") {
-            completedCount++;
+          if (isScheduled) {
+            scheduledCount++;
+            const log = logs.find((l) => l.dateString === dateStr);
+            if (log && log.status === "completed") {
+              completedCount++;
+            }
           }
         }
-      }
 
-      const weeklyRate = scheduledCount > 0
-        ? Math.round((completedCount / scheduledCount) * 100)
-        : 0;
+        const weeklyRate =
+          scheduledCount > 0
+            ? Math.round((completedCount / scheduledCount) * 100)
+            : 0;
 
-      return `- [${h._id}] "${h.name}" (${schedStr}) | Current Streak: ${h.currentStreak} day(s) (Longest: ${h.longestStreak}d), Weekly Rate: ${weeklyRate}% (${completedCount}/${scheduledCount} Completed) | ${statusStr}${lastLoggedStr}`;
-    }));
+        return `- [${h._id}] "${h.name}" (${schedStr}) | Current Streak: ${h.currentStreak} day(s) (Longest: ${h.longestStreak}d), Weekly Rate: ${weeklyRate}% (${completedCount}/${scheduledCount} Completed) | ${statusStr}${lastLoggedStr}`;
+      }),
+    );
     const habitsContext = habitsContextLines.join("\n");
 
     // Fetch OCEAN digest data
@@ -431,12 +548,13 @@ export const getPromptContext = query({
     const latestMonthlyDigest = profile?.monthlyNotesSummaries?.[0] || "";
 
     // Session prolong inactivity check
-    const sessionLastActivity = (session as any)?.lastActivity ?? (session as any)?.updatedAt ?? 0;
+    const sessionLastActivity =
+      sessionWithTimezone.lastActivity ?? sessionWithTimezone.updatedAt ?? 0;
     let injectDigests = true;
     if (latestWeeklyDigest || latestMonthlyDigest) {
       const latestDigestTime = Math.max(
         latestWeeklyDigest?.createdAt ?? 0,
-        latestMonthlyDigest ? sessionLastActivity : 0
+        latestMonthlyDigest ? sessionLastActivity : 0,
       );
       if (sessionLastActivity > latestDigestTime) {
         injectDigests = false;
@@ -453,8 +571,8 @@ export const getPromptContext = query({
       Current Time: ${nowString}
       Pending Tasks: ${JSON.stringify(sortedPendingTasks)}
       Upcoming Calendar Events: ${JSON.stringify(events)}
-      
-      Provide a personalized, contextual "Sync" update. 
+
+      Provide a personalized, contextual "Sync" update.
       - MANDATORY: Adhere to the 'Zero Omission for Today' rule. Detail today's uncompleted tasks and active events exhaustively.
       - Lead strongly with high-priority tasks and momentary milestones.
       - For upcoming days, provide a brief conversational summary.
@@ -466,7 +584,8 @@ export const getPromptContext = query({
     }
 
     let personaName = "Dialogue";
-    let personaPrompt = "You build relationships through concrete behaviors, not prescribed tones.";
+    let personaPrompt =
+      "You build relationships through concrete behaviors, not prescribed tones.";
     if (session?.agentPersonaId) {
       const persona = await ctx.db.get(session.agentPersonaId);
       if (persona && persona.userId === userId) {
@@ -480,7 +599,7 @@ export const getPromptContext = query({
 
       ${SKILLS_INSTRUCTION}
       ${briefingContext}
- 
+
       ${workspaceContext}
       ${scopeContext}
 
@@ -500,29 +619,37 @@ export const getPromptContext = query({
       Recently Completed: ${completedTasksContext || "None."}
 
       CRITICAL TIMELINESS RULE: To evaluate if a task was completed fast or late, you MUST compare the Completion time against the Due Date, not the Creation time. A large gap between Creation and Completion does not mean the user procrastinated if the task was completed before its Due Date. Emphasize and heavily weight High Priority tasks in your summaries.
-      
+
       Upcoming Events: ${upcomingEventsContext || "None."}
-      
+
       Active Habits: ${habitsContext || "None."}
 
       --- BEHAVIORAL PATTERNS (OCEAN Digest) ---
-      ${injectDigests ? `
+      ${
+        injectDigests
+          ? `
       ${latestMonthlyDigest ? `Monthly OCEAN Digest:\n${latestMonthlyDigest}` : "No monthly OCEAN digest yet."}
       ${latestWeeklyDigest ? `Weekly OCEAN Digest (${latestWeeklyDigest.weekLabel}):\n${latestWeeklyDigest.digest}` : "No weekly OCEAN digest yet."}
-      ` : "Digests up to date — not re-injected."}
-      
+      `
+          : "Digests up to date — not re-injected."
+      }
+
       These are behavioral patterns analyzed from the user's activity using the Big 5 (OCEAN) personality framework. They reflect observed behavior — not stated preferences. The agent uses these to adapt tone and suggestions. NEVER state a pattern to the user as if they told you it. If they ask "why do you always suggest X?", THEN you may cite these observations.
 
       --- RELEVANT FACTS (Mentioned in Past Chats) ---
       ${personalityFragments ? `- ${personalityFragments}` : "No relevant facts found."}
-      
+
       These are things the user has mentioned before. They may be outdated or change without notice. If the user contradicts a fact, ignore the old fact and adapt to what they say now.
-      
+
       (Note: Local LLM mode supports tool execution and web search. Attachment reasoning across files is subject to your local model vision capabilities.)
     `;
 
-    return { systemInstruction, workspaceId, timezoneOffset: args.timezoneOffset };
-  }
+    return {
+      systemInstruction,
+      workspaceId,
+      timezoneOffset: args.timezoneOffset,
+    };
+  },
 });
 
 export const getLatestWeeklyDigest = query({
@@ -570,9 +697,9 @@ export const getMemoryByHash = query({
 });
 
 export const saveMemory = mutation({
-  args: { 
-    text: v.string(), 
-    embedding: v.array(v.number()), 
+  args: {
+    text: v.string(),
+    embedding: v.array(v.number()),
     userId: v.optional(v.id("users")),
     hash: v.optional(v.string()),
     createdAt: v.optional(v.number()),
@@ -603,9 +730,9 @@ export const saveMemory = mutation({
       }
     }
 
-    return await ctx.db.insert("memories", { 
-      userId, 
-      text: args.text, 
+    return await ctx.db.insert("memories", {
+      userId,
+      text: args.text,
       embedding: args.embedding,
       hash: args.hash,
       createdAt,
@@ -615,7 +742,10 @@ export const saveMemory = mutation({
 });
 
 export const getProfile = query({
-  args: { userId: v.optional(v.id("users")), revealKeys: v.optional(v.boolean()) },
+  args: {
+    userId: v.optional(v.id("users")),
+    revealKeys: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) return null;
@@ -623,18 +753,20 @@ export const getProfile = query({
       .query("userProfile")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
-      
+
     if (profile && profile.preferences) {
-      const prefs = profile.preferences as Record<string, any>;
+      const prefs = profile.preferences as PreferencesRecord;
       if (prefs.customConfigs) {
-        const safeConfigs = JSON.parse(JSON.stringify(prefs.customConfigs));
+        const safeConfigs: Record<string, CustomProviderConfig> = JSON.parse(
+          JSON.stringify(prefs.customConfigs),
+        );
         for (const p of Object.keys(safeConfigs)) {
           if (safeConfigs[p]?.apiKey) {
             try {
-              safeConfigs[p].apiKey = await decrypt(safeConfigs[p].apiKey);
-            } catch (e: any) {
-              console.error("Decryption failed for profile query:", e);
-              safeConfigs[p].apiKey = `ERROR: ${e.message}`; // Surface error to UI
+              safeConfigs[p].apiKey = await decrypt(safeConfigs[p].apiKey!);
+            } catch (error: unknown) {
+              console.error("Decryption failed for profile query:", error);
+              safeConfigs[p].apiKey = `ERROR: ${getErrorMessage(error)}`;
             }
           }
         }
@@ -646,7 +778,12 @@ export const getProfile = query({
 });
 
 export const updateProfile = mutation({
-  args: { name: v.optional(v.string()), bio: v.optional(v.string()), preferences: v.optional(v.any()), userId: v.optional(v.id("users")) },
+  args: {
+    name: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    preferences: v.optional(v.any()),
+    userId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) throw new Error("Unauthorized");
@@ -661,28 +798,38 @@ export const updateProfile = mutation({
       if (args.name !== undefined) patch.name = args.name;
       if (args.bio !== undefined) patch.bio = args.bio;
       if (args.preferences !== undefined) {
-        const existingPrefs = (profile.preferences as Record<string, unknown>) || {};
+        const existingPrefs =
+          (profile.preferences as Record<string, unknown>) || {};
         patch.preferences = { ...existingPrefs, ...args.preferences };
       }
       await ctx.db.patch(profile._id, patch);
     } else {
-      await ctx.db.insert("userProfile", { 
-        userId, 
-        name: args.name, 
-        bio: args.bio || "", 
-        preferences: args.preferences || {} 
+      await ctx.db.insert("userProfile", {
+        userId,
+        name: args.name,
+        bio: args.bio || "",
+        preferences: args.preferences || {},
       });
     }
   },
 });
 
 export const updatePreferences = mutation({
-  args: { 
-    provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"), v.literal("openai"), v.literal("anthropic"))),
-    searchProvider: v.optional(v.union(v.literal("tavily"), v.literal("serper"))),
+  args: {
+    provider: v.optional(
+      v.union(
+        v.literal("gemini"),
+        v.literal("lmstudio"),
+        v.literal("openai"),
+        v.literal("anthropic"),
+      ),
+    ),
+    searchProvider: v.optional(
+      v.union(v.literal("tavily"), v.literal("serper")),
+    ),
     customConfigs: v.optional(v.any()),
     taskModels: v.optional(v.any()),
-    userId: v.optional(v.id("users"))
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
@@ -693,45 +840,61 @@ export const updatePreferences = mutation({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
 
-    const preferences = profile ? ((profile.preferences as Record<string, unknown>) || {}) : {};
-    const existingConfigs = (preferences.customConfigs as Record<string, any>) || {};
+    const preferences = profile
+      ? (profile.preferences as PreferencesRecord) || {}
+      : {};
+    const existingConfigs = preferences.customConfigs || {};
 
-    let processedConfigs = args.customConfigs;
+    const processedConfigs = args.customConfigs as
+      | Record<string, CustomProviderConfig>
+      | undefined;
     if (processedConfigs) {
       for (const p of Object.keys(processedConfigs)) {
         if (processedConfigs[p]?.apiKey) {
           try {
-            processedConfigs[p].apiKey = await encrypt(processedConfigs[p].apiKey);
-          } catch (e: any) {
-            console.error("Encryption failed:", e);
-            throw new Error("Failed to encrypt API key. Ensure ENCRYPTION_KEY is set in Convex dashboard.");
+            processedConfigs[p].apiKey = await encrypt(
+              processedConfigs[p].apiKey!,
+            );
+          } catch (error: unknown) {
+            console.error("Encryption failed:", error);
+            throw new Error(
+              "Failed to encrypt API key. Ensure ENCRYPTION_KEY is set in Convex dashboard.",
+            );
           }
         }
       }
     }
 
     if (profile) {
-      const newConfigs = processedConfigs ? { ...existingConfigs, ...processedConfigs } : existingConfigs;
+      const newConfigs = processedConfigs
+        ? { ...existingConfigs, ...processedConfigs }
+        : existingConfigs;
 
       await ctx.db.patch(profile._id, {
-        preferences: { 
-          ...preferences, 
+        preferences: {
+          ...preferences,
           ...(args.provider ? { provider: args.provider } : {}),
-          ...(args.searchProvider ? { searchProvider: args.searchProvider } : { searchProvider: "tavily" }),
+          ...(args.searchProvider
+            ? { searchProvider: args.searchProvider }
+            : { searchProvider: "tavily" }),
           ...(args.taskModels ? { taskModels: args.taskModels } : {}),
-          customConfigs: newConfigs
-        }
+          customConfigs: newConfigs,
+        },
       });
     } else {
       await ctx.db.insert("userProfile", {
         userId,
         bio: "",
-        preferences: { 
-          ...(args.provider ? { provider: args.provider } : { provider: "gemini" }),
-          ...(args.searchProvider ? { searchProvider: args.searchProvider } : { searchProvider: "tavily" }),
+        preferences: {
+          ...(args.provider
+            ? { provider: args.provider }
+            : { provider: "gemini" }),
+          ...(args.searchProvider
+            ? { searchProvider: args.searchProvider }
+            : { searchProvider: "tavily" }),
           ...(processedConfigs ? { customConfigs: processedConfigs } : {}),
-          ...(args.taskModels ? { taskModels: args.taskModels } : {})
-        }
+          ...(args.taskModels ? { taskModels: args.taskModels } : {}),
+        },
       });
     }
   },
@@ -772,26 +935,31 @@ export const deleteMemory = mutation({
   },
 });
 
-
 export const addTask = mutation({
   args: {
     text: v.string(),
     workspaceId: v.optional(v.id("workspaces")),
     dueDate: v.optional(v.number()),
     dueDateStr: v.optional(v.string()),
-    priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
+    priority: v.optional(
+      v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    ),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
     progress: v.optional(v.number()),
     statusHook: v.optional(v.string()),
-    resources: v.optional(v.array(v.object({
-      type: v.union(v.literal("url"), v.literal("document")),
-      title: v.string(),
-      url: v.string(),
-      storageId: v.optional(v.id("_storage")),
-      summary: v.optional(v.string()),
-      linkedAt: v.number(),
-    }))),
+    resources: v.optional(
+      v.array(
+        v.object({
+          type: v.union(v.literal("url"), v.literal("document")),
+          title: v.string(),
+          url: v.string(),
+          storageId: v.optional(v.id("_storage")),
+          summary: v.optional(v.string()),
+          linkedAt: v.number(),
+        }),
+      ),
+    ),
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -811,7 +979,10 @@ export const addTask = mutation({
       progress: args.progress,
       statusHook: args.statusHook,
       resources: args.resources,
-      contextUpdatedAt: (args.notes || args.progress !== undefined || args.statusHook) ? Date.now() : undefined,
+      contextUpdatedAt:
+        args.notes || args.progress !== undefined || args.statusHook
+          ? Date.now()
+          : undefined,
       createdAt: Date.now(),
     });
   },

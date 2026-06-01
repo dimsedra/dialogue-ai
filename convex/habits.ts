@@ -23,8 +23,12 @@ const addDays = (ds: string, n: number): string => {
 };
 
 const daysBetween = (a: string, b: string): number => {
-  const aMs = Date.UTC(...Object.values(dateParts(a)) as [number, number, number]);
-  const bMs = Date.UTC(...Object.values(dateParts(b)) as [number, number, number]);
+  const aMs = Date.UTC(
+    ...(Object.values(dateParts(a)) as [number, number, number]),
+  );
+  const bMs = Date.UTC(
+    ...(Object.values(dateParts(b)) as [number, number, number]),
+  );
   return Math.round((aMs - bMs) / (24 * 60 * 60 * 1000));
 };
 
@@ -48,7 +52,7 @@ export function calculateNewStreak(
   },
   logDateString: string,
   logStatus: "completed" | "skipped",
-  skippedDates: Set<string>
+  skippedDates: Set<string>,
 ): { currentStreak: number; longestStreak: number } {
   if (!habit.lastLoggedDate) {
     const initialStreak = logStatus === "completed" ? 1 : 0;
@@ -74,7 +78,9 @@ export function calculateNewStreak(
 
       let isScheduled = true;
       if (habit.frequency === "custom" && habit.frequencyConfig?.daysOfWeek) {
-        isScheduled = habit.frequencyConfig.daysOfWeek.includes(getDayOfWeek(cursorDateStr));
+        isScheduled = habit.frequencyConfig.daysOfWeek.includes(
+          getDayOfWeek(cursorDateStr),
+        );
       }
 
       if (isScheduled && !skippedDates.has(cursorDateStr)) {
@@ -106,7 +112,7 @@ export function isStreakActive(
     lastLoggedDate?: string;
   },
   todayDateString: string,
-  skippedDates: Set<string>
+  skippedDates: Set<string>,
 ): boolean {
   if (!habit.lastLoggedDate) return true;
 
@@ -119,7 +125,9 @@ export function isStreakActive(
 
     let isScheduled = true;
     if (habit.frequency === "custom" && habit.frequencyConfig?.daysOfWeek) {
-      isScheduled = habit.frequencyConfig.daysOfWeek.includes(getDayOfWeek(cursorDateStr));
+      isScheduled = habit.frequencyConfig.daysOfWeek.includes(
+        getDayOfWeek(cursorDateStr),
+      );
     }
 
     if (isScheduled && !skippedDates.has(cursorDateStr)) {
@@ -132,7 +140,7 @@ export function isStreakActive(
 
 export async function recalculateHabitStreak(
   ctx: MutationCtx,
-  habitId: Id<"habits">
+  habitId: Id<"habits">,
 ) {
   const habit = await ctx.db.get(habitId);
   if (!habit) return;
@@ -150,7 +158,7 @@ export async function recalculateHabitStreak(
   let lastLoggedDate: string | undefined = undefined;
 
   const skippedDates = new Set<string>(
-    logs.filter((l) => l.status === "skipped").map((l) => l.dateString)
+    logs.filter((l) => l.status === "skipped").map((l) => l.dateString),
   );
 
   for (const log of logs) {
@@ -164,7 +172,7 @@ export async function recalculateHabitStreak(
       },
       log.dateString,
       log.status,
-      skippedDates
+      skippedDates,
     );
     currentStreak = result.currentStreak;
     longestStreak = result.longestStreak;
@@ -233,7 +241,7 @@ export const logHabit = mutation({
     const existingLog = await ctx.db
       .query("habitLogs")
       .withIndex("by_habit_dateString", (q) =>
-        q.eq("habitId", args.habitId).eq("dateString", args.dateString)
+        q.eq("habitId", args.habitId).eq("dateString", args.dateString),
       )
       .unique();
 
@@ -241,7 +249,12 @@ export const logHabit = mutation({
     const now = new Date();
     const tz = args.timezone || "UTC";
     const datePart = now.toLocaleDateString("en-CA", { timeZone: tz });
-    const timePart = now.toLocaleTimeString("en-US", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" });
+    const timePart = now.toLocaleTimeString("en-US", {
+      timeZone: tz,
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
     const ts = `[${datePart} ${timePart}]`;
 
     let logId;
@@ -270,7 +283,9 @@ export const logHabit = mutation({
       }
     } else {
       // Write log entry with timestamped notes
-      const timestampedNote = args.notes ? `${ts} ${args.notes.trim()}` : undefined;
+      const timestampedNote = args.notes
+        ? `${ts} ${args.notes.trim()}`
+        : undefined;
       logId = await ctx.db.insert("habitLogs", {
         userId,
         habitId: args.habitId,
@@ -298,7 +313,7 @@ export const getHabits = query({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) return [];
 
-    let habitsQuery = ctx.db
+    const habitsQuery = ctx.db
       .query("habits")
       .withIndex("by_user", (q) => q.eq("userId", userId));
 
@@ -306,13 +321,17 @@ export const getHabits = query({
 
     // Filter by workspace & archived status
     const activeHabits = allHabits.filter(
-      (h) => (args.workspaceId ? h.workspaceId === args.workspaceId : true) && !h.archived
+      (h) =>
+        (args.workspaceId ? h.workspaceId === args.workspaceId : true) &&
+        !h.archived,
     );
 
-    const todayStr = args.todayDateString ?? (() => {
-      const now = new Date();
-      return now.toLocaleDateString("en-CA", { timeZone: "UTC" });
-    })();
+    const todayStr =
+      args.todayDateString ??
+      (() => {
+        const now = new Date();
+        return now.toLocaleDateString("en-CA", { timeZone: "UTC" });
+      })();
 
     // Jointly fetch the last 30 logs for each habit to avoid N+1 query loops
     const enrichedHabits = await Promise.all(
@@ -326,9 +345,13 @@ export const getHabits = query({
         let currentStreak = habit.currentStreak;
         if (args.todayDateString) {
           const skippedDates = new Set(
-            logs.filter((l) => l.status === "skipped").map((l) => l.dateString)
+            logs.filter((l) => l.status === "skipped").map((l) => l.dateString),
           );
-          const active = isStreakActive(habit, args.todayDateString, skippedDates);
+          const active = isStreakActive(
+            habit,
+            args.todayDateString,
+            skippedDates,
+          );
           if (!active) {
             currentStreak = 0;
           }
@@ -344,7 +367,10 @@ export const getHabits = query({
           const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 
           let isScheduled = true;
-          if (habit.frequency === "custom" && habit.frequencyConfig?.daysOfWeek) {
+          if (
+            habit.frequency === "custom" &&
+            habit.frequencyConfig?.daysOfWeek
+          ) {
             isScheduled = habit.frequencyConfig.daysOfWeek.includes(dayOfWeek);
           }
 
@@ -357,9 +383,10 @@ export const getHabits = query({
           }
         }
 
-        const weeklyRate = scheduledCount > 0
-          ? Math.round((completedCount / scheduledCount) * 100)
-          : 0;
+        const weeklyRate =
+          scheduledCount > 0
+            ? Math.round((completedCount / scheduledCount) * 100)
+            : 0;
 
         return {
           ...habit,
@@ -375,7 +402,7 @@ export const getHabits = query({
             notes: l.notes,
           })),
         };
-      })
+      }),
     );
 
     return enrichedHabits;
@@ -386,7 +413,7 @@ export const getHabitConsistency = query({
   args: {
     workspaceId: v.optional(v.id("workspaces")),
     periodStartDate: v.string(), // "YYYY-MM-DD"
-    periodEndDate: v.string(),   // "YYYY-MM-DD"
+    periodEndDate: v.string(), // "YYYY-MM-DD"
     userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
@@ -399,7 +426,9 @@ export const getHabitConsistency = query({
       .collect();
 
     const activeHabits = habits.filter(
-      (h) => (args.workspaceId ? h.workspaceId === args.workspaceId : true) && !h.archived
+      (h) =>
+        (args.workspaceId ? h.workspaceId === args.workspaceId : true) &&
+        !h.archived,
     );
 
     const reports = [];
@@ -410,11 +439,17 @@ export const getHabitConsistency = query({
         .collect();
 
       const rangeLogs = logs.filter(
-        (l) => l.dateString >= args.periodStartDate && l.dateString <= args.periodEndDate
+        (l) =>
+          l.dateString >= args.periodStartDate &&
+          l.dateString <= args.periodEndDate,
       );
 
-      const completedCount = rangeLogs.filter((l) => l.status === "completed").length;
-      const skippedCount = rangeLogs.filter((l) => l.status === "skipped").length;
+      const completedCount = rangeLogs.filter(
+        (l) => l.status === "completed",
+      ).length;
+      const skippedCount = rangeLogs.filter(
+        (l) => l.status === "skipped",
+      ).length;
 
       reports.push({
         habitId: habit._id,
@@ -449,7 +484,7 @@ export const get = query({
         .withIndex("by_habit", (q) => q.eq("habitId", habit._id))
         .collect();
       const skippedDates = new Set(
-        logs.filter((l) => l.status === "skipped").map((l) => l.dateString)
+        logs.filter((l) => l.status === "skipped").map((l) => l.dateString),
       );
       const active = isStreakActive(habit, args.todayDateString, skippedDates);
       if (!active) {
@@ -470,9 +505,11 @@ export const updateHabit = mutation({
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     frequency: v.optional(v.union(v.literal("daily"), v.literal("custom"))),
-    frequencyConfig: v.optional(v.object({
-      daysOfWeek: v.optional(v.array(v.number())),
-    })),
+    frequencyConfig: v.optional(
+      v.object({
+        daysOfWeek: v.optional(v.array(v.number())),
+      }),
+    ),
     workspaceId: v.optional(v.union(v.id("workspaces"), v.null())),
     archived: v.optional(v.boolean()),
     userId: v.optional(v.id("users")),
@@ -486,13 +523,15 @@ export const updateHabit = mutation({
       throw new Error("Habit not found or unauthorized");
     }
 
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
     if (args.name !== undefined) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
     if (args.frequency !== undefined) updates.frequency = args.frequency;
-    if (args.frequencyConfig !== undefined) updates.frequencyConfig = args.frequencyConfig;
+    if (args.frequencyConfig !== undefined)
+      updates.frequencyConfig = args.frequencyConfig;
     if (args.workspaceId !== undefined) {
-      updates.workspaceId = args.workspaceId === null ? undefined : args.workspaceId;
+      updates.workspaceId =
+        args.workspaceId === null ? undefined : args.workspaceId;
     }
     if (args.archived !== undefined) updates.archived = args.archived;
 

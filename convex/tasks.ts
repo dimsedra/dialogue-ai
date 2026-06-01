@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { auth } from "./auth";
 import { Id } from "./_generated/dataModel";
@@ -9,12 +9,12 @@ import { internal } from "./_generated/api";
  * based on the task's due date and reminder offset.
  */
 async function rescheduleTaskReminder(
-  ctx: any,
+  ctx: MutationCtx,
   taskId: Id<"tasks">,
   dueDate: number | undefined,
   text: string,
   userId: Id<"users">,
-  reminderOffset: number | undefined | null
+  reminderOffset: number | undefined | null,
 ) {
   const task = await ctx.db.get(taskId);
   if (!task) return;
@@ -45,9 +45,10 @@ async function rescheduleTaskReminder(
   const triggerTime = Math.max(reminderTime, Date.now());
 
   if (triggerTime > Date.now()) {
-    const timePhrase = reminderOffset === 0
-      ? "is due now"
-      : `is due in ${reminderOffset} minute${reminderOffset === 1 ? "" : "s"}`;
+    const timePhrase =
+      reminderOffset === 0
+        ? "is due now"
+        : `is due in ${reminderOffset} minute${reminderOffset === 1 ? "" : "s"}`;
 
     const scheduledId = await ctx.scheduler.runAt(
       triggerTime,
@@ -58,7 +59,7 @@ async function rescheduleTaskReminder(
         message: `"${text}" ${timePhrase}.`,
         type: "task_remind",
         actionUrl: "/?view=tasks",
-      }
+      },
     );
 
     // Save job ID reference
@@ -70,7 +71,10 @@ async function rescheduleTaskReminder(
 }
 
 export const list = query({
-  args: { workspaceId: v.optional(v.id("workspaces")), userId: v.optional(v.id("users")) },
+  args: {
+    workspaceId: v.optional(v.id("workspaces")),
+    userId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) return [];
@@ -106,14 +110,19 @@ export const toggleCompleted = mutation({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const task = await ctx.db.get(args.id);
     if (!task || task.userId !== userId) {
-      console.error("Unauthorized task toggle attempt:", { taskId: args.id, taskOwner: task?.userId, requestingUser: userId, taskFound: !!task });
+      console.error("Unauthorized task toggle attempt:", {
+        taskId: args.id,
+        taskOwner: task?.userId,
+        requestingUser: userId,
+        taskFound: !!task,
+      });
       throw new Error("Unauthorized");
     }
-    
+
     const completed = !task.completed;
-    await ctx.db.patch(args.id, { 
+    await ctx.db.patch(args.id, {
       completed,
-      completedAt: completed ? Date.now() : undefined
+      completedAt: completed ? Date.now() : undefined,
     });
 
     const updatedTask = await ctx.db.get(args.id);
@@ -124,7 +133,7 @@ export const toggleCompleted = mutation({
         updatedTask.dueDate,
         updatedTask.text,
         userId,
-        updatedTask.reminderOffset
+        updatedTask.reminderOffset,
       );
     }
   },
@@ -136,7 +145,12 @@ export const completeTask = mutation({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const task = await ctx.db.get(args.id);
     if (!task || task.userId !== userId) {
-      console.error("Unauthorized task completion attempt:", { taskId: args.id, taskOwner: task?.userId, requestingUser: userId, taskFound: !!task });
+      console.error("Unauthorized task completion attempt:", {
+        taskId: args.id,
+        taskOwner: task?.userId,
+        requestingUser: userId,
+        taskFound: !!task,
+      });
       throw new Error("Unauthorized");
     }
 
@@ -150,7 +164,7 @@ export const completeTask = mutation({
         updatedTask.dueDate,
         updatedTask.text,
         userId,
-        updatedTask.reminderOffset
+        updatedTask.reminderOffset,
       );
     }
   },
@@ -162,15 +176,23 @@ export const deleteTask = mutation({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const task = await ctx.db.get(args.id);
     if (!task || task.userId !== userId) {
-      console.error("Unauthorized task deletion attempt:", { taskId: args.id, taskOwner: task?.userId, requestingUser: userId, taskFound: !!task });
+      console.error("Unauthorized task deletion attempt:", {
+        taskId: args.id,
+        taskOwner: task?.userId,
+        requestingUser: userId,
+        taskFound: !!task,
+      });
       throw new Error("Unauthorized");
     }
-    
+
     if (task.scheduledNotificationId) {
       try {
         await ctx.scheduler.cancel(task.scheduledNotificationId);
       } catch (e) {
-        console.warn("Could not cancel existing task reminder job on deletion:", e);
+        console.warn(
+          "Could not cancel existing task reminder job on deletion:",
+          e,
+        );
       }
     }
     await ctx.db.delete(args.id);
@@ -178,25 +200,31 @@ export const deleteTask = mutation({
 });
 
 export const updateTask = mutation({
-  args: { 
+  args: {
     id: v.id("tasks"),
     text: v.optional(v.string()),
     completed: v.optional(v.boolean()),
     dueDate: v.optional(v.number()),
     dueDateStr: v.optional(v.string()),
-    priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
+    priority: v.optional(
+      v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    ),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
     progress: v.optional(v.number()),
     statusHook: v.optional(v.string()),
-    resources: v.optional(v.array(v.object({
-      type: v.union(v.literal("url"), v.literal("document")),
-      title: v.string(),
-      url: v.string(),
-      storageId: v.optional(v.id("_storage")),
-      summary: v.optional(v.string()),
-      linkedAt: v.number(),
-    }))),
+    resources: v.optional(
+      v.array(
+        v.object({
+          type: v.union(v.literal("url"), v.literal("document")),
+          title: v.string(),
+          url: v.string(),
+          storageId: v.optional(v.id("_storage")),
+          summary: v.optional(v.string()),
+          linkedAt: v.number(),
+        }),
+      ),
+    ),
     workspaceId: v.optional(v.union(v.id("workspaces"), v.null())),
     overwriteResources: v.optional(v.boolean()),
     userId: v.optional(v.id("users")),
@@ -211,7 +239,7 @@ export const updateTask = mutation({
         taskId: args.id,
         taskOwner: task?.userId,
         requestingUser: userId,
-        taskFound: !!task
+        taskFound: !!task,
       });
       throw new Error("Unauthorized");
     }
@@ -219,13 +247,13 @@ export const updateTask = mutation({
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
       if (
-        value !== undefined && 
-        key !== "id" && 
-        key !== "userId" && 
-        key !== "notes" && 
-        key !== "timezoneOffset" && 
-        key !== "resources" && 
-        key !== "workspaceId" && 
+        value !== undefined &&
+        key !== "id" &&
+        key !== "userId" &&
+        key !== "notes" &&
+        key !== "timezoneOffset" &&
+        key !== "resources" &&
+        key !== "workspaceId" &&
         key !== "overwriteResources" &&
         key !== "reminderOffset"
       ) {
@@ -233,10 +261,12 @@ export const updateTask = mutation({
       }
     }
     if (args.workspaceId !== undefined) {
-      updates.workspaceId = args.workspaceId === null ? undefined : args.workspaceId;
+      updates.workspaceId =
+        args.workspaceId === null ? undefined : args.workspaceId;
     }
     if (args.reminderOffset !== undefined) {
-      updates.reminderOffset = args.reminderOffset === null ? undefined : args.reminderOffset;
+      updates.reminderOffset =
+        args.reminderOffset === null ? undefined : args.reminderOffset;
     }
     if (args.notes !== undefined) {
       let incomingNote = args.notes.trim();
@@ -244,16 +274,20 @@ export const updateTask = mutation({
       if (existingNotes && incomingNote.startsWith(existingNotes)) {
         incomingNote = incomingNote.slice(existingNotes.length).trim();
       }
-      incomingNote = incomingNote.replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*/, "").trim();
+      incomingNote = incomingNote
+        .replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*/, "")
+        .trim();
       if (incomingNote) {
         let now = new Date();
         if (args.timezoneOffset !== undefined) {
-          now = new Date(Date.now() - (args.timezoneOffset * 60000));
+          now = new Date(Date.now() - args.timezoneOffset * 60000);
         }
         const pad = (n: number) => n.toString().padStart(2, "0");
         const timestamp = `[${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}]`;
         const newEntry = `${timestamp} ${incomingNote}`;
-        updates.notes = existingNotes ? `${existingNotes}\n${newEntry}` : newEntry;
+        updates.notes = existingNotes
+          ? `${existingNotes}\n${newEntry}`
+          : newEntry;
       }
     }
     if (args.resources !== undefined) {
@@ -261,13 +295,19 @@ export const updateTask = mutation({
         updates.resources = args.resources;
       } else {
         const existingUrls = new Set((task.resources ?? []).map((r) => r.url));
-        const newResources = args.resources.filter((r) => !existingUrls.has(r.url));
+        const newResources = args.resources.filter(
+          (r) => !existingUrls.has(r.url),
+        );
         if (newResources.length > 0) {
           updates.resources = [...(task.resources ?? []), ...newResources];
         }
       }
     }
-    if (args.notes !== undefined || args.progress !== undefined || args.statusHook !== undefined) {
+    if (
+      args.notes !== undefined ||
+      args.progress !== undefined ||
+      args.statusHook !== undefined
+    ) {
       updates.contextUpdatedAt = Date.now();
     }
     if (args.completed === true && !task.completed) {
@@ -285,14 +325,17 @@ export const updateTask = mutation({
         updatedTask.dueDate,
         updatedTask.text,
         userId,
-        updatedTask.reminderOffset
+        updatedTask.reminderOffset,
       );
     }
   },
 });
 
 export const getDailyBriefing = query({
-  args: { workspaceId: v.optional(v.id("workspaces")), userId: v.optional(v.id("users")) },
+  args: {
+    workspaceId: v.optional(v.id("workspaces")),
+    userId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) return { tasks: [], profile: null };
@@ -302,25 +345,27 @@ export const getDailyBriefing = query({
     const tasks = args.workspaceId
       ? await ctx.db
           .query("tasks")
-          .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
-          .filter((q) => 
+          .withIndex("by_workspace", (q) =>
+            q.eq("workspaceId", args.workspaceId),
+          )
+          .filter((q) =>
             q.and(
               q.eq(q.field("userId"), userId),
               q.or(
                 q.eq(q.field("completed"), false),
-                q.gte(q.field("completedAt"), fortyEightHoursAgo)
-              )
-            )
+                q.gte(q.field("completedAt"), fortyEightHoursAgo),
+              ),
+            ),
           )
           .collect()
       : await ctx.db
           .query("tasks")
           .withIndex("by_user", (q) => q.eq("userId", userId))
-          .filter((q) => 
+          .filter((q) =>
             q.or(
               q.eq(q.field("completed"), false),
-              q.gte(q.field("completedAt"), fortyEightHoursAgo)
-            )
+              q.gte(q.field("completedAt"), fortyEightHoursAgo),
+            ),
           )
           .collect();
 
@@ -352,16 +397,22 @@ export const searchHistory = query({
       .collect();
 
     if (args.startTime !== undefined) {
-      results = results.filter((t) => (t.completedAt ?? t.createdAt) >= args.startTime!);
+      results = results.filter(
+        (t) => (t.completedAt ?? t.createdAt) >= args.startTime!,
+      );
     }
     if (args.endTime !== undefined) {
-      results = results.filter((t) => (t.completedAt ?? t.createdAt) <= args.endTime!);
+      results = results.filter(
+        (t) => (t.completedAt ?? t.createdAt) <= args.endTime!,
+      );
     }
     if (args.query) {
       const lower = args.query.toLowerCase();
       results = results.filter((t) => t.text.toLowerCase().includes(lower));
     }
-    results.sort((a, b) => (b.completedAt ?? b.createdAt) - (a.completedAt ?? a.createdAt));
+    results.sort(
+      (a, b) => (b.completedAt ?? b.createdAt) - (a.completedAt ?? a.createdAt),
+    );
     if (args.limit !== undefined) {
       results = results.slice(0, args.limit);
     }
@@ -371,15 +422,19 @@ export const searchHistory = query({
 
 export const batchAdd = mutation({
   args: {
-    tasks: v.array(v.object({
-      text: v.string(),
-      priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
-      category: v.optional(v.string()),
-      dueDate: v.optional(v.number()),
-      dueDateStr: v.optional(v.string()),
-      notes: v.optional(v.string()),
-      reminderOffset: v.optional(v.union(v.number(), v.null())),
-    })),
+    tasks: v.array(
+      v.object({
+        text: v.string(),
+        priority: v.optional(
+          v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+        ),
+        category: v.optional(v.string()),
+        dueDate: v.optional(v.number()),
+        dueDateStr: v.optional(v.string()),
+        notes: v.optional(v.string()),
+        reminderOffset: v.optional(v.union(v.number(), v.null())),
+      }),
+    ),
     workspaceId: v.optional(v.id("workspaces")),
     userId: v.optional(v.id("users")),
   },
@@ -389,9 +444,14 @@ export const batchAdd = mutation({
 
     const ids: string[] = [];
     for (const task of args.tasks) {
-      const reminderOffset = task.reminderOffset !== undefined
-        ? (task.reminderOffset === null ? undefined : task.reminderOffset)
-        : (task.dueDate !== undefined ? 15 : undefined);
+      const reminderOffset =
+        task.reminderOffset !== undefined
+          ? task.reminderOffset === null
+            ? undefined
+            : task.reminderOffset
+          : task.dueDate !== undefined
+            ? 15
+            : undefined;
 
       const id = await ctx.db.insert("tasks", {
         userId,
@@ -406,7 +466,14 @@ export const batchAdd = mutation({
         createdAt: Date.now(),
         reminderOffset,
       });
-      await rescheduleTaskReminder(ctx, id, task.dueDate, task.text, userId, reminderOffset);
+      await rescheduleTaskReminder(
+        ctx,
+        id,
+        task.dueDate,
+        task.text,
+        userId,
+        reminderOffset,
+      );
       ids.push(id);
     }
     return ids;
@@ -419,19 +486,25 @@ export const add = mutation({
     workspaceId: v.optional(v.union(v.id("workspaces"), v.null())),
     dueDate: v.optional(v.number()),
     dueDateStr: v.optional(v.string()),
-    priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
+    priority: v.optional(
+      v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    ),
     category: v.optional(v.string()),
     notes: v.optional(v.string()),
     progress: v.optional(v.number()),
     statusHook: v.optional(v.string()),
-    resources: v.optional(v.array(v.object({
-      type: v.union(v.literal("url"), v.literal("document")),
-      title: v.string(),
-      url: v.string(),
-      storageId: v.optional(v.id("_storage")),
-      summary: v.optional(v.string()),
-      linkedAt: v.number(),
-    }))),
+    resources: v.optional(
+      v.array(
+        v.object({
+          type: v.union(v.literal("url"), v.literal("document")),
+          title: v.string(),
+          url: v.string(),
+          storageId: v.optional(v.id("_storage")),
+          summary: v.optional(v.string()),
+          linkedAt: v.number(),
+        }),
+      ),
+    ),
     userId: v.optional(v.id("users")),
     reminderOffset: v.optional(v.union(v.number(), v.null())),
   },
@@ -439,9 +512,14 @@ export const add = mutation({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) throw new Error("Unauthorized");
 
-    const reminderOffset = args.reminderOffset !== undefined
-      ? (args.reminderOffset === null ? undefined : args.reminderOffset)
-      : (args.dueDate !== undefined ? 15 : undefined);
+    const reminderOffset =
+      args.reminderOffset !== undefined
+        ? args.reminderOffset === null
+          ? undefined
+          : args.reminderOffset
+        : args.dueDate !== undefined
+          ? 15
+          : undefined;
 
     const taskId = await ctx.db.insert("tasks", {
       userId,
@@ -456,12 +534,22 @@ export const add = mutation({
       progress: args.progress,
       statusHook: args.statusHook,
       resources: args.resources,
-      contextUpdatedAt: (args.notes || args.progress !== undefined || args.statusHook) ? Date.now() : undefined,
+      contextUpdatedAt:
+        args.notes || args.progress !== undefined || args.statusHook
+          ? Date.now()
+          : undefined,
       createdAt: Date.now(),
       reminderOffset,
     });
 
-    await rescheduleTaskReminder(ctx, taskId, args.dueDate, args.text, userId, reminderOffset);
+    await rescheduleTaskReminder(
+      ctx,
+      taskId,
+      args.dueDate,
+      args.text,
+      userId,
+      reminderOffset,
+    );
 
     return taskId;
   },

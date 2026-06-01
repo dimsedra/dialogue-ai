@@ -4,8 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Chat } from "@/components/Chat";
 import { TaskPanel } from "@/components/TaskPanel";
 import { Id } from "../../convex/_generated/dataModel";
-import { api } from "../../convex/_generated/api";
-import { Authenticated, Unauthenticated, useQuery } from "convex/react";
+import { Authenticated, Unauthenticated } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SignInForm } from "@/components/auth/SignInForm";
 import { Scope } from "@/components/chat/types";
@@ -13,15 +12,24 @@ import { usePushSync } from "@/hooks/usePushSync";
 
 export default function Home() {
   usePushSync();
-  const [activeSessionId, setActiveSessionId] = useState<Id<"chatSessions"> | null>(null);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<Id<"workspaces"> | undefined>(undefined);
+  const [activeSessionId, setActiveSessionId] =
+    useState<Id<"chatSessions"> | null>(null);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<
+    Id<"workspaces"> | undefined
+  >(undefined);
   const [activeScope, setActiveScope] = useState<Scope | null>(null);
-  
+
   // Clear session when workspace changes
-  const handleWorkspaceChange = useCallback((id: Id<"workspaces"> | undefined, sessionId?: Id<"chatSessions"> | null) => {
-    setActiveWorkspaceId(id);
-    setActiveSessionId(sessionId || null);
-  }, []);
+  const handleWorkspaceChange = useCallback(
+    (
+      id: Id<"workspaces"> | undefined,
+      sessionId?: Id<"chatSessions"> | null,
+    ) => {
+      setActiveWorkspaceId(id);
+      setActiveSessionId(sessionId || null);
+    },
+    [],
+  );
 
   const [showHistory, setShowHistory] = useState(true);
   const [showTasks, setShowTasks] = useState(true);
@@ -29,9 +37,7 @@ export default function Home() {
   const [isLargeViewport, setIsLargeViewport] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [initialHeight, setInitialHeight] = useState<number | null>(null);
-  const [chatInputOffset, setChatInputOffset] = useState(0);
-
-  const workspaces = useQuery(api.workspaces.list, {});
+  const [, setChatInputOffset] = useState(0);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -50,10 +56,12 @@ export default function Home() {
         lastWidth = currentWidth;
       } else {
         // If height increased while width stayed the same (keyboard hiding or vertical resize on small window)
-        setInitialHeight((prev) => currentHeight > (prev || 0) ? currentHeight : prev);
+        setInitialHeight((prev) =>
+          currentHeight > (prev || 0) ? currentHeight : prev,
+        );
       }
     };
-    
+
     handleResize();
     window.addEventListener("resize", handleResize);
 
@@ -62,16 +70,16 @@ export default function Home() {
       if (window.visualViewport) {
         // Force absolute top to prevent double scrollbar triggers
         window.scrollTo(0, 0);
-        
+
         const viewportHeight = window.visualViewport.height;
         const viewportOffsetTop = window.visualViewport.offsetTop;
-        
+
         // Use initialHeight as the baseline to avoid "stretching" math
         const baseline = initialHeight || window.innerHeight;
-        
+
         // Precise math for Android/Samsung viewport shifts
         const offset = baseline - (viewportHeight + viewportOffsetTop);
-        
+
         setKeyboardOffset(Math.max(0, offset));
       }
     };
@@ -91,8 +99,14 @@ export default function Home() {
     return () => {
       window.removeEventListener("resize", handleResize);
       if (window.visualViewport) {
-        window.visualViewport.removeEventListener("resize", handleViewportChange);
-        window.visualViewport.removeEventListener("scroll", handleViewportChange);
+        window.visualViewport.removeEventListener(
+          "resize",
+          handleViewportChange,
+        );
+        window.visualViewport.removeEventListener(
+          "scroll",
+          handleViewportChange,
+        );
       }
       window.removeEventListener("scroll", preventNativeScroll);
     };
@@ -107,7 +121,7 @@ export default function Home() {
     // 1. Load preferences from storage
     const savedHistory = localStorage.getItem("dialogue_show_history");
     const savedTasks = localStorage.getItem("dialogue_show_tasks");
-    
+
     queueMicrotask(() => {
       if (savedHistory !== null) setShowHistory(savedHistory === "true");
       if (savedTasks !== null) setShowTasks(savedTasks === "true");
@@ -128,15 +142,21 @@ export default function Home() {
     }
   }, [showTasks, isLoaded]);
   // Sidebar Mutual Exclusivity Logic — only enforced on tablet/mobile
-  const handleSetShowHistory = useCallback((val: boolean) => {
-    setShowHistory(val);
-    if (val && !isLargeViewport) setShowTasks(false);
-  }, [isLargeViewport]);
+  const handleSetShowHistory = useCallback(
+    (val: boolean) => {
+      setShowHistory(val);
+      if (val && !isLargeViewport) setShowTasks(false);
+    },
+    [isLargeViewport],
+  );
 
-  const handleSetShowTasks = useCallback((val: boolean) => {
-    setShowTasks(val);
-    if (val && !isLargeViewport) setShowHistory(false);
-  }, [isLargeViewport]);
+  const handleSetShowTasks = useCallback(
+    (val: boolean) => {
+      setShowTasks(val);
+      if (val && !isLargeViewport) setShowHistory(false);
+    },
+    [isLargeViewport],
+  );
 
   const syncRef = useRef<(() => void) | null>(null);
   const handleSyncFromPanel = useCallback(() => {
@@ -146,14 +166,13 @@ export default function Home() {
     }
   }, [isLargeViewport, handleSetShowTasks]);
 
-
   return (
     <>
       <Unauthenticated>
         <SignInForm />
       </Unauthenticated>
       <Authenticated>
-        <main 
+        <main
           style={{ height: initialHeight ? `${initialHeight}px` : "100svh" }}
           className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]"
         >
@@ -165,49 +184,72 @@ export default function Home() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0 }}
-                onClick={() => { setShowHistory(false); setShowTasks(false); }}
+                onClick={() => {
+                  setShowHistory(false);
+                  setShowTasks(false);
+                }}
                 className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
               />
             )}
           </AnimatePresence>
 
           {/* Main Content Area */}
-          <motion.div 
+          <motion.div
             layout
             className="flex-1 flex h-full overflow-hidden relative"
           >
-            <Chat 
-              activeSessionId={activeSessionId} 
-              setActiveSessionId={setActiveSessionId}
+            <Chat
+              activeSessionId={activeSessionId}
+              setActiveSessionIdAction={setActiveSessionId}
               activeWorkspaceId={activeWorkspaceId}
-              setActiveWorkspaceId={handleWorkspaceChange}
+              setActiveWorkspaceIdAction={handleWorkspaceChange}
               activeScope={activeScope}
-              setActiveScope={setActiveScope}
+              setActiveScopeAction={setActiveScope}
               showHistory={showHistory}
-              setShowHistory={handleSetShowHistory}
+              setShowHistoryAction={handleSetShowHistory}
               onSyncRef={syncRef}
               isLargeViewport={isLargeViewport}
               keyboardOffset={keyboardOffset}
-              onChatInputResize={setChatInputOffset}
-              onShowTasks={showTasks ? undefined : () => handleSetShowTasks(true)}
+              onChatInputResizeAction={setChatInputOffset}
+              onShowTasksAction={
+                showTasks ? undefined : () => handleSetShowTasks(true)
+              }
             />
           </motion.div>
 
           {/* Task Panel (Collapsible / Overlay) */}
           <motion.div
             initial={false}
-            animate={{ 
-              width: isLargeViewport ? (showTasks ? 320 : 0) : (showTasks ? "min(320px, 85vw)" : 0),
-              opacity: isLargeViewport ? (showTasks ? 1 : 0) : (showTasks ? 1 : 0),
-              x: isLargeViewport ? 0 : (showTasks ? 0 : "100%")
+            animate={{
+              width: isLargeViewport
+                ? showTasks
+                  ? 320
+                  : 0
+                : showTasks
+                  ? "min(320px, 85vw)"
+                  : 0,
+              opacity: isLargeViewport
+                ? showTasks
+                  ? 1
+                  : 0
+                : showTasks
+                  ? 1
+                  : 0,
+              x: isLargeViewport ? 0 : showTasks ? 0 : "100%",
             }}
-            transition={isLargeViewport ? { type: "spring", damping: 30, stiffness: 250 } : { duration: 0 }}
+            transition={
+              isLargeViewport
+                ? { type: "spring", damping: 30, stiffness: 250 }
+                : { duration: 0 }
+            }
             className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 overflow-hidden z-40 ${
-              isLargeViewport ? "relative border-l" : "absolute right-0 shadow-[-20px_0_40px_rgba(0,0,0,0.5)]"
+              isLargeViewport
+                ? "relative border-l"
+                : "absolute right-0 shadow-[-20px_0_40px_rgba(0,0,0,0.5)]"
             }`}
           >
             <div className="w-full h-full">
-              <TaskPanel 
+              <TaskPanel
                 activeWorkspaceId={activeWorkspaceId}
                 onSync={handleSyncFromPanel}
                 onClose={() => handleSetShowTasks(false)}

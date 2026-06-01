@@ -272,11 +272,6 @@ You are a multimodal agent capable of analyzing multiple images and documents (P
 ### deleteSemanticMemory
 - Purpose: Delete a specific long-term semantic memory/fact if the user explicitly corrects a previously remembered fact or requests that it be forgotten.
 - Verification Protocol: You MUST ask for confirmation/verification before calling this tool, unless the user's message is an explicit instruction to delete/forget it (e.g., "Forget that I have a cat").
-### triggerReflection
-- Purpose: Use to trigger a Spotify-Wrapped style periodic reflection summary of the user's tasks, events, categories, and streaks over a specific period. Use when the user asks how they are doing, requests a summary/reflection of their week/month/year, or says "How is my week going?"
-- Parameters:
-  * type: "weekly", "monthly", or "yearly".
-  * offsetWeeks, offsetMonths, offsetYears: number (optional, default 0 for current week/month/year. Use positive numbers to look back in history).
 ### searchHistoricalEntities
 - Purpose: Search the user's completed tasks and past events on demand. Use when the user asks retrospective questions about what they've done, finished, or attended.
 - Parameters: type ("tasks", "events", or "all"), optional query (keyword filter), optional startTime/endTime (date range in UTC ms), optional limit (max results).
@@ -937,20 +932,6 @@ export const chat = internalAction({
                 memoryId: { type: SchemaType.STRING, description: "The ID of the memory to delete" },
               },
               required: ["memoryId"],
-            },
-          },
-          {
-            name: "triggerReflection",
-            description: "Triggers a periodic reflection (Spotify Wrapped style) for the user to summarize tasks completed, events attended, streaks, etc. Can be weekly, monthly, or yearly.",
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                type: { type: SchemaType.STRING, description: "Type of reflection: 'weekly', 'monthly', or 'yearly'" },
-                offsetWeeks: { type: SchemaType.NUMBER, description: "Offset weeks to look back (default 0 for current week)" },
-                offsetMonths: { type: SchemaType.NUMBER, description: "Offset months to look back (default 0)" },
-                offsetYears: { type: SchemaType.NUMBER, description: "Offset years to look back (default 0)" },
-              },
-              required: ["type"],
             },
           },
           {
@@ -1705,124 +1686,6 @@ export const chat = internalAction({
               args: call.args as Record<string, unknown>,
               result: { status: "success" }
             });
-          } else if (call.name === "triggerReflection") {
-            const reflArgs = call.args as {
-              type: "weekly" | "monthly" | "yearly";
-              offsetWeeks?: number;
-              offsetMonths?: number;
-              offsetYears?: number;
-            };
-
-            const type = reflArgs.type;
-            const offset = type === "weekly"
-              ? (reflArgs.offsetWeeks ?? 0)
-              : type === "monthly"
-                ? (reflArgs.offsetMonths ?? 0)
-                : (reflArgs.offsetYears ?? 0);
-
-            const { startMs, endMs } = getPeriodRange(type, offset, args.timezoneOffset);
-            const periodLabel = getPeriodLabel(type, startMs, args.timezoneOffset);
-
-            const stats = await ctx.runQuery(api.reflections.compileReflectionStats, {
-              workspaceId,
-              type,
-              periodStart: startMs,
-              periodEnd: endMs,
-              userId: args.userId
-            });
-
-            if (stats) {
-              if (!genAI) {
-                console.error("Cannot generate reflection summary: Gemini API key is missing.");
-                await ctx.runMutation(internal.messages.internalSend, {
-                  sessionId: args.sessionId,
-                  text: "I'm sorry, I can't generate a reflection summary because the Google Gemini API key is not configured in Settings.",
-                  author: "AI",
-                });
-                return;
-              }
-              const summaryModel = genAI.getGenerativeModel({ model: getTaskModel(profile, "reflection") });
-              const statsText = `
-                Type: ${type}
-                Period: ${periodLabel}
-                Tasks Completed: ${stats.tasksCompleted}
-                Tasks Created: ${stats.tasksCreated}
-                Events Attended: ${stats.eventsAttended}
-                Top Categories: ${stats.topCategories?.join(", ") || "None"}
-                Streak Days: ${stats.streakDays || 0}
-                
-                ${stats.subSummaries ? `SUB-PERIOD SUMMARIES:\n${stats.subSummaries}` : ""}
-                ${stats.rawDetails ? `RAW LOGS:\n${stats.rawDetails}` : ""}
-              `;
-
-              const summaryPrompt = `
-                You are Dialogue, a productivity companion.
-                Create a high-fidelity, Spotify-Wrapped style periodic reflection summary.
-                Keep it highly engaging, celebratory, motivating, but honest.
-                Use bullet points, emojis, bold text, and highlights.
-                Draw connections between tasks and events if possible.
-                Address the user by name: "${profile?.name || "User"}".
-                
-                Stats data:
-                ${statsText}
-                
-                CRITICAL INSTRUCTION:
-                1. Make it feel extremely personalized and premium.
-                2. Write the ENTIRE reflection summary, all bullet points, and the concluding question in the same language as the user's query: "${args.text.replace(/"/g, '\\"')}".
-                   - Detect the language of the user's query (e.g., English, Indonesian, Japanese, or any other language).
-                   - You MUST translate and write everything (headings, stats summaries, list items, and the concluding question) in that exact query language.
-                   - Ignore the language of the source tasks or events in the Stats data (which may be in Indonesian). The query's language is the ONLY language allowed for the output.
-                3. Conclude with a single open-ended question in that query language inviting the user's feedback/reflection on their progress (e.g., "How do you feel about this week's progress?"). Do NOT output any internal formatting, instructions, or robotic tags.
-              `;
-
-              const summaryRes = await summaryModel.generateContent(summaryPrompt);
-              const summaryText = summaryRes.response.text();
-              reflectionSummaryText = summaryText;
-
-              const tz = args.timezone || "UTC";
-              const reflectionId = await ctx.runMutation(api.reflections.saveReflection, {
-                workspaceId,
-                type,
-                periodStart: startMs,
-                periodStartStr: new Date(startMs).toLocaleDateString("en-CA", { timeZone: tz }),
-                periodEnd: endMs,
-                periodEndStr: new Date(endMs).toLocaleDateString("en-CA", { timeZone: tz }),
-                periodLabel,
-                summary: summaryText,
-                stats: {
-                  tasksCompleted: stats.tasksCompleted,
-                  tasksCreated: stats.tasksCreated,
-                  eventsAttended: stats.eventsAttended,
-                  topCategories: stats.topCategories || [],
-                  streakDays: stats.streakDays,
-                },
-                userId: args.userId,
-              });
-
-              executedActionSummaries.push({
-                name: "triggerReflection",
-                summary: `Generated and saved a ${type} reflection for ${periodLabel}`
-              });
-
-              activeToolCalls.push({
-                name: "triggerReflection",
-                args: call.args as Record<string, unknown>,
-                result: {
-                  status: "success",
-                  reflectionId,
-                  type,
-                  periodLabel,
-                  summary: summaryText,
-                  stats: {
-                    tasksCompleted: stats.tasksCompleted,
-                    tasksCreated: stats.tasksCreated,
-                    eventsAttended: stats.eventsAttended,
-                    topCategories: stats.topCategories || [],
-                    streakDays: stats.streakDays,
-                  }
-                }
-              });
-            }
           } else if (call.name === "searchHistoricalEntities") {
             const histArgs = call.args as {
               type: "tasks" | "events" | "all";
@@ -2415,7 +2278,6 @@ export const saveSemanticMemoryAction = action({
 export const generateCronReflection = internalAction({
   args: {
     userId: v.id("users"),
-    sessionId: v.id("chatSessions"),
     type: v.union(v.literal("weekly"), v.literal("monthly"), v.literal("yearly")),
     timezone: v.optional(v.string()),
   },
@@ -2431,12 +2293,17 @@ export const generateCronReflection = internalAction({
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    
-    const recentMessages = await ctx.runQuery(api.messages.list, {
-      sessionId: args.sessionId,
-      userId: args.userId
+
+    const lastSession = await ctx.runQuery(internal.dashboard.getLastSession, {
+      userId: args.userId,
     });
-    const lastUserText = recentMessages.slice().reverse().find((m: any) => m.author === "User")?.text || "Hello";
+    const recentMessages = lastSession
+      ? await ctx.runQuery(api.messages.list, {
+          sessionId: lastSession._id,
+          userId: args.userId,
+        })
+      : [];
+    const lastUserText = recentMessages.slice().reverse().find((m: any) => m.author === "User")?.text || profile?.name || "Hello";
     const lastMsgWithTz = recentMessages.slice().reverse().find((m: any) => m.timezoneOffset !== undefined);
     const timezoneOffset = lastMsgWithTz?.timezoneOffset ?? 0;
 
@@ -2510,50 +2377,6 @@ export const generateCronReflection = internalAction({
         streakDays: stats.streakDays,
       },
       userId: args.userId,
-    });
-
-    await ctx.runMutation(internal.messages.internalSend, {
-      sessionId: args.sessionId,
-      text: summaryText,
-      author: "AI",
-      toolCall: {
-        name: "triggerReflection",
-        args: { type: args.type, offsetWeeks: args.type === "weekly" ? 0 : 0, offsetMonths: args.type === "monthly" ? 1 : 0 },
-        result: {
-          status: "success",
-          reflectionId,
-          type: args.type,
-          periodLabel,
-          summary: summaryText,
-          stats: {
-            tasksCompleted: stats.tasksCompleted,
-            tasksCreated: stats.tasksCreated,
-            eventsAttended: stats.eventsAttended,
-            topCategories: stats.topCategories || [],
-            streakDays: stats.streakDays,
-          }
-        }
-      },
-      toolCalls: [
-        {
-          name: "triggerReflection",
-          args: { type: args.type, offsetWeeks: args.type === "weekly" ? 0 : 0, offsetMonths: args.type === "monthly" ? 1 : 0 },
-          result: {
-            status: "success",
-            reflectionId,
-            type: args.type,
-            periodLabel,
-            summary: summaryText,
-            stats: {
-              tasksCompleted: stats.tasksCompleted,
-              tasksCreated: stats.tasksCreated,
-              eventsAttended: stats.eventsAttended,
-              topCategories: stats.topCategories || [],
-              streakDays: stats.streakDays,
-            }
-          }
-        }
-      ]
     });
   }
 });

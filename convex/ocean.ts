@@ -55,14 +55,11 @@ export const cronTriggerWeekly = internalMutation({
       });
 
       // 2. Reflections prompt (user-facing) — reuses existing generateCronReflection
-      if (lastSession) {
-        await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
-          userId: user._id,
-          sessionId: lastSession._id,
-          type: "weekly",
-          timezone,
-        });
-      }
+      await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
+        userId: user._id,
+        type: "weekly",
+        timezone,
+      });
     }
 
     // 3. Cleanup: delete session summaries older than 7 days
@@ -103,10 +100,9 @@ export const cronTriggerMonthly = internalMutation({
       });
 
       // Yearly Reflections: fire in December (year-to-date review)
-      if (isDecember && lastSession) {
+      if (isDecember) {
         await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
           userId: user._id,
-          sessionId: lastSession._id,
           type: "yearly",
           timezone,
         });

@@ -2,16 +2,16 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
-import { 
-  ArrowLeft, 
-  User, 
-  Brain, 
-  Cpu, 
-  Save, 
-  Trash2, 
-  Plus, 
-  Sparkles, 
+import { Doc, Id } from "../../../convex/_generated/dataModel";
+import {
+  ArrowLeft,
+  User,
+  Brain,
+  Cpu,
+  Save,
+  Trash2,
+  Plus,
+  Sparkles,
   Zap,
   Bot,
   Search,
@@ -21,7 +21,7 @@ import {
   X,
   Eye,
   EyeOff,
-  Bell
+  Bell,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -30,7 +30,9 @@ import { useAuthActions } from "@convex-dev/auth/react";
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
+  const base64 = (base64String + padding)
+    .replace(/\-/g, "+")
+    .replace(/_/g, "/");
   const rawData = window.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
   for (let i = 0; i < rawData.length; ++i) {
@@ -65,16 +67,26 @@ export default function SettingsPage() {
   const [bio, setBio] = useState("");
   type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic";
   const [provider, setProvider] = useState<AIProvider>("gemini");
-  const [customConfigs, setCustomConfigs] = useState<Record<string, { apiKey?: string, baseUrl?: string, modelId?: string }>>({});
+  const [customConfigs, setCustomConfigs] = useState<
+    Record<string, { apiKey?: string; baseUrl?: string; modelId?: string }>
+  >({});
   const [taskModels, setTaskModels] = useState<Record<string, string>>({});
-  const [searchProvider, setSearchProvider] = useState<"tavily" | "serper">("tavily");
-  const [prevProfileId, setPrevProfileId] = useState<Id<"userProfile"> | null>(null);
+  const [searchProvider, setSearchProvider] = useState<"tavily" | "serper">(
+    "tavily",
+  );
+  const [prevProfileId, setPrevProfileId] = useState<Id<"userProfile"> | null>(
+    null,
+  );
   const [showApiKey, setShowApiKey] = useState(false);
   const [showSearchApiKey, setShowSearchApiKey] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"profile" | "ai" | "memory">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "ai" | "memory">(
+    "profile",
+  );
   const [isSaving, setIsSaving] = useState(false);
-  const [editingMemoryId, setEditingMemoryId] = useState<Id<"memories"> | null>(null);
+  const [editingMemoryId, setEditingMemoryId] = useState<Id<"memories"> | null>(
+    null,
+  );
   const [editMemoryText, setEditMemoryText] = useState("");
   const [newMemoryText, setNewMemoryText] = useState("");
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -94,7 +106,9 @@ export default function SettingsPage() {
       setTaskModels(profile.preferences.taskModels as Record<string, string>);
     }
     if (profile.preferences?.searchProvider) {
-      setSearchProvider(profile.preferences.searchProvider as "tavily" | "serper");
+      setSearchProvider(
+        profile.preferences.searchProvider as "tavily" | "serper",
+      );
     }
     if (profile.preferences?.pushEnabled !== undefined) {
       setPushEnabled(!!profile.preferences.pushEnabled);
@@ -105,7 +119,12 @@ export default function SettingsPage() {
     setIsSaving(true);
     try {
       await updateProfile({ name, bio, preferences: { pushEnabled } });
-      await updatePreferences({ provider, searchProvider, customConfigs, taskModels });
+      await updatePreferences({
+        provider,
+        searchProvider,
+        customConfigs,
+        taskModels,
+      });
     } catch (error) {
       console.error(error);
     } finally {
@@ -114,7 +133,11 @@ export default function SettingsPage() {
   };
 
   const handleTogglePush = async () => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window)
+    ) {
       alert("Push notifications are not supported on this browser.");
       return;
     }
@@ -186,7 +209,9 @@ export default function SettingsPage() {
 
   const handleAddMemory = async () => {
     if (!newMemoryText.trim()) return;
-    const dummyEmbedding = Array(768).fill(0).map(() => Math.random());
+    const dummyEmbedding = Array(768)
+      .fill(0)
+      .map(() => Math.random());
     await addMemory({ text: newMemoryText, embedding: dummyEmbedding });
     setNewMemoryText("");
   };
@@ -197,7 +222,7 @@ export default function SettingsPage() {
         {/* Header */}
         <div className="flex flex-col items-start gap-1 mb-8">
           <div className="flex items-center gap-3">
-            <Link 
+            <Link
               href="/"
               className="p-2 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all shadow-xl"
             >
@@ -205,7 +230,9 @@ export default function SettingsPage() {
             </Link>
             <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           </div>
-          <p className="text-[#a8a29e] text-[10px] ml-12">Personalize your Dialogue experience.</p>
+          <p className="text-[#a8a29e] text-[10px] ml-12">
+            Personalize your Dialogue experience.
+          </p>
         </div>
 
         {/* Layout */}
@@ -213,21 +240,25 @@ export default function SettingsPage() {
           {/* Navigation Sidebar (Sticky) */}
           <nav className="flex flex-col w-full md:sticky md:top-6 space-y-2">
             <div className="flex flex-row md:flex-col gap-1.5 overflow-x-auto pb-4 md:pb-0 mb-4 md:mb-6 scrollbar-hide">
-              {( [
-                { id: "profile", label: "Profile", icon: User },
-                { id: "ai", label: "AI Provider", icon: Cpu },
-                { id: "memory", label: "Intelligence", icon: Brain },
-              ] as const).map((tab) => (
+              {(
+                [
+                  { id: "profile", label: "Profile", icon: User },
+                  { id: "ai", label: "AI Provider", icon: Cpu },
+                  { id: "memory", label: "Intelligence", icon: Brain },
+                ] as const
+              ).map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex-1 md:flex-none flex items-center justify-center md:justify-start gap-2.5 px-4 py-2.5 rounded-xl transition-all text-[11px] font-bold whitespace-nowrap border-2 ${
-                    activeTab === tab.id 
-                      ? "bg-[#d4a373] text-[#0f0e0c] border-[#d4a373] shadow-[0_5px_15px_rgba(212,163,115,0.15)]" 
+                    activeTab === tab.id
+                      ? "bg-[#d4a373] text-[#0f0e0c] border-[#d4a373] shadow-[0_5px_15px_rgba(212,163,115,0.15)]"
                       : "bg-[#1a1814] text-[#a8a29e] border-[#2a2723] hover:border-[#3a3733] hover:text-[#f2efeb]"
                   }`}
                 >
-                  <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? "text-[#0f0e0c]" : "text-[#a8a29e]"}`} />
+                  <tab.icon
+                    className={`w-3.5 h-3.5 ${activeTab === tab.id ? "text-[#0f0e0c]" : "text-[#a8a29e]"}`}
+                  />
                   {tab.label}
                 </button>
               ))}
@@ -240,10 +271,14 @@ export default function SettingsPage() {
                 disabled={isSaving}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] font-black uppercase tracking-widest text-[9px] transition-all shadow-xl shadow-[#d4a373]/10 disabled:opacity-50 active:scale-[0.98]"
               >
-                {isSaving ? <Sparkles className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                {isSaving ? (
+                  <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
                 Apply Settings
               </button>
-              
+
               <button
                 onClick={() => signOut()}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#f87171] hover:bg-red-500/10 hover:border-red-500/20 transition-all font-black uppercase tracking-widest text-[9px] group"
@@ -255,10 +290,10 @@ export default function SettingsPage() {
           </nav>
 
           {/* Content Area */}
-          <div className="w-full min-h-[400px]">
+          <div className="w-full min-h-100">
             <AnimatePresence mode="wait">
               {activeTab === "profile" && (
-                <motion.div 
+                <motion.div
                   key="profile"
                   initial={{ opacity: 0, x: 5 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -267,14 +302,20 @@ export default function SettingsPage() {
                 >
                   <section className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg">
                     <div className="mb-4">
-                      <h2 className="text-base font-bold text-[#f2efeb]">Identity Profile</h2>
-                      <p className="text-[#a8a29e] text-[10px]">Personalize how your AI companions interact with you.</p>
+                      <h2 className="text-base font-bold text-[#f2efeb]">
+                        Identity Profile
+                      </h2>
+                      <p className="text-[#a8a29e] text-[10px]">
+                        Personalize how your AI companions interact with you.
+                      </p>
                     </div>
-                    
+
                     <div className="space-y-4">
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">Preferred Name</label>
-                        <input 
+                        <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">
+                          Preferred Name
+                        </label>
+                        <input
                           name="settings-pref-name"
                           autoComplete="off"
                           autoCorrect="off"
@@ -288,8 +329,10 @@ export default function SettingsPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">Persona & Instructions</label>
-                        <textarea 
+                        <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">
+                          Persona & Instructions
+                        </label>
+                        <textarea
                           name="settings-persona-bio"
                           autoComplete="off"
                           autoCorrect="off"
@@ -309,19 +352,34 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2.5 mb-4">
                       <Bell className="w-4 h-4 text-[#d4a373]" />
                       <div>
-                        <h2 className="text-base font-bold text-[#f2efeb]">System Notifications</h2>
-                        <p className="text-[#a8a29e] text-[11px]">Configure alerts sent directly to your device.</p>
+                        <h2 className="text-base font-bold text-[#f2efeb]">
+                          System Notifications
+                        </h2>
+                        <p className="text-[#a8a29e] text-[11px]">
+                          Configure alerts sent directly to your device.
+                        </p>
                       </div>
                     </div>
 
                     <div className="p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] flex items-center justify-between">
                       <div className="space-y-1 pr-4">
-                        <h3 className="text-xs font-bold text-[#f2efeb]">Closed-Tab Notifications</h3>
+                        <h3 className="text-xs font-bold text-[#f2efeb]">
+                          Closed-Tab Notifications
+                        </h3>
                         <p className="text-xs text-[#a8a29e] leading-relaxed">
-                          Receive browser push alerts for scheduled reminders even when Dialogue is not open.
+                          Receive browser push alerts for scheduled reminders
+                          even when Dialogue is not open.
                         </p>
                         <p className="text-[11px] text-[#a8a29e]/60 leading-normal mt-1.5 max-w-md">
-                          💡 Brave users: Ensure <span className="text-[#d4a373]">"Use Google services for push messaging"</span> is enabled in <code className="bg-[#1a1814] px-1 py-0.5 rounded text-[10px]">brave://settings/privacy</code>.
+                          💡 Brave users: Ensure{" "}
+                          <span className="text-[#d4a373]">
+                            &quot;Use Google services for push messaging&quot;
+                          </span>{" "}
+                          is enabled in{" "}
+                          <code className="bg-[#1a1814] px-1 py-0.5 rounded text-[10px]">
+                            brave://settings/privacy
+                          </code>
+                          .
                         </p>
                       </div>
                       <button
@@ -342,7 +400,7 @@ export default function SettingsPage() {
               )}
 
               {activeTab === "ai" && (
-                <motion.div 
+                <motion.div
                   key="ai"
                   initial={{ opacity: 0, x: 5 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -352,55 +410,116 @@ export default function SettingsPage() {
                   <section className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg">
                     <div className="flex items-center gap-2.5 mb-4">
                       <Cpu className="w-4 h-4 text-[#d4a373]" />
-                      <h2 className="text-base font-bold text-[#f2efeb]">Inference Engine</h2>
+                      <h2 className="text-base font-bold text-[#f2efeb]">
+                        Inference Engine
+                      </h2>
                     </div>
 
                     <div className="grid grid-cols-1 gap-2">
-                      {( [
-                        { id: "gemini", name: "Google Gemini", desc: "Cloud-based reasoning and large context.", icon: Zap },
-                        { id: "openai", name: "OpenAI", desc: "GPT-4 and compatible endpoints.", icon: Sparkles },
-                        { id: "anthropic", name: "Anthropic", desc: "Claude 3.5 Sonnet and Opus.", icon: Brain },
-                        { id: "lmstudio", name: "LM Studio", desc: "Local execution for maximum privacy.", icon: Bot }
-                      ] as const).map((p) => (
-                        <button 
+                      {(
+                        [
+                          {
+                            id: "gemini",
+                            name: "Google Gemini",
+                            desc: "Cloud-based reasoning and large context.",
+                            icon: Zap,
+                          },
+                          {
+                            id: "openai",
+                            name: "OpenAI",
+                            desc: "GPT-4 and compatible endpoints.",
+                            icon: Sparkles,
+                          },
+                          {
+                            id: "anthropic",
+                            name: "Anthropic",
+                            desc: "Claude 3.5 Sonnet and Opus.",
+                            icon: Brain,
+                          },
+                          {
+                            id: "lmstudio",
+                            name: "LM Studio",
+                            desc: "Local execution for maximum privacy.",
+                            icon: Bot,
+                          },
+                        ] as const
+                      ).map((p) => (
+                        <button
                           key={p.id}
-                          onClick={() => { setProvider(p.id); setShowApiKey(false); }}
+                          onClick={() => {
+                            setProvider(p.id);
+                            setShowApiKey(false);
+                          }}
                           className={`p-3 rounded-lg border transition-all text-left flex items-center justify-between group ${
-                            provider === p.id 
-                              ? "bg-[#0f0e0c] border-[#d4a373]/40" 
+                            provider === p.id
+                              ? "bg-[#0f0e0c] border-[#d4a373]/40"
                               : "bg-[#1a1814]/50 border-[#2a2723] hover:border-[#3a3733]"
                           }`}
                         >
                           <div className="flex items-center gap-3.5">
-                            <p.icon className={`w-4 h-4 ${provider === p.id ? "text-[#d4a373]" : "text-[#a8a29e]"}`} />
+                            <p.icon
+                              className={`w-4 h-4 ${provider === p.id ? "text-[#d4a373]" : "text-[#a8a29e]"}`}
+                            />
                             <div>
-                              <h3 className={`text-[13px] font-bold ${provider === p.id ? "text-[#f2efeb]" : "text-[#a8a29e]"}`}>{p.name}</h3>
-                              <p className="text-[10px] text-[#a8a29e] leading-tight">{p.desc}</p>
+                              <h3
+                                className={`text-[13px] font-bold ${provider === p.id ? "text-[#f2efeb]" : "text-[#a8a29e]"}`}
+                              >
+                                {p.name}
+                              </h3>
+                              <p className="text-[10px] text-[#a8a29e] leading-tight">
+                                {p.desc}
+                              </p>
                             </div>
                           </div>
-                          <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
-                            provider === p.id ? "border-[#d4a373]" : "border-[#2a2723]"
-                          }`}>
-                            {provider === p.id && <div className="h-2 w-2 rounded-full bg-[#d4a373]" />}
+                          <div
+                            className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
+                              provider === p.id
+                                ? "border-[#d4a373]"
+                                : "border-[#2a2723]"
+                            }`}
+                          >
+                            {provider === p.id && (
+                              <div className="h-2 w-2 rounded-full bg-[#d4a373]" />
+                            )}
                           </div>
                         </button>
                       ))}
                     </div>
 
                     <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
-                      <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">Custom {provider} Config</h3>
+                      <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">
+                        Custom {provider} Config
+                      </h3>
                       <div className="space-y-1.5">
                         <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
-                          {provider === "lmstudio" ? "API Key (Ignored for local LLM)" : "API Key (Overrides Env Var)"}
+                          {provider === "lmstudio"
+                            ? "API Key (Ignored for local LLM)"
+                            : "API Key (Overrides Env Var)"}
                         </label>
                         <div className="relative flex items-center">
-                          <input 
+                          <input
                             type={showApiKey ? "text" : "password"}
                             value={customConfigs[provider]?.apiKey || ""}
-                            onChange={(e) => setCustomConfigs(prev => ({ ...prev, [provider]: { ...prev[provider], apiKey: e.target.value } }))}
+                            onChange={(e) =>
+                              setCustomConfigs((prev) => ({
+                                ...prev,
+                                [provider]: {
+                                  ...prev[provider],
+                                  apiKey: e.target.value,
+                                },
+                              }))
+                            }
                             onCopy={(e) => !showApiKey && e.preventDefault()}
                             onCut={(e) => !showApiKey && e.preventDefault()}
-                            placeholder={provider === "lmstudio" ? (showApiKey ? "lm-studio" : "••••••••••••") : (showApiKey ? "sk-..." : "••••••••••••")}
+                            placeholder={
+                              provider === "lmstudio"
+                                ? showApiKey
+                                  ? "lm-studio"
+                                  : "••••••••••••"
+                                : showApiKey
+                                  ? "sk-..."
+                                  : "••••••••••••"
+                            }
                             className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg pl-3 pr-9 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                           />
                           <button
@@ -419,73 +538,172 @@ export default function SettingsPage() {
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
-                          {provider === "lmstudio" ? "Base URL (Defaults to http://localhost:1234/v1)" : "Base URL (Optional)"}
+                          {provider === "lmstudio"
+                            ? "Base URL (Defaults to http://localhost:1234/v1)"
+                            : "Base URL (Optional)"}
                         </label>
-                        <input 
+                        <input
                           type="text"
                           value={customConfigs[provider]?.baseUrl || ""}
-                          onChange={(e) => setCustomConfigs(prev => ({ ...prev, [provider]: { ...prev[provider], baseUrl: e.target.value } }))}
-                          placeholder={provider === "openai" ? "https://api.openai.com/v1" : provider === "lmstudio" ? "http://localhost:1234/v1" : ""}
+                          onChange={(e) =>
+                            setCustomConfigs((prev) => ({
+                              ...prev,
+                              [provider]: {
+                                ...prev[provider],
+                                baseUrl: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder={
+                            provider === "openai"
+                              ? "https://api.openai.com/v1"
+                              : provider === "lmstudio"
+                                ? "http://localhost:1234/v1"
+                                : ""
+                          }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">Model ID (Optional)</label>
-                        <input 
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                          Model ID (Optional)
+                        </label>
+                        <input
                           type="text"
                           value={customConfigs[provider]?.modelId || ""}
-                          onChange={(e) => setCustomConfigs(prev => ({ ...prev, [provider]: { ...prev[provider], modelId: e.target.value } }))}
-                          placeholder={provider === "openai" ? "gpt-4o" : provider === "anthropic" ? "claude-3-5-sonnet-latest" : provider === "lmstudio" ? "e.g. llama-3.2-3b-instruct" : "gemini-1.5-pro"}
+                          onChange={(e) =>
+                            setCustomConfigs((prev) => ({
+                              ...prev,
+                              [provider]: {
+                                ...prev[provider],
+                                modelId: e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder={
+                            provider === "openai"
+                              ? "gpt-4o"
+                              : provider === "anthropic"
+                                ? "claude-3-5-sonnet-latest"
+                                : provider === "lmstudio"
+                                  ? "e.g. llama-3.2-3b-instruct"
+                                  : "gemini-1.5-pro"
+                          }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
                       </div>
                     </div>
 
                     <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
-                      <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">Task Models</h3>
-                      <p className="text-[11px] text-[#a8a29e]/60 leading-relaxed">Models used for background tasks like reflection summaries and OCR. These don't need to be as powerful as your chat model.</p>
+                      <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">
+                        Task Models
+                      </h3>
+                      <p className="text-[11px] text-[#a8a29e]/60 leading-relaxed">
+                        Models used for background tasks like reflection
+                        summaries and OCR. These do not need to be as powerful
+                        as your chat model.
+                      </p>
                       <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">Reflection Summary</label>
-                          <input 
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                          Reflection Summary
+                        </label>
+                        <input
                           type="text"
                           value={taskModels["reflection"] || ""}
-                          onChange={(e) => setTaskModels(prev => ({ ...prev, reflection: e.target.value }))}
-                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSaveProfile()}
-                          placeholder={customConfigs[provider]?.modelId || "gemini-2.0-flash"}
+                          onChange={(e) =>
+                            setTaskModels((prev) => ({
+                              ...prev,
+                              reflection: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) =>
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            handleSaveProfile()
+                          }
+                          placeholder={
+                            customConfigs[provider]?.modelId ||
+                            "gemini-2.0-flash"
+                          }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">OCR / Vision Extraction</label>
-                        <p className="text-[10px] text-[#a8a29e]/50">Requires a multimodal model that supports image input (e.g. Gemini Pro Vision, GPT-4o).</p>
-                        <input 
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                          OCR / Vision Extraction
+                        </label>
+                        <p className="text-[10px] text-[#a8a29e]/50">
+                          Requires a multimodal model that supports image input
+                          (e.g. Gemini Pro Vision, GPT-4o).
+                        </p>
+                        <input
                           type="text"
                           value={taskModels["ocr"] || ""}
-                          onChange={(e) => setTaskModels(prev => ({ ...prev, ocr: e.target.value }))}
-                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSaveProfile()}
-                          placeholder={customConfigs[provider]?.modelId || "gemini-2.0-flash"}
+                          onChange={(e) =>
+                            setTaskModels((prev) => ({
+                              ...prev,
+                              ocr: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) =>
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            handleSaveProfile()
+                          }
+                          placeholder={
+                            customConfigs[provider]?.modelId ||
+                            "gemini-2.0-flash"
+                          }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">Auto-Title & Date Parsing</label>
-                        <input 
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                          Auto-Title & Date Parsing
+                        </label>
+                        <input
                           type="text"
                           value={taskModels["title"] || ""}
-                          onChange={(e) => setTaskModels(prev => ({ ...prev, title: e.target.value }))}
-                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSaveProfile()}
-                          placeholder={customConfigs[provider]?.modelId || "gemini-2.0-flash-lite"}
+                          onChange={(e) =>
+                            setTaskModels((prev) => ({
+                              ...prev,
+                              title: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) =>
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            handleSaveProfile()
+                          }
+                          placeholder={
+                            customConfigs[provider]?.modelId ||
+                            "gemini-2.0-flash-lite"
+                          }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">Memory Extraction</label>
-                        <input 
+                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                          Memory Extraction
+                        </label>
+                        <input
                           type="text"
                           value={taskModels["memory"] || ""}
-                          onChange={(e) => setTaskModels(prev => ({ ...prev, memory: e.target.value }))}
-                          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSaveProfile()}
-                          placeholder={customConfigs[provider]?.modelId || "gemini-2.0-flash-lite"}
+                          onChange={(e) =>
+                            setTaskModels((prev) => ({
+                              ...prev,
+                              memory: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) =>
+                            e.key === "Enter" &&
+                            !e.shiftKey &&
+                            handleSaveProfile()
+                          }
+                          placeholder={
+                            customConfigs[provider]?.modelId ||
+                            "gemini-2.0-flash-lite"
+                          }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
                       </div>
@@ -494,57 +712,118 @@ export default function SettingsPage() {
                     <div className="mt-6 pt-5 border-t border-[#2a2723]">
                       <div className="flex items-center gap-2.5 mb-4">
                         <Search className="w-4 h-4 text-[#d4a373]" />
-                        <h2 className="text-base font-bold text-[#f2efeb]">Search Intelligence</h2>
+                        <h2 className="text-base font-bold text-[#f2efeb]">
+                          Search Intelligence
+                        </h2>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {( [
-                          { id: "tavily", name: "Tavily AI", desc: "Optimized for LLM research.", icon: Zap },
-                          { id: "serper", name: "Serper.dev", desc: "Google Search API power.", icon: Globe }
-                        ] as const).map((s) => (
-                          <button 
+                        {(
+                          [
+                            {
+                              id: "tavily",
+                              name: "Tavily AI",
+                              desc: "Optimized for LLM research.",
+                              icon: Zap,
+                            },
+                            {
+                              id: "serper",
+                              name: "Serper.dev",
+                              desc: "Google Search API power.",
+                              icon: Globe,
+                            },
+                          ] as const
+                        ).map((s) => (
+                          <button
                             key={s.id}
-                            onClick={() => { setSearchProvider(s.id); setShowSearchApiKey(false); }}
+                            onClick={() => {
+                              setSearchProvider(s.id);
+                              setShowSearchApiKey(false);
+                            }}
                             className={`p-3 rounded-lg border transition-all text-left group ${
-                              searchProvider === s.id 
-                                ? "bg-[#0f0e0c] border-[#d4a373]/40" 
+                              searchProvider === s.id
+                                ? "bg-[#0f0e0c] border-[#d4a373]/40"
                                 : "bg-[#1a1814]/50 border-[#2a2723] hover:border-[#3a3733]"
                             }`}
                           >
                             <div className="flex items-center justify-between mb-1.5">
-                              <s.icon className={`w-3.5 h-3.5 ${searchProvider === s.id ? "text-[#d4a373]" : "text-[#a8a29e]"}`} />
-                              <div className={`h-3.5 w-3.5 rounded-full border-2 flex items-center justify-center ${
-                                searchProvider === s.id ? "border-[#d4a373]" : "border-[#2a2723]"
-                              }`}>
-                                {searchProvider === s.id && <div className="h-1.5 w-1.5 rounded-full bg-[#d4a373]" />}
+                              <s.icon
+                                className={`w-3.5 h-3.5 ${searchProvider === s.id ? "text-[#d4a373]" : "text-[#a8a29e]"}`}
+                              />
+                              <div
+                                className={`h-3.5 w-3.5 rounded-full border-2 flex items-center justify-center ${
+                                  searchProvider === s.id
+                                    ? "border-[#d4a373]"
+                                    : "border-[#2a2723]"
+                                }`}
+                              >
+                                {searchProvider === s.id && (
+                                  <div className="h-1.5 w-1.5 rounded-full bg-[#d4a373]" />
+                                )}
                               </div>
                             </div>
-                            <h3 className={`text-[12px] font-bold ${searchProvider === s.id ? "text-[#f2efeb]" : "text-[#a8a29e]"}`}>{s.name}</h3>
-                            <p className="text-[10px] text-[#a8a29e] leading-tight">{s.desc}</p>
+                            <h3
+                              className={`text-[12px] font-bold ${searchProvider === s.id ? "text-[#f2efeb]" : "text-[#a8a29e]"}`}
+                            >
+                              {s.name}
+                            </h3>
+                            <p className="text-[10px] text-[#a8a29e] leading-tight">
+                              {s.desc}
+                            </p>
                           </button>
                         ))}
                       </div>
 
                       {/* Custom Search Config */}
                       <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
-                        <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">Custom {searchProvider} Config</h3>
+                        <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">
+                          Custom {searchProvider} Config
+                        </h3>
                         <div className="space-y-1.5">
-                          <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">API Key (Overrides Env Var)</label>
+                          <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                            API Key (Overrides Env Var)
+                          </label>
                           <div className="relative flex items-center">
-                            <input 
+                            <input
                               type={showSearchApiKey ? "text" : "password"}
-                              value={customConfigs[searchProvider]?.apiKey || ""}
-                              onChange={(e) => setCustomConfigs(prev => ({ ...prev, [searchProvider]: { ...prev[searchProvider], apiKey: e.target.value } }))}
-                              onCopy={(e) => !showSearchApiKey && e.preventDefault()}
-                              onCut={(e) => !showSearchApiKey && e.preventDefault()}
-                              placeholder={showSearchApiKey ? (searchProvider === "tavily" ? "tvly-..." : "api_key") : "••••••••••••"}
+                              value={
+                                customConfigs[searchProvider]?.apiKey || ""
+                              }
+                              onChange={(e) =>
+                                setCustomConfigs((prev) => ({
+                                  ...prev,
+                                  [searchProvider]: {
+                                    ...prev[searchProvider],
+                                    apiKey: e.target.value,
+                                  },
+                                }))
+                              }
+                              onCopy={(e) =>
+                                !showSearchApiKey && e.preventDefault()
+                              }
+                              onCut={(e) =>
+                                !showSearchApiKey && e.preventDefault()
+                              }
+                              placeholder={
+                                showSearchApiKey
+                                  ? searchProvider === "tavily"
+                                    ? "tvly-..."
+                                    : "api_key"
+                                  : "••••••••••••"
+                              }
                               className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg pl-3 pr-9 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                             />
                             <button
                               type="button"
-                              onClick={() => setShowSearchApiKey(!showSearchApiKey)}
+                              onClick={() =>
+                                setShowSearchApiKey(!showSearchApiKey)
+                              }
                               className="absolute right-2.5 text-[#a8a29e] hover:text-[#f2efeb] focus:outline-none transition-colors"
-                              title={showSearchApiKey ? "Hide API Key" : "Show API Key"}
+                              title={
+                                showSearchApiKey
+                                  ? "Hide API Key"
+                                  : "Show API Key"
+                              }
                             >
                               {showSearchApiKey ? (
                                 <EyeOff className="w-3.5 h-3.5" />
@@ -561,7 +840,7 @@ export default function SettingsPage() {
               )}
 
               {activeTab === "memory" && (
-                <motion.div 
+                <motion.div
                   key="memory"
                   initial={{ opacity: 0, x: 5 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -571,11 +850,13 @@ export default function SettingsPage() {
                   <section className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg">
                     <div className="flex items-center gap-2.5 mb-4">
                       <Brain className="w-4 h-4 text-[#d4a373]" />
-                      <h2 className="text-base font-bold text-[#f2efeb]">Semantic Memory</h2>
+                      <h2 className="text-base font-bold text-[#f2efeb]">
+                        Semantic Memory
+                      </h2>
                     </div>
 
                     <div className="mb-4 flex gap-2">
-                      <input 
+                      <input
                         name="settings-new-memory"
                         autoComplete="off"
                         autoCorrect="off"
@@ -585,9 +866,11 @@ export default function SettingsPage() {
                         onChange={(e) => setNewMemoryText(e.target.value)}
                         placeholder="Add insight..."
                         className="flex-1 bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all"
-                        onKeyDown={(e) => e.key === "Enter" && handleAddMemory()}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && handleAddMemory()
+                        }
                       />
-                      <button 
+                      <button
                         onClick={handleAddMemory}
                         className="px-3 rounded-lg bg-[#d4a373] text-[#0f0e0c] hover:bg-[#c39262] transition-all"
                       >
@@ -595,20 +878,22 @@ export default function SettingsPage() {
                       </button>
                     </div>
 
-                    <div className="space-y-1.5 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="space-y-1.5 max-h-87.5 overflow-y-auto pr-1 custom-scrollbar">
                       {memories?.length === 0 && (
                         <div className="text-center py-8 border border-dashed border-[#2a2723] rounded-lg">
-                          <p className="text-[#a8a29e] text-[10px] italic">No memories stored.</p>
+                          <p className="text-[#a8a29e] text-[10px] italic">
+                            No memories stored.
+                          </p>
                         </div>
                       )}
-                      {memories?.map((memory: any) => (
-                        <div 
+                      {memories?.map((memory: Doc<"memories">) => (
+                        <div
                           key={memory._id}
                           className="group p-2.5 rounded-lg bg-[#0f0e0c] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all"
                         >
                           {editingMemoryId === memory._id ? (
                             <div className="flex gap-2 items-center">
-                              <input 
+                              <input
                                 autoFocus
                                 name="settings-edit-memory"
                                 autoComplete="off"
@@ -616,21 +901,53 @@ export default function SettingsPage() {
                                 autoCapitalize="off"
                                 spellCheck={false}
                                 value={editMemoryText}
-                                onChange={(e) => setEditMemoryText(e.target.value)}
+                                onChange={(e) =>
+                                  setEditMemoryText(e.target.value)
+                                }
                                 className="flex-1 bg-transparent border-none outline-none text-xs text-[#f2efeb]"
-                                onKeyDown={(e) => e.key === "Enter" && handleUpdateMemory(memory._id)}
+                                onKeyDown={(e) =>
+                                  e.key === "Enter" &&
+                                  handleUpdateMemory(memory._id)
+                                }
                               />
                               <div className="flex gap-1">
-                                <button onClick={() => handleUpdateMemory(memory._id)} className="text-[#d4a373] p-1"><Save className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => setEditingMemoryId(null)} className="text-[#a8a29e] p-1"><X className="w-3.5 h-3.5" /></button>
+                                <button
+                                  onClick={() => handleUpdateMemory(memory._id)}
+                                  className="text-[#d4a373] p-1"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingMemoryId(null)}
+                                  className="text-[#a8a29e] p-1"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </div>
                           ) : (
                             <div className="flex items-start justify-between gap-4">
-                              <p className="text-[11px] text-[#a8a29e] leading-relaxed group-hover:text-[#f2efeb]">{memory.text}</p>
+                              <p className="text-[11px] text-[#a8a29e] leading-relaxed group-hover:text-[#f2efeb]">
+                                {memory.text}
+                              </p>
                               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => { setEditingMemoryId(memory._id); setEditMemoryText(memory.text); }} className="p-1 text-[#a8a29e] hover:text-[#d4a373]"><Edit3 className="w-3 h-3" /></button>
-                                <button onClick={() => deleteMemory({ id: memory._id })} className="p-1 text-[#a8a29e] hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                                <button
+                                  onClick={() => {
+                                    setEditingMemoryId(memory._id);
+                                    setEditMemoryText(memory.text);
+                                  }}
+                                  className="p-1 text-[#a8a29e] hover:text-[#d4a373]"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    deleteMemory({ id: memory._id })
+                                  }
+                                  className="p-1 text-[#a8a29e] hover:text-red-400"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
                               </div>
                             </div>
                           )}
@@ -646,7 +963,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Mobile Sticky Bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-2 bg-[#0f0e0c]/90 backdrop-blur-2xl border-t border-[#2a2723] z-[100] md:hidden flex gap-2">
+      <div className="fixed bottom-0 left-0 right-0 p-2 bg-[#0f0e0c]/90 backdrop-blur-2xl border-t border-[#2a2723] z-100 md:hidden flex gap-2">
         <button
           onClick={() => signOut()}
           className="p-2.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-red-400"
@@ -658,7 +975,11 @@ export default function SettingsPage() {
           disabled={isSaving}
           className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#d4a373] text-[#0f0e0c] font-bold text-[10px] uppercase tracking-wider"
         >
-          {isSaving ? <Sparkles className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          {isSaving ? (
+            <Sparkles className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Save className="w-3.5 h-3.5" />
+          )}
           Apply Changes
         </button>
       </div>
@@ -667,11 +988,23 @@ export default function SettingsPage() {
         .settings-container {
           min-height: 100dvh;
         }
-        .custom-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #2a2723; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d4a373; }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 2px;
+          height: 2px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #2a2723;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #d4a373;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
       `}</style>
     </div>
   );

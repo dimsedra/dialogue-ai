@@ -14,6 +14,7 @@ import type * as ai_providers from "../ai_providers.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
 import type * as dailySummary from "../dailySummary.js";
+import type * as dashboard from "../dashboard.js";
 import type * as dateMigration from "../dateMigration.js";
 import type * as encryption from "../encryption.js";
 import type * as events from "../events.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   crons: typeof crons;
   dailySummary: typeof dailySummary;
+  dashboard: typeof dashboard;
   dateMigration: typeof dateMigration;
   encryption: typeof encryption;
   events: typeof events;

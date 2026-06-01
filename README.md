@@ -23,6 +23,9 @@ Checked off your habits twenty days in a row? Standard checklists break down whe
 #### Semantic Memory (Facts)
 Standard AI assistants suffer from total amnesia—requiring you to re-introduce yourself, your goals, and your work style at the start of every new chat session. Dialogue remembers. It stores durable facts about your life, preferences, and technical stack in a vector-indexed memory layer with automatic deduplication and time-decay weighting. Automatic near-duplicate detection prevents contradictions, and a delete tool lets you correct wrong facts on the spot. You shouldn't have to repeat yourself. Ever.
 
+#### Graph-Based Relational Memory (Relationships)
+Tabular databases separate your tasks, events, and memories into isolated drawers, forcing the AI to guess how they relate. Dialogue solves this by mapping your entire workspace into a structured, schema-gated knowledge graph. It defines workspaces, tasks, events, habits, and resources as nodes, and maps their relationships (`BLOCKED_BY`, `COLLABORATES_WITH`, `PREREQUISITE_FOR`, `REFERENCES`) as edges. When you query the agent, it runs a spreading activation traversal from semantic entry nodes, assembling a highly contextual, structured briefing of dependencies and connections instantly.
+
 #### Bidirectional OCEAN Processing (Patterns)
 Facts tell the agent *what* you like. Patterns tell it *who you are*. Dialogue captures daily activity snapshots across all workspaces and performs a weekly/monthly **Bidirectional Cognitive Processing** compile. It reads the feed backward (**Retrograde Analysis**) to understand context and justify behaviors, and forward (**Anterograde Analysis**) to map user trajectory momentum. It frames these insights using the **Big 5 (OCEAN)** personality model (Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism) with bulleted evidence. The agent reads these digests at session start to optimize prompt context and caching, adapting its coaching tone. Instead of starting fresh, it refines and updates the existing monthly profile, discarding raw details over time to protect storage.
 
@@ -70,13 +73,14 @@ Productivity isn't just about crossing items off a list; it is about recognizing
 
 ## How Memory Works: The Agent That Grows With You
 
-Most AI assistants start fresh every conversation. Dialogue is built on a different premise: **the agent should be smarter on day 365 than it was on day 1.** Not because we feed it more data—because we designed three complementary, cross-referencing memory systems that see you from different angles: **Facts (Semantic Memory)**, **Patterns (Bidirectional OCEAN)**, and **Identity (User Bio)**.
+Most AI assistants start fresh every conversation. Dialogue is built on a different premise: **the agent should be smarter on day 365 than it was on day 1.** Not because we feed it more data—because we designed four complementary, cross-referencing memory systems that see you from different angles: **Identity (User Bio)**, **Behaviors (Bidirectional OCEAN)**, **Facts (Semantic Memory)**, and **Relationships (Graph Memory)**.
 
 | Subsystem | What it stores | Core Retrieval Method | Compounding & Pruning Mechanics |
 |---|---|---|---|
-| **Semantic memory** | Explicit facts, stack choices, links, credentials, context | Cosine similarity vector search (top-5 matches) | Point deduplication, 30-day recency boost, linear decay |
-| **Bidirectional OCEAN** | Psychometric profile (Big 5), behavior, energy, vector trajectory | Top-of-prompt instruction context (Cache-Optimized) | Daily snapshotting, weekly compile, monthly cascade (prunes weekly digests) |
-| **User bio** | Stated identity, communications, guidelines | Loaded globally on every message turn | Manual edit overrides with revision history rollbacks |
+| **Stated Identity (User Bio)** | Stated biography, names, communication style, instructions | Loaded globally on every message turn | Manual edit overrides with revision history rollbacks |
+| **Observed Patterns (OCEAN)** | Psychometric profile (Big 5), behavior, energy, vector trajectory | Top-of-prompt instruction context (Cache-Optimized) | Daily snapshotting, weekly compile, monthly cascade (prunes weekly digests) |
+| **Explicit Facts (Semantic)** | Long-term preferences, technology stacks, static details | Cosine similarity vector search (top-5 matches) | Point deduplication, 30-day recency boost, linear decay |
+| **Relational Context (Graph)** | Entity-relationship nodes (Tasks, Events, Habits) and typed, weighted edges | Spreading activation traversal (1-2 degrees of separation) | Node/edge indexing, OCEAN weight scaling, and UserBio policy filtering |
 
 ---
 
@@ -107,11 +111,21 @@ Facts only represent what you *tell* the agent. Your actual behavior is a richer
 ### 3. Stated Identity (User Bio)
 Your stated biography and communication preferences (such as preferred tone, username, or guidelines) are loaded globally. Unlike behavioral patterns (which are *observed*), this is what you *want* the agent to know. Updates overwrite the active bio, but all historic revisions are saved for instant rollbacks.
 
-### Triangulation: How the Subsystems Collaborate
-At session start, the agent loads your stated **Identity (Bio)**, observes your **Behavioral Patterns (OCEAN Digests)**, and fetches matching **Factual Context (Semantic Memory)**. The agent triangulates these three signals:
-- *Bio* sets the user's explicit rules and username.
-- *OCEAN* adjusts the agent's coaching tone, verbosity, and recommendation frequencies based on actual pressure and energy patterns.
-- *Semantic memory* feeds technical facts as the conversation requests them.
+---
+
+### 4. Relational Context (Graph Memory)
+Dialogue maps your entire workspace into a structured, schema-gated knowledge graph. It defines concrete entities (Workspaces, Tasks, Events, Habits, Resources, People) as nodes and typed relationships (`BLOCKED_BY`, `COLLABORATES_WITH`, `PREREQUISITE_FOR`, `REFERENCES`) as edges.
+- **Spreading Activation**: Recreates thought association. Locating a node automatically activates neighboring nodes (e.g., matching a person node pulls active tasks and resources connected to them).
+- **Sub-Graph Extraction**: Instead of injecting raw lists of all tasks/events, the compiler extracts only the local neighborhood of active nodes, saving context window space.
+- **MCP Node Syncing**: Workspace-specific MCP integrations (such as GitHub, Overleaf, or Zotero) dynamically populate the graph with external commit logs, references, and edit states.
+- **Causal Warnings**: Graph edges track timeline dependencies in real time, allowing the agent to predict and warn about schedule conflicts (e.g. late coding sessions threatening habit streaks).
+
+### Quad-Triangulation: How the Subsystems Collaborate
+At session start, the agent loads your stated **Identity (Bio)**, observes your **Behavioral Patterns (OCEAN Digests)**, fetches matching **Factual Context (Semantic Memory)**, and traverses the **Relational Network (Graph Memory)**. The agent integrates these four signals:
+- *Bio* sets global rules, username, and prunes graph paths that violate user constraints.
+- *OCEAN* observes behavioral patterns and dynamically tunes graph edge weights (e.g. prioritizing blocker resolution during high-stress periods).
+- *Semantic Memory* acts as an entry portal to match query vectors to starting nodes in the graph.
+- *Graph Memory* acts as the central connective tissue, walking paths to retrieve related tasks, calendar events, habits, and synced external MCP resources in a clean structural briefing.
 
 ---
 
@@ -204,6 +218,8 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 * **`habits`**: Habit definitions including name, workspace configuration mapping, target completion metrics, and cached streak stats.
 * **`habitLogs`**: Timezone-adjusted completion logs, recording exact timestamps, skipped/completed states, and contextual progress notes.
 * **`pushSubscriptions`**: Browser Web Push subscription registration endpoints and cryptographic keys (`p256dh`, `auth`) mapped to users for closed-tab background alerts.
+* **`graphNodes`**: Entities represented as graph nodes, mapping workspaces, tasks, events, habits, resources, and people.
+* **`graphEdges`**: Weighted, directed edges mapping relationships (`BLOCKED_BY`, `COLLABORATES_WITH`, `PREREQUISITE_FOR`, `REFERENCES`) between graph nodes.
 
 ---
 

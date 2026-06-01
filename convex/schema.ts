@@ -177,6 +177,7 @@ export default defineSchema({
       habitStreakDays: v.optional(v.number()),
     }),
     userReflection: v.optional(v.string()),  // User's own words during reflection conversation
+    shared: v.optional(v.boolean()),         // Public share toggle
     createdAt: v.number(),
   }).index("by_user_type", ["userId", "type"])
     .index("by_user_period", ["userId", "periodStart"]),
@@ -295,4 +296,17 @@ export default defineSchema({
     }),
   }).index("by_user", ["userId"])
     .index("by_endpoint", ["endpoint"]),
+
+  cardState: defineTable({
+    userId: v.id("users"),
+    cardType: v.string(),
+    cardId: v.optional(v.string()),
+    dismissedAt: v.optional(v.number()),
+    snoozedUntil: v.optional(v.number()),
+    mutedAt: v.optional(v.number()),
+    lastShownAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_type", ["userId", "cardType"])
+    .index("by_user_type_cardid", ["userId", "cardType", "cardId"]),
 });

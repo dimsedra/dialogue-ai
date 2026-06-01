@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, MutationCtx } from "./_generated/server";
 import { auth } from "./auth";
 import { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -9,11 +9,11 @@ import { internal } from "./_generated/api";
  * based on the event's start time and reminder offset.
  */
 async function rescheduleEventReminder(
-  ctx: any, 
-  eventId: Id<"events">, 
-  startTime: number, 
-  title: string, 
-  userId: Id<"users">
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  startTime: number,
+  title: string,
+  userId: Id<"users">,
 ) {
   const event = await ctx.db.get(eventId);
   if (!event) return;
@@ -23,13 +23,21 @@ async function rescheduleEventReminder(
     try {
       await ctx.scheduler.cancel(event.scheduledNotificationId);
     } catch (e) {
-      console.warn("Could not cancel existing job (it may have already run or expired):", e);
+      console.warn(
+        "Could not cancel existing job (it may have already run or expired):",
+        e,
+      );
     }
   }
 
   // 2. Determine offset (default to 15m if not specified, null or negative means disabled)
-  const reminderOffset = event.reminderOffset !== undefined ? event.reminderOffset : 15;
-  if (reminderOffset === null || reminderOffset === undefined || reminderOffset < 0) {
+  const reminderOffset =
+    event.reminderOffset !== undefined ? event.reminderOffset : 15;
+  if (
+    reminderOffset === null ||
+    reminderOffset === undefined ||
+    reminderOffset < 0
+  ) {
     await ctx.db.patch(eventId, { scheduledNotificationId: undefined });
     return;
   }
@@ -39,9 +47,10 @@ async function rescheduleEventReminder(
   const triggerTime = Math.max(reminderTime, Date.now());
 
   if (triggerTime > Date.now()) {
-    const timePhrase = reminderOffset === 0 
-      ? "starts now" 
-      : `starts in ${reminderOffset} minute${reminderOffset === 1 ? "" : "s"}`;
+    const timePhrase =
+      reminderOffset === 0
+        ? "starts now"
+        : `starts in ${reminderOffset} minute${reminderOffset === 1 ? "" : "s"}`;
 
     const scheduledId = await ctx.scheduler.runAt(
       triggerTime,
@@ -52,7 +61,7 @@ async function rescheduleEventReminder(
         message: `"${title}" ${timePhrase}.`,
         type: "event_remind",
         actionUrl: "/?view=calendar",
-      }
+      },
     );
 
     // Save job ID reference
@@ -63,17 +72,26 @@ async function rescheduleEventReminder(
   }
 }
 
-const recurrenceValidator = v.optional(v.union(v.object({
-  frequency: v.union(v.literal("daily"), v.literal("weekly")),
-  interval: v.number(),
-  daysOfWeek: v.optional(v.array(v.number())),
-  until: v.optional(v.number()),
-  untilStr: v.optional(v.string()),
-  exceptions: v.optional(v.array(v.number())),
-  exceptionsStr: v.optional(v.array(v.string())),
-}), v.null()));
+const recurrenceValidator = v.optional(
+  v.union(
+    v.object({
+      frequency: v.union(v.literal("daily"), v.literal("weekly")),
+      interval: v.number(),
+      daysOfWeek: v.optional(v.array(v.number())),
+      until: v.optional(v.number()),
+      untilStr: v.optional(v.string()),
+      exceptions: v.optional(v.array(v.number())),
+      exceptionsStr: v.optional(v.array(v.string())),
+    }),
+    v.null(),
+  ),
+);
 
-function expandRecurringEvents(events: Doc<"events">[], windowStart: number, windowEnd: number) {
+function expandRecurringEvents(
+  events: Doc<"events">[],
+  windowStart: number,
+  windowEnd: number,
+) {
   const expanded: (Doc<"events"> & { cancelled?: boolean })[] = [];
   for (const event of events) {
     if (!event.recurrence) {
@@ -81,7 +99,8 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
       continue;
     }
 
-    const duration = event.endTime !== undefined ? event.endTime - event.startTime : 0;
+    const duration =
+      event.endTime !== undefined ? event.endTime - event.startTime : 0;
     const limit = Math.min(windowEnd, event.recurrence.until ?? windowEnd);
     const exceptions = event.recurrence.exceptions ?? [];
 
@@ -93,16 +112,18 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
           expanded.push({
             ...event,
             startTime: timestamp,
-            endTime: event.endTime !== undefined ? timestamp + duration : undefined,
+            endTime:
+              event.endTime !== undefined ? timestamp + duration : undefined,
           });
         }
         d.setDate(d.getDate() + event.recurrence.interval);
       }
     } else if (event.recurrence.frequency === "weekly") {
       const d = new Date(event.startTime);
-      const daysOfWeek = event.recurrence.daysOfWeek && event.recurrence.daysOfWeek.length > 0
-        ? event.recurrence.daysOfWeek
-        : [d.getDay()];
+      const daysOfWeek =
+        event.recurrence.daysOfWeek && event.recurrence.daysOfWeek.length > 0
+          ? event.recurrence.daysOfWeek
+          : [d.getDay()];
 
       const currWeekStart = new Date(event.startTime);
       currWeekStart.setDate(currWeekStart.getDate() - currWeekStart.getDay());
@@ -115,14 +136,27 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
               const targetDate = new Date(currWeekStart);
               targetDate.setDate(targetDate.getDate() + dayIndex);
               const origTime = new Date(event.startTime);
-              targetDate.setHours(origTime.getHours(), origTime.getMinutes(), origTime.getSeconds(), origTime.getMilliseconds());
-              
+              targetDate.setHours(
+                origTime.getHours(),
+                origTime.getMinutes(),
+                origTime.getSeconds(),
+                origTime.getMilliseconds(),
+              );
+
               const timestamp = targetDate.getTime();
-              if (timestamp >= event.startTime && timestamp <= limit && timestamp >= windowStart && !exceptions.includes(timestamp)) {
+              if (
+                timestamp >= event.startTime &&
+                timestamp <= limit &&
+                timestamp >= windowStart &&
+                !exceptions.includes(timestamp)
+              ) {
                 expanded.push({
                   ...event,
                   startTime: timestamp,
-                  endTime: event.endTime !== undefined ? timestamp + duration : undefined,
+                  endTime:
+                    event.endTime !== undefined
+                      ? timestamp + duration
+                      : undefined,
                 });
               }
             }
@@ -137,7 +171,10 @@ function expandRecurringEvents(events: Doc<"events">[], windowStart: number, win
 }
 
 export const list = query({
-  args: { workspaceId: v.optional(v.id("workspaces")), userId: v.optional(v.id("users")) },
+  args: {
+    workspaceId: v.optional(v.id("workspaces")),
+    userId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) return [];
@@ -187,14 +224,18 @@ export const add = mutation({
     outcome: v.optional(v.string()),
     statusHook: v.optional(v.string()),
     recurrence: recurrenceValidator,
-    resources: v.optional(v.array(v.object({
-      type: v.union(v.literal("url"), v.literal("document")),
-      title: v.string(),
-      url: v.string(),
-      storageId: v.optional(v.id("_storage")),
-      summary: v.optional(v.string()),
-      linkedAt: v.number(),
-    }))),
+    resources: v.optional(
+      v.array(
+        v.object({
+          type: v.union(v.literal("url"), v.literal("document")),
+          title: v.string(),
+          url: v.string(),
+          storageId: v.optional(v.id("_storage")),
+          summary: v.optional(v.string()),
+          linkedAt: v.number(),
+        }),
+      ),
+    ),
     workspaceId: v.optional(v.id("workspaces")),
     userId: v.optional(v.id("users")),
     reminderOffset: v.optional(v.union(v.number(), v.null())),
@@ -207,22 +248,35 @@ export const add = mutation({
       title: args.title,
       startTime: args.startTime,
       endTime: args.endTime,
-      eventType: args.eventType ?? (args.endTime !== undefined ? "interval" : "point"),
+      eventType:
+        args.eventType ?? (args.endTime !== undefined ? "interval" : "point"),
       description: args.description,
       location: args.location,
       notes: args.notes,
       outcome: args.outcome,
       statusHook: args.statusHook,
-      contextUpdatedAt: (args.notes !== undefined || args.outcome !== undefined || args.statusHook !== undefined) ? Date.now() : undefined,
+      contextUpdatedAt:
+        args.notes !== undefined ||
+        args.outcome !== undefined ||
+        args.statusHook !== undefined
+          ? Date.now()
+          : undefined,
       recurrence: args.recurrence ?? undefined,
       resources: args.resources,
       workspaceId: args.workspaceId,
       userId,
       createdAt: Date.now(),
-      reminderOffset: args.reminderOffset === null ? undefined : args.reminderOffset,
+      reminderOffset:
+        args.reminderOffset === null ? undefined : args.reminderOffset,
     });
 
-    await rescheduleEventReminder(ctx, eventId, args.startTime, args.title, userId);
+    await rescheduleEventReminder(
+      ctx,
+      eventId,
+      args.startTime,
+      args.title,
+      userId,
+    );
     return eventId;
   },
 });
@@ -233,7 +287,7 @@ export const remove = mutation({
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== userId) throw new Error("Unauthorized");
-    
+
     const detachedInstances = await ctx.db
       .query("events")
       .withIndex("by_series", (q) => q.eq("seriesId", args.id))
@@ -243,7 +297,10 @@ export const remove = mutation({
         try {
           await ctx.scheduler.cancel(inst.scheduledNotificationId);
         } catch (e) {
-          console.warn("Could not cancel scheduled reminder for detached instance:", e);
+          console.warn(
+            "Could not cancel scheduled reminder for detached instance:",
+            e,
+          );
         }
       }
       await ctx.db.delete(inst._id);
@@ -274,14 +331,18 @@ export const update = mutation({
     statusHook: v.optional(v.string()),
     cancelled: v.optional(v.boolean()),
     recurrence: recurrenceValidator,
-    resources: v.optional(v.array(v.object({
-      type: v.union(v.literal("url"), v.literal("document")),
-      title: v.string(),
-      url: v.string(),
-      storageId: v.optional(v.id("_storage")),
-      summary: v.optional(v.string()),
-      linkedAt: v.number(),
-    }))),
+    resources: v.optional(
+      v.array(
+        v.object({
+          type: v.union(v.literal("url"), v.literal("document")),
+          title: v.string(),
+          url: v.string(),
+          storageId: v.optional(v.id("_storage")),
+          summary: v.optional(v.string()),
+          linkedAt: v.number(),
+        }),
+      ),
+    ),
     userId: v.optional(v.id("users")),
     timezoneOffset: v.optional(v.number()),
     reminderOffset: v.optional(v.union(v.number(), v.null())),
@@ -296,13 +357,13 @@ export const update = mutation({
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
       if (
-        value !== undefined && 
-        key !== "id" && 
-        key !== "userId" && 
-        key !== "notes" && 
-        key !== "timezoneOffset" && 
-        key !== "resources" && 
-        key !== "workspaceId" && 
+        value !== undefined &&
+        key !== "id" &&
+        key !== "userId" &&
+        key !== "notes" &&
+        key !== "timezoneOffset" &&
+        key !== "resources" &&
+        key !== "workspaceId" &&
         key !== "overwriteResources"
       ) {
         if (value === null) {
@@ -313,7 +374,8 @@ export const update = mutation({
       }
     }
     if (args.workspaceId !== undefined) {
-      updates.workspaceId = args.workspaceId === null ? undefined : args.workspaceId;
+      updates.workspaceId =
+        args.workspaceId === null ? undefined : args.workspaceId;
     }
     // Preserve existing exceptions/until when updating recurrence (avoid overwriting)
     if (args.recurrence !== undefined && event.recurrence) {
@@ -328,16 +390,20 @@ export const update = mutation({
       if (existingNotes && incomingNote.startsWith(existingNotes)) {
         incomingNote = incomingNote.slice(existingNotes.length).trim();
       }
-      incomingNote = incomingNote.replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*/, "").trim();
+      incomingNote = incomingNote
+        .replace(/^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\]\s*/, "")
+        .trim();
       if (incomingNote) {
         let now = new Date();
         if (args.timezoneOffset !== undefined) {
-          now = new Date(Date.now() - (args.timezoneOffset * 60000));
+          now = new Date(Date.now() - args.timezoneOffset * 60000);
         }
         const pad = (n: number) => n.toString().padStart(2, "0");
         const timestamp = `[${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}]`;
         const newEntry = `${timestamp} ${incomingNote}`;
-        updates.notes = existingNotes ? `${existingNotes}\n${newEntry}` : newEntry;
+        updates.notes = existingNotes
+          ? `${existingNotes}\n${newEntry}`
+          : newEntry;
       }
     }
     if (args.resources !== undefined) {
@@ -345,26 +411,43 @@ export const update = mutation({
         updates.resources = args.resources;
       } else {
         const existingUrls = new Set((event.resources ?? []).map((r) => r.url));
-        const newResources = args.resources.filter((r) => !existingUrls.has(r.url));
+        const newResources = args.resources.filter(
+          (r) => !existingUrls.has(r.url),
+        );
         if (newResources.length > 0) {
           updates.resources = [...(event.resources ?? []), ...newResources];
         }
       }
     }
-    if (args.notes !== undefined || args.outcome !== undefined || args.statusHook !== undefined) {
+    if (
+      args.notes !== undefined ||
+      args.outcome !== undefined ||
+      args.statusHook !== undefined
+    ) {
       updates.contextUpdatedAt = Date.now();
     }
     await ctx.db.patch(args.id, updates);
 
     const updatedEvent = await ctx.db.get(args.id);
     if (updatedEvent) {
-      await rescheduleEventReminder(ctx, args.id, updatedEvent.startTime, updatedEvent.title, userId);
+      await rescheduleEventReminder(
+        ctx,
+        args.id,
+        updatedEvent.startTime,
+        updatedEvent.title,
+        userId,
+      );
     }
   },
 });
 
 export const cancelOccurrence = mutation({
-  args: { id: v.id("events"), timestamp: v.number(), timezone: v.optional(v.string()), userId: v.optional(v.id("users")) },
+  args: {
+    id: v.id("events"),
+    timestamp: v.number(),
+    timezone: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
     const userId = args.userId ?? (await auth.getUserId(ctx));
     const event = await ctx.db.get(args.id);
@@ -375,7 +458,10 @@ export const cancelOccurrence = mutation({
         try {
           await ctx.scheduler.cancel(event.scheduledNotificationId);
         } catch (e) {
-          console.warn("Could not cancel scheduled reminder for series occurrence:", e);
+          console.warn(
+            "Could not cancel scheduled reminder for series occurrence:",
+            e,
+          );
         }
       }
       await ctx.db.delete(args.id);
@@ -385,7 +471,9 @@ export const cancelOccurrence = mutation({
     if (event.recurrence) {
       const exceptions = event.recurrence.exceptions ?? [];
       const exceptionsStr = event.recurrence.exceptionsStr ?? [];
-      const dateStr = new Date(args.timestamp).toLocaleDateString("en-CA", { timeZone: args.timezone || "UTC" });
+      const dateStr = new Date(args.timestamp).toLocaleDateString("en-CA", {
+        timeZone: args.timezone || "UTC",
+      });
 
       if (!exceptions.includes(args.timestamp)) {
         exceptions.push(args.timestamp);
@@ -427,7 +515,10 @@ export const updateOccurrence = mutation({
     if (parent.recurrence) {
       const exceptions = parent.recurrence.exceptions ?? [];
       const exceptionsStr = parent.recurrence.exceptionsStr ?? [];
-      const dateStr = new Date(args.originalStartTime).toLocaleDateString("en-CA", { timeZone: args.timezone || "UTC" });
+      const dateStr = new Date(args.originalStartTime).toLocaleDateString(
+        "en-CA",
+        { timeZone: args.timezone || "UTC" },
+      );
 
       if (!exceptions.includes(args.originalStartTime)) {
         exceptions.push(args.originalStartTime);
@@ -445,9 +536,13 @@ export const updateOccurrence = mutation({
       });
     }
 
-    const duration = parent.endTime !== undefined ? parent.endTime - parent.startTime : 0;
+    const duration =
+      parent.endTime !== undefined ? parent.endTime - parent.startTime : 0;
     const finalStartTime = args.startTime ?? args.originalStartTime;
-    const finalEndTime = parent.endTime !== undefined ? (args.endTime ?? (finalStartTime + duration)) : undefined;
+    const finalEndTime =
+      parent.endTime !== undefined
+        ? (args.endTime ?? finalStartTime + duration)
+        : undefined;
 
     const newEventId = await ctx.db.insert("events", {
       title: args.title ?? parent.title,
@@ -468,7 +563,13 @@ export const updateOccurrence = mutation({
       reminderOffset: parent.reminderOffset,
     });
 
-    await rescheduleEventReminder(ctx, newEventId, finalStartTime, args.title ?? parent.title, parent.userId);
+    await rescheduleEventReminder(
+      ctx,
+      newEventId,
+      finalStartTime,
+      args.title ?? parent.title,
+      parent.userId,
+    );
     return newEventId;
   },
 });
@@ -502,7 +603,7 @@ export const searchHistory = query({
       results = results.filter(
         (e) =>
           e.title.toLowerCase().includes(lower) ||
-          (e.description && e.description.toLowerCase().includes(lower))
+          (e.description && e.description.toLowerCase().includes(lower)),
       );
     }
     results.sort((a, b) => b.startTime - a.startTime);
