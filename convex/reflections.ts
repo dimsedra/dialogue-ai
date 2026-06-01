@@ -1,7 +1,9 @@
-import { query, mutation, internalQuery } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { auth } from "./auth";
 import { Doc } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
+import { getLocalDayOfWeek, getOffsetMinutes, getLocalDateString } from "./timezones";
 
 type ReflectionEventSummary = Pick<
   Doc<"events">,
@@ -682,5 +684,111 @@ export const compileWeeklyData = internalQuery({
         `DAILY SESSION SUMMARIES:\n${summariesText || "No session summaries recorded."}`,
       ].join("\n\n"),
     };
+  },
+});
+
+/**
+ * Weekly Reflection cron: fires on each user's local Monday.
+ * Runs every hour, schedules users at their local Monday.
+ * Uses idempotency check to prevent 24x spam.
+ */
+export const cronTriggerWeeklyReflection = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+
+    for (const user of users) {
+      const lastSession = await ctx.db
+        .query("chatSessions")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .order("desc")
+        .first();
+
+      const timezone = lastSession?.timezone || "UTC";
+
+      // Check if it's Monday in the user's local time
+      const localDay = getLocalDayOfWeek(timezone);
+      if (localDay !== 1) continue; // Not Monday
+
+      // Calculate this Monday's start time (epoch ms)
+      const localDateStr = getLocalDateString(timezone);
+      const [year, month, day] = localDateStr.split("-").map(Number);
+      const offset = getOffsetMinutes(timezone);
+
+      const today = new Date(Date.UTC(year, month - 1, day));
+      const dayOfWeek = today.getUTCDay();
+      const daysSinceMonday = (dayOfWeek + 6) % 7;
+      const monday = new Date(Date.UTC(year, month - 1, day - daysSinceMonday));
+      const mondayStart = monday.getTime() - offset * 60000;
+
+      // Idempotency check: does a weekly reflection already exist for this Monday?
+      const existing = await ctx.db
+        .query("reflections")
+        .withIndex("by_user_type", (q) =>
+          q.eq("userId", user._id).eq("type", "weekly"),
+        )
+        .filter((q) => q.eq(q.field("periodStart"), mondayStart))
+        .first();
+
+      if (existing) continue; // Already generated this week
+
+      await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
+        userId: user._id,
+        type: "weekly",
+        timezone,
+      });
+    }
+  },
+});
+
+/**
+ * Yearly Reflection cron: fires on December 27-30 (last week of December).
+ * Checks each user's LOCAL date (not UTC) to determine if it's Dec 27-30.
+ * Uses idempotency check to prevent duplicates.
+ *
+ * Why Dec 27-30 instead of 28-31?
+ * Users in UTC+13 (e.g., Pacific/Auckland) would be on Jan 1 when UTC is Dec 31.
+ * Firing on Dec 27-30 ensures ALL users are still in December when the cron runs.
+ * The period still covers Jan 1 → Dec 31 (cap removed for yearly in getPeriodRange).
+ */
+export const cronTriggerYearlyReflection = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+
+    for (const user of users) {
+      const lastSession = await ctx.db
+        .query("chatSessions")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .order("desc")
+        .first();
+      const timezone = lastSession?.timezone || "UTC";
+
+      // Check if it's December 27-30 in the user's LOCAL time (not UTC)
+      const localDateStr = getLocalDateString(timezone);
+      const [localYear, localMonth, localDay] = localDateStr.split("-").map(Number);
+
+      if (localMonth !== 12 || localDay < 27 || localDay > 30) continue;
+
+      // Calculate this year's January 1 start time (epoch ms)
+      const jan1Start = Date.UTC(localYear, 0, 1, 0, 0, 0, 0);
+
+      // Idempotency check: does a yearly reflection already exist for this year?
+      const existing = await ctx.db
+        .query("reflections")
+        .withIndex("by_user_type", (q) =>
+          q.eq("userId", user._id).eq("type", "yearly"),
+        )
+        .filter((q) => q.eq(q.field("periodStart"), jan1Start))
+        .first();
+
+      if (existing) continue; // Already generated this year
+
+      await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
+        userId: user._id,
+        type: "yearly",
+        timezone,
+      });
+    }
   },
 });

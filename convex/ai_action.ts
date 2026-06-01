@@ -144,9 +144,13 @@ function getPeriodRange(
     endMs = endMs + timezoneOffset * 60000;
   }
 
-  const currentRealTimeMs = Date.now();
-  if (endMs > currentRealTimeMs) {
-    endMs = currentRealTimeMs;
+  // Cap endMs to current time for weekly/monthly (avoid future data)
+  // For yearly, keep the full Dec 31 end to cover the entire year
+  if (type !== "yearly") {
+    const currentRealTimeMs = Date.now();
+    if (endMs > currentRealTimeMs) {
+      endMs = currentRealTimeMs;
+    }
   }
 
   return { startMs, endMs };
@@ -2307,7 +2311,7 @@ export const generateCronReflection = internalAction({
     const lastMsgWithTz = recentMessages.slice().reverse().find((m: any) => m.timezoneOffset !== undefined);
     const timezoneOffset = lastMsgWithTz?.timezoneOffset ?? 0;
 
-    const offset = args.type === "monthly" ? 1 : 0;
+    const offset = (args.type === "weekly" || args.type === "monthly") ? 1 : 0;
     
     const { startMs, endMs } = getPeriodRange(args.type, offset, timezoneOffset);
     const periodLabel = getPeriodLabel(args.type, startMs, timezoneOffset);

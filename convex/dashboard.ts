@@ -6,6 +6,33 @@ import { Doc, Id } from "./_generated/dataModel";
 
 type ProactiveState =
   | {
+      type: "attention_needed";
+      priority: "overdue_task";
+      taskId: Id<"tasks">;
+      taskTitle: string;
+      overdueByDays: number;
+    }
+  | {
+      type: "attention_needed";
+      priority: "unchecked_habit";
+      habitId: Id<"habits">;
+      habitName: string;
+      streak: number;
+    }
+  | {
+      type: "attention_needed";
+      priority: "pending_reflection";
+      reflectionId: Id<"reflections">;
+      periodLabel: string;
+    }
+  | {
+      type: "attention_needed";
+      priority: "oldest_task";
+      taskId: Id<"tasks">;
+      taskTitle: string;
+      ageInDays: number;
+    }
+  | {
       type: "reflection_ready";
       reflectionId: Id<"reflections">;
       periodLabel: string;
@@ -30,9 +57,7 @@ type ProactiveState =
       highlightTaskTitle?: string;
     }
   | {
-      type: "standard_snapshot";
-      taskCount: number;
-      eventCount: number;
+      type: "all_caught_up";
     };
 
 type TimeContext = {
@@ -252,11 +277,12 @@ const getHighlightedTask = (tasks: Doc<"tasks">[]) =>
 type CardType = ProactiveState["type"];
 
 const DEBOUNCE_MS: Record<CardType, number> = {
+  attention_needed: 4 * 60 * 60 * 1000,
   reflection_ready: 4 * 60 * 60 * 1000,
   task_triage: 4 * 60 * 60 * 1000,
   habit_check: 60 * 60 * 1000,
   morning_brief: 4 * 60 * 60 * 1000,
-  standard_snapshot: 0,
+  all_caught_up: 0,
 };
 
 const TIME_BUCKETED_CARDS: ReadonlySet<CardType> = new Set([
@@ -319,13 +345,24 @@ const isSuppressed = (
 
 const cardIdFor = (state: ProactiveState): CardId | undefined => {
   switch (state.type) {
+    case "attention_needed":
+      switch (state.priority) {
+        case "overdue_task":
+        case "oldest_task":
+          return state.taskId;
+        case "unchecked_habit":
+          return state.habitId;
+        case "pending_reflection":
+          return state.reflectionId;
+      }
+      return undefined;
     case "reflection_ready":
       return state.reflectionId;
     case "habit_check":
       return state.habitId;
     case "task_triage":
     case "morning_brief":
-    case "standard_snapshot":
+    case "all_caught_up":
       return undefined;
   }
 };
@@ -353,6 +390,95 @@ const collectCardStates = async (
   return map;
 };
 
+const daysSince = (timestamp: number, now: number): number =>
+  Math.max(0, Math.floor((now - timestamp) / (24 * 60 * 60 * 1000)));
+
+const buildAttentionNeededState = async (
+  ctx: QueryCtx,
+  userId: Id<"users">,
+  tasks: Doc<"tasks">[],
+  activeHabits: Doc<"habits">[],
+  pendingReflection: Doc<"reflections"> | undefined,
+  todayDateString: string,
+  now: number,
+): Promise<ProactiveState | null> => {
+  const tier1Overdue = tasks
+    .filter(
+      (task) =>
+        !task.completed &&
+        task.dueDate !== undefined &&
+        task.dueDate < now,
+    )
+    .sort((a, b) => (a.dueDate ?? 0) - (b.dueDate ?? 0))[0];
+
+  if (tier1Overdue && tier1Overdue.dueDate !== undefined) {
+    return {
+      type: "attention_needed",
+      priority: "overdue_task",
+      taskId: tier1Overdue._id,
+      taskTitle: tier1Overdue.text,
+      overdueByDays: daysSince(tier1Overdue.dueDate, now),
+    };
+  }
+
+  if (activeHabits.length > 0) {
+    const userLogsToday = await ctx.db
+      .query("habitLogs")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const loggedHabitIds = new Set(
+      userLogsToday
+        .filter((log) => log.dateString === todayDateString)
+        .map((log) => log.habitId),
+    );
+
+    const tier2Habit = activeHabits
+      .filter((habit) => !loggedHabitIds.has(habit._id))
+      .sort((a, b) => {
+        if (a.currentStreak !== b.currentStreak) {
+          return b.currentStreak - a.currentStreak;
+        }
+        return a.createdAt - b.createdAt;
+      })[0];
+
+    if (tier2Habit) {
+      return {
+        type: "attention_needed",
+        priority: "unchecked_habit",
+        habitId: tier2Habit._id,
+        habitName: tier2Habit.name,
+        streak: tier2Habit.currentStreak,
+      };
+    }
+  }
+
+  if (pendingReflection) {
+    return {
+      type: "attention_needed",
+      priority: "pending_reflection",
+      reflectionId: pendingReflection._id,
+      periodLabel: pendingReflection.periodLabel,
+    };
+  }
+
+  const tier4Oldest = tasks
+    .filter((task) => !task.completed)
+    .sort((a, b) => a._creationTime - b._creationTime)[0];
+
+  if (tier4Oldest) {
+    return {
+      type: "attention_needed",
+      priority: "oldest_task",
+      taskId: tier4Oldest._id,
+      taskTitle: tier4Oldest.text,
+      ageInDays: daysSince(tier4Oldest._creationTime, now),
+    };
+  }
+
+  return null;
+};
+
 export const getProactiveState = query({
   args: {
     timezone: v.optional(v.string()),
@@ -362,9 +488,7 @@ export const getProactiveState = query({
     const userId = await auth.getUserId(ctx);
     if (!userId) {
       return {
-        type: "standard_snapshot",
-        taskCount: 0,
-        eventCount: 0,
+        type: "all_caught_up",
       };
     }
 
@@ -487,13 +611,18 @@ export const getProactiveState = query({
           })()
         : null;
 
-    const standardSnapshot: ProactiveState = {
-      type: "standard_snapshot",
-      taskCount: todayTasks.length,
-      eventCount: todayEvents.length,
-    };
+    const attentionNeededState = await buildAttentionNeededState(
+      ctx,
+      userId,
+      tasks,
+      activeHabits,
+      pendingReflection,
+      todayDateString,
+      now,
+    );
 
     const candidateOrder: ProactiveState[] = [
+      ...(attentionNeededState ? [attentionNeededState] : []),
       ...(reflectionState ? [reflectionState] : []),
       ...(taskTriageState ? [taskTriageState] : []),
       ...(habitCheckState ? [habitCheckState] : []),
@@ -518,7 +647,9 @@ export const getProactiveState = query({
       }
     }
 
-    return standardSnapshot;
+    return {
+      type: "all_caught_up",
+    };
   },
 });
 

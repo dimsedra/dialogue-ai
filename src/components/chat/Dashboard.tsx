@@ -1,16 +1,19 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
+import type { FunctionReturnType } from "convex/server";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
   Pin,
-  Calendar,
-  CheckCircle2,
   ArrowRight,
   Brush,
   Menu,
   ClipboardList,
+  AlertCircle,
+  Flame,
+  ListTodo,
+  CheckCheck,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PageCustomizer } from "./PageCustomizer";
@@ -18,6 +21,27 @@ import { usePageSettings } from "../../hooks/usePageSettings";
 import { DASHBOARD_DEFAULTS, getCardBgStyle } from "../../utils/color";
 import { NotificationBell } from "../notifications-bell";
 import { CardMenu } from "./CardMenu";
+
+type ProactiveState = FunctionReturnType<
+  typeof api.dashboard.getProactiveState
+>;
+
+function getCardIdForState(state: ProactiveState): string | undefined {
+  if (state.type === "attention_needed") {
+    switch (state.priority) {
+      case "overdue_task":
+      case "oldest_task":
+        return state.taskId;
+      case "unchecked_habit":
+        return state.habitId;
+      case "pending_reflection":
+        return state.reflectionId;
+    }
+  }
+  if (state.type === "reflection_ready") return state.reflectionId;
+  if (state.type === "habit_check") return state.habitId;
+  return undefined;
+}
 
 interface DashboardProps {
   workspaces: Doc<"workspaces">[] | undefined;
@@ -81,28 +105,31 @@ export function Dashboard({
 
   const lastTrackedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!proactiveState || proactiveState.type === "standard_snapshot") {
+    if (!proactiveState || proactiveState.type === "all_caught_up") {
       lastTrackedRef.current = null;
       return;
     }
-    const cardId =
-      proactiveState.type === "reflection_ready"
-        ? proactiveState.reflectionId
-        : proactiveState.type === "habit_check"
-          ? proactiveState.habitId
-          : undefined;
+    const cardId = getCardIdForState(proactiveState);
     const trackingKey = `${proactiveState.type}|${cardId ?? ""}`;
     if (lastTrackedRef.current === trackingKey) return;
     lastTrackedRef.current = trackingKey;
     markCardShown({
       cardType: proactiveState.type,
-      cardId: cardId as Id<"reflections"> | Id<"habits"> | undefined,
+      cardId: cardId as
+        | Id<"reflections">
+        | Id<"habits">
+        | Id<"tasks">
+        | undefined,
     }).catch((err) => {
       console.error("markCardShown failed:", err);
     });
   }, [proactiveState, markCardShown]);
 
   const now = new Date();
+
+  const todayDateString = `${now.getFullYear()}-${String(
+    now.getMonth() + 1,
+  ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   const pinnedSessions = sessions?.filter((s) => s.pinned) || [];
   const recentSessions =
@@ -151,23 +178,20 @@ export function Dashboard({
       bgColor: "rgba(15, 14, 12, 0.85)",
     } as const;
 
-    if (!proactiveState || proactiveState.type === "standard_snapshot") {
-      const taskCount = proactiveState?.taskCount ?? 0;
-      const eventCount = proactiveState?.eventCount ?? 0;
-
+    if (!proactiveState || proactiveState.type === "all_caught_up") {
       return (
         <motion.div
-          key="standard_snapshot"
+          key="all_caught_up"
           layoutId="proactive-card"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="relative rounded-xl border p-5 space-y-3"
+          className="relative rounded-xl border p-5 space-y-2"
           style={cardBgStyle}
         >
           <div className="flex items-center gap-2">
-            <Sparkles
+            <CheckCheck
               className="w-3.5 h-3.5"
               style={{ color: bgSettings.accentColor }}
             />
@@ -175,46 +199,223 @@ export function Dashboard({
               className="text-[9px] font-black uppercase tracking-[0.2em]"
               style={{ color: bgSettings.secondaryText }}
             >
-              Today
+              Dialogue • All Caught Up
             </span>
           </div>
+          <p
+            className="text-sm leading-relaxed"
+            style={{ color: bgSettings.primaryText }}
+          >
+            All caught up. Take a breather.
+          </p>
+        </motion.div>
+      );
+    }
 
-          {taskCount === 0 && eventCount === 0 ? (
-            <p className="text-sm" style={{ color: bgSettings.secondaryText }}>
-              Nothing due today. Take a breather.
-            </p>
-          ) : (
-            <div className="flex gap-6">
-              {taskCount > 0 && (
-                <div className="flex items-center gap-2">
-                  <CheckCircle2
-                    className="w-4 h-4"
-                    style={{ color: bgSettings.accentColor }}
-                  />
-                  <span
-                    className="text-sm font-medium"
-                    style={{ color: bgSettings.primaryText }}
-                  >
-                    {taskCount} task{taskCount > 1 ? "s" : ""} due
-                  </span>
-                </div>
-              )}
-              {eventCount > 0 && (
-                <div className="flex items-center gap-2">
-                  <Calendar
-                    className="w-4 h-4"
-                    style={{ color: bgSettings.accentColor }}
-                  />
-                  <span
-                    className="text-sm font-medium"
-                    style={{ color: bgSettings.primaryText }}
-                  >
-                    {eventCount} event{eventCount > 1 ? "s" : ""}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+    if (proactiveState.type === "attention_needed") {
+      const { priority } = proactiveState;
+      const priorityLabel: Record<typeof priority, string> = {
+        overdue_task: "Dialogue • Overdue",
+        unchecked_habit: "Dialogue • Habit",
+        pending_reflection: "Dialogue • Reflection",
+        oldest_task: "Dialogue • Oldest Open",
+      };
+
+      const body = (() => {
+        switch (priority) {
+          case "overdue_task":
+            return (
+              <p
+                className="text-sm leading-relaxed"
+                style={{ color: bgSettings.primaryText }}
+              >
+                <span className="font-semibold">{proactiveState.taskTitle}</span>{" "}
+                is past due
+                {proactiveState.overdueByDays > 0
+                  ? `. ${proactiveState.overdueByDays} day${
+                      proactiveState.overdueByDays === 1 ? "" : "s"
+                    } late.`
+                  : "."}
+              </p>
+            );
+          case "unchecked_habit":
+            return (
+              <p
+                className="text-sm leading-relaxed"
+                style={{ color: bgSettings.primaryText }}
+              >
+                You haven&apos;t logged{" "}
+                <span className="font-semibold">{proactiveState.habitName}</span>{" "}
+                today
+                {proactiveState.streak > 0
+                  ? `. Streak at ${proactiveState.streak}.`
+                  : "."}
+              </p>
+            );
+          case "pending_reflection":
+            return (
+              <p
+                className="text-sm leading-relaxed"
+                style={{ color: bgSettings.primaryText }}
+              >
+                Your{" "}
+                <span className="font-semibold">
+                  {proactiveState.periodLabel}
+                </span>{" "}
+                wrap is ready.
+              </p>
+            );
+          case "oldest_task":
+            return (
+              <p
+                className="text-sm leading-relaxed"
+                style={{ color: bgSettings.primaryText }}
+              >
+                <span className="font-semibold">{proactiveState.taskTitle}</span>{" "}
+                has been open{" "}
+                {proactiveState.ageInDays === 0
+                  ? "for less than a day"
+                  : `for ${proactiveState.ageInDays} day${
+                      proactiveState.ageInDays === 1 ? "" : "s"
+                    }`}
+                . Worth a look?
+              </p>
+            );
+        }
+      })();
+
+      const icon = (() => {
+        switch (priority) {
+          case "overdue_task":
+            return (
+              <AlertCircle
+                className="w-3.5 h-3.5"
+                style={{ color: bgSettings.accentColor }}
+              />
+            );
+          case "unchecked_habit":
+            return (
+              <Flame
+                className="w-3.5 h-3.5"
+                style={{ color: bgSettings.accentColor }}
+              />
+            );
+          case "pending_reflection":
+            return (
+              <Sparkles
+                className="w-3.5 h-3.5"
+                style={{ color: bgSettings.accentColor }}
+              />
+            );
+          case "oldest_task":
+            return (
+              <ListTodo
+                className="w-3.5 h-3.5"
+                style={{ color: bgSettings.accentColor }}
+              />
+            );
+        }
+      })();
+
+      const cardId = getCardIdForState(proactiveState);
+
+      return (
+        <motion.div
+          key={`attention_needed:${priority}:${cardId ?? ""}`}
+          layoutId="proactive-card"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className="relative rounded-xl border p-5 space-y-4"
+          style={cardBgStyle}
+        >
+          <CardMenu
+            cardType="attention_needed"
+            cardId={cardId}
+            {...cardMenuProps}
+          />
+          <div className="flex items-center gap-2">
+            {icon}
+            <span
+              className="text-[9px] font-black uppercase tracking-[0.2em]"
+              style={{ color: bgSettings.secondaryText }}
+            >
+              {priorityLabel[priority]}
+            </span>
+          </div>
+          {body}
+          <div className="flex flex-wrap gap-2">
+            {priority === "overdue_task" || priority === "oldest_task" ? (
+              onShowTasks && (
+                <button
+                  type="button"
+                  onClick={onShowTasks}
+                  className="px-3 py-2 rounded-lg text-[11px] font-bold transition-all"
+                  style={{
+                    backgroundColor: bgSettings.accentColor,
+                    color: "#0f0e0c",
+                  }}
+                >
+                  {priority === "overdue_task" ? "Resolve" : "Open Task"}
+                </button>
+              )
+            ) : priority === "unchecked_habit" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleLogHabit(
+                      proactiveState.habitId,
+                      todayDateString,
+                      "completed",
+                    )
+                  }
+                  className="px-3 py-2 rounded-lg text-[11px] font-bold transition-all"
+                  style={{
+                    backgroundColor: bgSettings.accentColor,
+                    color: "#0f0e0c",
+                  }}
+                >
+                  Log Completed
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleLogHabit(
+                      proactiveState.habitId,
+                      todayDateString,
+                      "skipped",
+                    )
+                  }
+                  className="px-3 py-2 rounded-lg text-[11px] font-bold border transition-all"
+                  style={{
+                    borderColor: `${bgSettings.accentColor}55`,
+                    color: bgSettings.primaryText,
+                  }}
+                >
+                  Skip Today
+                </button>
+              </>
+            ) : (
+              priority === "pending_reflection" &&
+              onOpenReflection && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenReflection(proactiveState.reflectionId)
+                  }
+                  className="px-3 py-2 rounded-lg text-[11px] font-bold transition-all"
+                  style={{
+                    backgroundColor: bgSettings.accentColor,
+                    color: "#0f0e0c",
+                  }}
+                >
+                  Reflect
+                </button>
+              )
+            )}
+          </div>
         </motion.div>
       );
     }
@@ -252,10 +453,9 @@ export function Dashboard({
             className="text-sm leading-relaxed"
             style={{ color: bgSettings.primaryText }}
           >
-            Your wrap for{" "}
+            Your{" "}
             <span className="font-semibold">{proactiveState.periodLabel}</span>{" "}
-            is ready. Let&apos;s review the highlights and patterns from your
-            week.
+            wrap is ready.
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -306,10 +506,8 @@ export function Dashboard({
             className="text-sm leading-relaxed"
             style={{ color: bgSettings.primaryText }}
           >
-            You have{" "}
             <span className="font-semibold">{proactiveState.count}</span>{" "}
-            overdue task{proactiveState.count > 1 ? "s" : ""}. Want to review
-            what needs attention first?
+            overdue. Want to triage them?
           </p>
           {onShowTasks && (
             <div className="flex flex-wrap gap-2">
@@ -363,13 +561,11 @@ export function Dashboard({
             className="text-sm leading-relaxed"
             style={{ color: bgSettings.primaryText }}
           >
-            You&apos;re on a{" "}
-            <span className="font-semibold">
+            <span className="font-semibold">{proactiveState.habitName}</span>{" "}
+            — <span className="font-semibold">
               {proactiveState.streak}-day streak
-            </span>{" "}
-            for
-            <span className="font-semibold"> {proactiveState.habitName}</span>.
-            Did you get a chance to log it today?
+            </span>
+            . Did you log it today?
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -442,24 +638,13 @@ export function Dashboard({
           className="text-sm leading-relaxed"
           style={{ color: bgSettings.primaryText }}
         >
-          You have{" "}
+          <span className="font-semibold">{proactiveState.taskCount}</span>{" "}
+          task{proactiveState.taskCount === 1 ? "" : "s"},{" "}
           <span className="font-semibold">{proactiveState.eventCount}</span>{" "}
-          event{proactiveState.eventCount === 1 ? "" : "s"} and
-          <span className="font-semibold">
-            {" "}
-            {proactiveState.taskCount}
-          </span>{" "}
-          task{proactiveState.taskCount === 1 ? "" : "s"} due today.
-          {proactiveState.highlightTaskTitle && (
-            <>
-              {" "}
-              A strong focus candidate is{" "}
-              <span className="font-semibold">
-                {proactiveState.highlightTaskTitle}
-              </span>
-              .
-            </>
-          )}
+          event{proactiveState.eventCount === 1 ? "" : "s"} today
+          {proactiveState.highlightTaskTitle
+            ? `. ${proactiveState.highlightTaskTitle} could be a focus.`
+            : "."}
         </p>
         {onShowTasks && (
           <div className="flex flex-wrap gap-2">
