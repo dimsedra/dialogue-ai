@@ -139,11 +139,6 @@ function getPeriodRange(
   let startMs = periodStart.getTime();
   let endMs = periodEnd.getTime();
 
-  if (timezoneOffset !== undefined) {
-    startMs = startMs + timezoneOffset * 60000;
-    endMs = endMs + timezoneOffset * 60000;
-  }
-
   // Cap endMs to current time for weekly/monthly (avoid future data)
   // For yearly, keep the full Dec 31 end to cover the entire year
   if (type !== "yearly") {

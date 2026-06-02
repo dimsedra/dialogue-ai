@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreHorizontal, Clock, Moon, Sunrise, BellOff, X } from "lucide-react";
+import { MoreHorizontal, Clock, Moon, Sunrise, BellOff, X, ChevronLeft } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 
@@ -13,6 +13,8 @@ type CardType =
   | "task_triage"
   | "habit_check"
   | "morning_brief"
+  | "event_prep"
+  | "evening_log"
   | "all_caught_up";
 
 type ConfirmationState =
@@ -47,12 +49,14 @@ const SNOOZE_ICONS: Record<"1h" | "today" | "tomorrow", React.ReactNode> = {
 const TIME_BUCKETED: ReadonlySet<CardType> = new Set([
   "habit_check",
   "morning_brief",
+  "evening_log",
 ]);
 
 const DISMISSABLE: ReadonlySet<CardType> = new Set([
   "attention_needed",
   "reflection_ready",
   "task_triage",
+  "event_prep",
 ]);
 
 const HUMAN_LABELS: Record<CardType, string> = {
@@ -61,6 +65,8 @@ const HUMAN_LABELS: Record<CardType, string> = {
   task_triage: "Task Triage",
   habit_check: "Habit Check-In",
   morning_brief: "Morning Brief",
+  event_prep: "Event Prep",
+  evening_log: "Evening Log",
   all_caught_up: "All Caught Up",
 };
 
@@ -74,34 +80,12 @@ export function CardMenu({
   bgColor,
   onConfirmation,
 }: CardMenuProps) {
-  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"closed" | "actions">("closed");
   const [confirming, setConfirming] = useState<ConfirmationState>(null);
   const [busy, setBusy] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
   const dismissCard = useMutation(api.dashboard.dismissCard);
   const snoozeCard = useMutation(api.dashboard.snoozeCard);
   const muteCardType = useMutation(api.dashboard.muteCardType);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpen(false);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [open]);
 
   useEffect(() => {
     if (!confirming) return;
@@ -111,7 +95,6 @@ export function CardMenu({
 
   const handleSnooze = async (duration: "1h" | "today" | "tomorrow") => {
     setBusy(true);
-    setOpen(false);
     try {
       await snoozeCard({
         cardType,
@@ -120,6 +103,7 @@ export function CardMenu({
       });
       setConfirming({ kind: "snoozed", until: duration });
       onConfirmation?.({ kind: "snoozed", until: duration });
+      setView("closed");
     } catch (err) {
       console.error("Snooze failed:", err);
     } finally {
@@ -129,11 +113,11 @@ export function CardMenu({
 
   const handleMute = async () => {
     setBusy(true);
-    setOpen(false);
     try {
       await muteCardType({ cardType });
       setConfirming({ kind: "muted" });
       onConfirmation?.({ kind: "muted" });
+      setView("closed");
     } catch (err) {
       console.error("Mute failed:", err);
     } finally {
@@ -143,7 +127,6 @@ export function CardMenu({
 
   const handleDismiss = async () => {
     setBusy(true);
-    setOpen(false);
     try {
       await dismissCard({
         cardType,
@@ -151,6 +134,7 @@ export function CardMenu({
       });
       setConfirming({ kind: "dismissed" });
       onConfirmation?.({ kind: "dismissed" });
+      setView("closed");
     } catch (err) {
       console.error("Dismiss failed:", err);
     } finally {
@@ -167,10 +151,7 @@ export function CardMenu({
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20"
-    >
+    <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20">
       <AnimatePresence mode="wait" initial={false}>
         {confirming ? (
           <motion.div
@@ -196,6 +177,108 @@ export function CardMenu({
                   : "Card dismissed"}
             </span>
           </motion.div>
+        ) : view === "actions" ? (
+          <motion.div
+            key="actions"
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 8 }}
+            transition={{ duration: 0.18 }}
+            className="flex items-center gap-1.5"
+          >
+            <button
+              type="button"
+              onClick={() => setView("closed")}
+              disabled={busy}
+              aria-label="Back"
+              className="w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-105 disabled:opacity-50"
+              style={{
+                background: "rgba(0,0,0,0.35)",
+                border: `1px solid ${borderColor}`,
+                color: mutedTextColor,
+              }}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSnooze("1h")}
+              disabled={busy}
+              title="Snooze 1 hour"
+              className="h-7 px-2.5 rounded-full flex items-center gap-1.5 backdrop-blur-md transition-all hover:scale-105 disabled:opacity-50 text-[10px] font-bold uppercase tracking-widest"
+              style={{
+                background: bgColor,
+                border: `1px solid ${borderColor}`,
+                color: accentColor,
+              }}
+            >
+              <Clock className="w-3 h-3" />
+              <span>1h</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSnooze("today")}
+              disabled={busy}
+              title="Snooze until this evening"
+              className="w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-105 disabled:opacity-50"
+              style={{
+                background: "rgba(0,0,0,0.35)",
+                border: `1px solid ${borderColor}`,
+                color: mutedTextColor,
+              }}
+            >
+              <Moon className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSnooze("tomorrow")}
+              disabled={busy}
+              title="Snooze until tomorrow"
+              className="w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-105 disabled:opacity-50"
+              style={{
+                background: "rgba(0,0,0,0.35)",
+                border: `1px solid ${borderColor}`,
+                color: mutedTextColor,
+              }}
+            >
+              <Sunrise className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleMute}
+              disabled={busy}
+              title={`Don't show ${HUMAN_LABELS[cardType]} again`}
+              className="w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-105 disabled:opacity-50"
+              style={{
+                background: "rgba(0,0,0,0.35)",
+                border: `1px solid ${borderColor}`,
+                color: mutedTextColor,
+              }}
+            >
+              <BellOff className="w-3.5 h-3.5" />
+            </button>
+
+            {isDismissable && !isTimeBucketed && (
+              <button
+                type="button"
+                onClick={handleDismiss}
+                disabled={busy}
+                title="Dismiss this card"
+                className="w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-105 disabled:opacity-50"
+                style={{
+                  background: "rgba(0,0,0,0.35)",
+                  border: `1px solid ${borderColor}`,
+                  color: mutedTextColor,
+                }}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </motion.div>
         ) : (
           <motion.div
             key="button"
@@ -203,128 +286,24 @@ export function CardMenu({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="relative"
           >
             <button
               type="button"
-              onClick={() => setOpen((v) => !v)}
+              onClick={() => setView("actions")}
               disabled={busy}
               aria-label="Card options"
               className="w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-105 disabled:opacity-50"
               style={{
-                background: open ? bgColor : "rgba(0,0,0,0.35)",
+                background: "rgba(0,0,0,0.35)",
                 border: `1px solid ${borderColor}`,
-                color: open ? textColor : mutedTextColor,
+                color: mutedTextColor,
               }}
             >
               <MoreHorizontal className="w-3.5 h-3.5" />
             </button>
-
-            <AnimatePresence>
-              {open && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                  transition={{ duration: 0.15, ease: "easeOut" }}
-                  className="absolute top-full right-0 mt-2 w-56 rounded-xl shadow-2xl shadow-black/40 backdrop-blur-xl overflow-hidden"
-                  style={{
-                    background: bgColor,
-                    border: `1px solid ${borderColor}`,
-                  }}
-                >
-                  <div
-                    className="px-3 py-2 border-b"
-                    style={{ borderColor: borderColor }}
-                  >
-                    <span
-                      className="text-[9px] font-black uppercase tracking-[0.2em]"
-                      style={{ color: mutedTextColor }}
-                    >
-                      Snooze
-                    </span>
-                  </div>
-                  {(["1h", "today", "tomorrow"] as const).map((dur) => (
-                    <MenuItem
-                      key={dur}
-                      icon={SNOOZE_ICONS[dur]}
-                      label={SNOOZE_LABELS[dur]}
-                      onClick={() => handleSnooze(dur)}
-                      textColor={textColor}
-                      mutedTextColor={mutedTextColor}
-                      accentColor={accentColor}
-                    />
-                  ))}
-
-                  <div
-                    className="border-t my-1"
-                    style={{ borderColor: borderColor }}
-                  />
-
-                  <MenuItem
-                    icon={<BellOff className="w-3.5 h-3.5" />}
-                    label={`Don't show ${HUMAN_LABELS[cardType]} again`}
-                    onClick={handleMute}
-                    textColor={textColor}
-                    mutedTextColor={mutedTextColor}
-                    accentColor={accentColor}
-                  />
-
-                  {isDismissable && !isTimeBucketed && (
-                    <MenuItem
-                      icon={<X className="w-3.5 h-3.5" />}
-                      label="Dismiss this card"
-                      onClick={handleDismiss}
-                      textColor={textColor}
-                      mutedTextColor={mutedTextColor}
-                      accentColor={accentColor}
-                    />
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-function MenuItem({
-  icon,
-  label,
-  onClick,
-  textColor,
-  mutedTextColor,
-  accentColor,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  textColor: string;
-  mutedTextColor: string;
-  accentColor: string;
-}) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs font-medium transition-colors"
-      style={{
-        background: hovered ? "rgba(255,255,255,0.04)" : "transparent",
-        color: textColor,
-      }}
-    >
-      <span
-        className="shrink-0"
-        style={{ color: hovered ? accentColor : mutedTextColor }}
-      >
-        {icon}
-      </span>
-      <span>{label}</span>
-    </button>
   );
 }

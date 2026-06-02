@@ -554,3 +554,55 @@ export const add = mutation({
     return taskId;
   },
 });
+
+/**
+ * Roll over all overdue tasks: reschedules them to today.
+ * Used by the task_triage card's "Roll Over" CTA.
+ * Returns the count of tasks rescheduled.
+ */
+export const rollOverTasks = mutation({
+  args: {
+    timezone: v.optional(v.string()),
+    timezoneOffset: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const now = Date.now();
+    const offset = args.timezoneOffset ?? 0;
+
+    // Calculate today's date string (local)
+    const localNow = new Date(now - offset * 60000);
+    const todayStr = localNow.toISOString().slice(0, 10);
+
+    // Calculate today's start in epoch ms (local)
+    const todayStartMs = Date.UTC(
+      localNow.getUTCFullYear(),
+      localNow.getUTCMonth(),
+      localNow.getUTCDate(),
+      0, 0, 0, 0,
+    ) + offset * 60000;
+
+    // Find all overdue tasks
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const overdueTasks = tasks.filter(
+      (t) => !t.completed && t.dueDate !== undefined && t.dueDate < now,
+    );
+
+    let rescheduled = 0;
+    for (const task of overdueTasks) {
+      await ctx.db.patch(task._id, {
+        dueDate: todayStartMs,
+        dueDateStr: todayStr,
+      });
+      rescheduled++;
+    }
+
+    return { rescheduled };
+  },
+});

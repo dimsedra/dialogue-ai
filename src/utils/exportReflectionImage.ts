@@ -18,6 +18,9 @@ const COLORS = {
   emerald: "#10b981",
   violet: "#8b5cf6",
   orange: "#f97316",
+  quote: "#e6b984",
+  quoteBg: "rgba(212, 163, 115, 0.08)",
+  quoteBorder: "rgba(212, 163, 115, 0.3)",
 };
 
 const FONT_STACK =
@@ -96,32 +99,47 @@ function buildReflectionSvg(
   const heroStat = pickHeroStat(r);
   const stats = r.stats;
   const categories = stats.topCategories ?? [];
-  const summarySnippet = trimForSnippet(r.summary, 220);
+  const highlights = extractHighlights(r.summary);
+  const userWords = r.userReflection
+    ? stripMarkdown(r.userReflection).trim()
+    : null;
 
   const sections: string[] = [];
 
   sections.push(renderBackground(width, height));
   sections.push(renderHeader(width, r.periodLabel, r.type));
+
+  let y = 460;
+  sections.push(renderHeroStat(width, y, heroStat.value, heroStat.label, heroStat.color));
+  y += 250;
+
   sections.push(
-    renderHeroStat(width, 460, heroStat.value, heroStat.label, heroStat.color),
+    renderSecondaryStats(width, y, [
+      { label: "Events", value: stats.eventsAttended, color: COLORS.violet },
+      { label: "Streak", value: `${stats.streakDays ?? 0}d`, color: COLORS.orange },
+      {
+        label: "Habits",
+        value: String(stats.habitLogsCompleted ?? 0),
+        color: COLORS.gold,
+      },
+    ]),
   );
-  sections.push(
-    renderSecondaryStats(
-      width,
-      880,
-      [
-        { label: "Events", value: stats.eventsAttended, color: COLORS.violet },
-        { label: "Streak", value: `${stats.streakDays ?? 0}d`, color: COLORS.orange },
-        {
-          label: "Habits",
-          value: String(stats.habitLogsCompleted ?? 0),
-          color: COLORS.gold,
-        },
-      ],
-    ),
-  );
-  sections.push(renderFocusBars(width, 1120, categories));
-  sections.push(renderSummary(width, 1480, summarySnippet));
+  y += 180;
+
+  if (categories.length > 0) {
+    sections.push(renderFocusBars(width, y, categories));
+    y += 40 + categories.length * 56 + 20;
+  }
+
+  if (highlights.length > 0) {
+    sections.push(renderHighlights(width, y, highlights));
+    y += 40 + Math.min(highlights.length, 3) * 48 + 20;
+  }
+
+  if (userWords) {
+    sections.push(renderUserQuote(width, y, userWords));
+  }
+
   sections.push(renderFooter(width, height));
 
   return [
@@ -143,20 +161,25 @@ function renderBackground(w: number, h: number): string {
         <stop offset="0%" stop-color="${COLORS.gold}" stop-opacity="0.18" />
         <stop offset="100%" stop-color="${COLORS.gold}" stop-opacity="0" />
       </radialGradient>
+      <radialGradient id="bottomGlow" cx="50%" cy="100%" r="50%">
+        <stop offset="0%" stop-color="${COLORS.emerald}" stop-opacity="0.06" />
+        <stop offset="100%" stop-color="${COLORS.emerald}" stop-opacity="0" />
+      </radialGradient>
     </defs>
     <rect width="${w}" height="${h}" fill="url(#bg)" />
     <rect width="${w}" height="${h}" fill="url(#glow)" />
+    <rect width="${w}" height="${h}" fill="url(#bottomGlow)" />
   `;
 }
 
 function renderHeader(w: number, periodLabel: string, type: string): string {
   return `
     <g font-family="${FONT_STACK}">
-      <text x="${w / 2}" y="180" text-anchor="middle" fill="${COLORS.gold}" font-size="22" font-weight="900" letter-spacing="6">
-        ✨ DIALOGUE • ${type.toUpperCase()} WRAP
+      <text x="${w / 2}" y="150" text-anchor="middle" fill="${COLORS.gold}" font-size="22" font-weight="900" letter-spacing="10">
+        DIALOGUE · ${type.toUpperCase()} WRAP
       </text>
-      <line x1="${w / 2 - 80}" y1="210" x2="${w / 2 + 80}" y2="210" stroke="${COLORS.goldDark}" stroke-width="2" />
-      <text x="${w / 2}" y="280" text-anchor="middle" fill="${COLORS.textMuted}" font-size="36" font-weight="700" letter-spacing="2">
+      <line x1="${w / 2 - 60}" y1="180" x2="${w / 2 + 60}" y2="180" stroke="${COLORS.goldDark}" stroke-width="2" />
+      <text x="${w / 2}" y="240" text-anchor="middle" fill="${COLORS.textMuted}" font-size="36" font-weight="700" letter-spacing="1">
         ${escapeXml(periodLabel)}
       </text>
     </g>
@@ -172,10 +195,10 @@ function renderHeroStat(
 ): string {
   return `
     <g font-family="${FONT_STACK}">
-      <text x="${w / 2}" y="${y}" text-anchor="middle" fill="${color}" font-size="280" font-weight="900" letter-spacing="-8">
+      <text x="${w / 2}" y="${y}" text-anchor="middle" fill="${color}" font-size="240" font-weight="900" letter-spacing="-6">
         ${value}
       </text>
-      <text x="${w / 2}" y="${y + 70}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="32" font-weight="800" letter-spacing="8">
+      <text x="${w / 2}" y="${y + 60}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="28" font-weight="800" letter-spacing="8">
         ${label.toUpperCase()}
       </text>
     </g>
@@ -193,12 +216,12 @@ function renderSecondaryStats(
       const cx = colWidth * i + colWidth / 2;
       return `
         <g font-family="${FONT_STACK}">
-          <rect x="${cx - 130}" y="${y - 60}" width="260" height="140" rx="24"
-            fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="2" />
-          <text x="${cx}" y="${y + 8}" text-anchor="middle" fill="${item.color}" font-size="56" font-weight="900">
+          <rect x="${cx - 130}" y="${y - 55}" width="260" height="130" rx="20"
+            fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1.5" />
+          <text x="${cx}" y="${y + 12}" text-anchor="middle" fill="${item.color}" font-size="52" font-weight="900">
             ${item.value}
           </text>
-          <text x="${cx}" y="${y + 56}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="18" font-weight="700" letter-spacing="3">
+          <text x="${cx}" y="${y + 52}" text-anchor="middle" fill="${COLORS.textMuted}" font-size="16" font-weight="700" letter-spacing="3">
             ${item.label.toUpperCase()}
           </text>
         </g>
@@ -213,39 +236,30 @@ function renderFocusBars(
   y: number,
   categories: string[],
 ): string {
-  if (categories.length === 0) {
-    return `
-      <g font-family="${FONT_STACK}">
-        <text x="${w / 2}" y="${y + 30}" text-anchor="middle" fill="${COLORS.textDim}" font-size="22" font-style="italic">
-          No focus categories recorded
-        </text>
-      </g>
-    `;
-  }
-  const slotHeight = 50;
   const padding = w * 0.12;
   const barWidth = w - padding * 2;
+  const slotHeight = 56;
   const items = categories
     .map((cat, i) => {
       const pct = Math.round((1 / categories.length) * 100);
-      const ry = y + i * slotHeight;
+      const ry = y + 40 + i * slotHeight;
       return `
         <g font-family="${FONT_STACK}">
-          <text x="${padding}" y="${ry + 22}" fill="${COLORS.text}" font-size="22" font-weight="700" text-transform="capitalize">
+          <text x="${padding}" y="${ry + 12}" fill="${COLORS.text}" font-size="24" font-weight="600">
             ${escapeXml(cat)}
           </text>
-          <text x="${w - padding}" y="${ry + 22}" text-anchor="end" fill="${COLORS.gold}" font-size="22" font-weight="900">
+          <text x="${w - padding}" y="${ry + 12}" text-anchor="end" fill="${COLORS.gold}" font-size="24" font-weight="800">
             ${pct}%
           </text>
-          <rect x="${padding}" y="${ry + 32}" width="${barWidth}" height="6" rx="3" fill="${COLORS.textDim}" opacity="0.3" />
-          <rect x="${padding}" y="${ry + 32}" width="${(barWidth * pct) / 100}" height="6" rx="3" fill="${COLORS.gold}" />
+          <rect x="${padding}" y="${ry + 24}" width="${barWidth}" height="6" rx="3" fill="${COLORS.textDim}" opacity="0.25" />
+          <rect x="${padding}" y="${ry + 24}" width="${(barWidth * pct) / 100}" height="6" rx="3" fill="${COLORS.gold}" />
         </g>
       `;
     })
     .join("");
   return `
     <g font-family="${FONT_STACK}">
-      <text x="${w / 2}" y="${y - 30}" text-anchor="middle" fill="${COLORS.gold}" font-size="20" font-weight="900" letter-spacing="6">
+      <text x="${w / 2}" y="${y}" text-anchor="middle" fill="${COLORS.gold}" font-size="16" font-weight="900" letter-spacing="6">
         FOCUS DOMAINS
       </text>
       ${items}
@@ -253,21 +267,60 @@ function renderFocusBars(
   `;
 }
 
-function renderSummary(w: number, y: number, text: string): string {
+function renderHighlights(w: number, y: number, highlights: string[]): string {
   const padding = w * 0.1;
-  const lineHeight = 32;
-  const lines = wrapText(text, 48);
-  const rendered = lines
-    .map(
-      (line, i) =>
-        `<text x="${w / 2}" y="${y + i * lineHeight}" text-anchor="middle" fill="${COLORS.text}" font-size="22" font-weight="500" font-style="italic">${escapeXml(line)}</text>`,
-    )
+  const maxItems = 3;
+  const items = highlights
+    .slice(0, maxItems)
+    .map((h, i) => {
+      const ry = y + 40 + i * 48;
+      const truncated = h.length > 70 ? `${h.slice(0, 67)}…` : h;
+      return `
+        <g font-family="${FONT_STACK}">
+          <circle cx="${padding + 10}" cy="${ry + 4}" r="4" fill="${COLORS.gold}" />
+          <text x="${padding + 30}" y="${ry + 10}" fill="${COLORS.text}" font-size="20" font-weight="500">
+            ${escapeXml(truncated)}
+          </text>
+        </g>
+      `;
+    })
     .join("");
   return `
     <g font-family="${FONT_STACK}">
-      <line x1="${w / 2 - 40}" y1="${y - 30}" x2="${w / 2 + 40}" y2="${y - 30}" stroke="${COLORS.goldDark}" stroke-width="2" />
-      ${rendered}
-      <text x="${padding}" y="0" fill="transparent">.</text>
+      <text x="${w / 2}" y="${y}" text-anchor="middle" fill="${COLORS.gold}" font-size="18" font-weight="900" letter-spacing="8">
+        KEY HIGHLIGHTS
+      </text>
+      ${items}
+    </g>
+  `;
+}
+
+function renderUserQuote(w: number, y: number, text: string): string {
+  const padding = w * 0.07;
+  const boxWidth = w - padding * 2;
+  const lineHeight = 42;
+  const fontSize = 26;
+  const maxLines = 5;
+  const lines = wrapText(text, 38).slice(0, maxLines);
+  const labelHeight = 50;
+  const boxHeight = labelHeight + 20 + lines.length * lineHeight + 30;
+  const boxTop = y + 20;
+
+  const renderedLines = lines
+    .map(
+      (line, i) =>
+        `<text x="${w / 2}" y="${boxTop + labelHeight + 30 + i * lineHeight}" text-anchor="middle" fill="${COLORS.quote}" font-size="${fontSize}" font-weight="500" font-style="italic">${escapeXml(line)}</text>`,
+    )
+    .join("");
+
+  return `
+    <g font-family="${FONT_STACK}">
+      <rect x="${padding}" y="${boxTop}" width="${boxWidth}" height="${boxHeight}" rx="20"
+        fill="${COLORS.quoteBg}" stroke="${COLORS.quoteBorder}" stroke-width="2" />
+      <text x="${w / 2}" y="${boxTop + 38}" text-anchor="middle" fill="${COLORS.gold}" font-size="18" font-weight="900" letter-spacing="6">
+        HOW THIS FELT
+      </text>
+      ${renderedLines}
     </g>
   `;
 }
@@ -275,7 +328,7 @@ function renderSummary(w: number, y: number, text: string): string {
 function renderFooter(w: number, h: number): string {
   return `
     <g font-family="${FONT_STACK}">
-      <text x="${w / 2}" y="${h - 60}" text-anchor="middle" fill="${COLORS.textDim}" font-size="18" font-weight="700" letter-spacing="4">
+      <text x="${w / 2}" y="${h - 50}" text-anchor="middle" fill="${COLORS.textDim}" font-size="16" font-weight="700" letter-spacing="4">
         MADE WITH DIALOGUE
       </text>
     </g>
@@ -309,12 +362,37 @@ function pickHeroStat(r: Doc<"reflections">): {
   return candidates.reduce((a, b) => (b.value > a.value ? b : a));
 }
 
-function trimForSnippet(text: string, maxChars: number): string {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  if (cleaned.length <= maxChars) return cleaned;
-  const cut = cleaned.slice(0, maxChars);
-  const lastSpace = cut.lastIndexOf(" ");
-  return `${cut.slice(0, lastSpace > 0 ? lastSpace : maxChars)}…`;
+function extractHighlights(summary: string): string[] {
+  const cleaned = stripMarkdown(summary);
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 20 && s.length < 200);
+
+  if (sentences.length === 0) return [];
+
+  return sentences.slice(0, 3);
+}
+
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/`(.+?)`/g, "$1")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/\[(.+?)\]\(.+?\)/g, "$1")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/^>\s+/gm, "")
+    .replace(/---+/g, "")
+    .replace(/\n{2,}/g, " ")
+    .replace(/\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function wrapText(text: string, maxCharsPerLine: number): string[] {
@@ -331,7 +409,7 @@ function wrapText(text: string, maxCharsPerLine: number): string[] {
     }
   }
   if (current) lines.push(current);
-  return lines.slice(0, 5);
+  return lines;
 }
 
 function escapeXml(s: string): string {

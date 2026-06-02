@@ -57,6 +57,19 @@ type ProactiveState =
       highlightTaskTitle?: string;
     }
   | {
+      type: "event_prep";
+      eventId: Id<"events">;
+      eventTitle: string;
+      startTime: number;
+      notes?: string;
+      resourceCount: number;
+    }
+  | {
+      type: "evening_log";
+      unloggedHabitIds: Id<"habits">[];
+      unloggedHabitNames: string[];
+    }
+  | {
       type: "all_caught_up";
     };
 
@@ -276,18 +289,10 @@ const getHighlightedTask = (tasks: Doc<"tasks">[]) =>
 
 type CardType = ProactiveState["type"];
 
-const DEBOUNCE_MS: Record<CardType, number> = {
-  attention_needed: 4 * 60 * 60 * 1000,
-  reflection_ready: 4 * 60 * 60 * 1000,
-  task_triage: 4 * 60 * 60 * 1000,
-  habit_check: 60 * 60 * 1000,
-  morning_brief: 4 * 60 * 60 * 1000,
-  all_caught_up: 0,
-};
-
 const TIME_BUCKETED_CARDS: ReadonlySet<CardType> = new Set([
   "habit_check",
   "morning_brief",
+  "evening_log",
 ]);
 
 const getEndOfDayMs = (
@@ -331,15 +336,6 @@ const isSuppressed = (
     return true;
   }
 
-  const debounce = DEBOUNCE_MS[cardType];
-  if (
-    debounce > 0 &&
-    state.lastShownAt !== undefined &&
-    now - state.lastShownAt < debounce
-  ) {
-    return true;
-  }
-
   return false;
 };
 
@@ -362,6 +358,8 @@ const cardIdFor = (state: ProactiveState): CardId | undefined => {
       return state.habitId;
     case "task_triage":
     case "morning_brief":
+    case "event_prep":
+    case "evening_log":
     case "all_caught_up":
       return undefined;
   }
@@ -611,6 +609,61 @@ export const getProactiveState = query({
           })()
         : null;
 
+    // event_prep: 12-17h, upcoming event in <2h
+    let eventPrepState: ProactiveState | null = null;
+    if (localHour >= 12 && localHour < 17) {
+      const upcomingEvents = todayEvents
+        .filter((e) => e.startTime > now && e.startTime - now <= 2 * 60 * 60 * 1000)
+        .sort((a, b) => a.startTime - b.startTime);
+
+      if (upcomingEvents.length > 0) {
+        const nextEvent = upcomingEvents[0];
+        const fullEvent = events.find((e) => e._id === nextEvent._id);
+        if (fullEvent) {
+          eventPrepState = {
+            type: "event_prep",
+            eventId: fullEvent._id,
+            eventTitle: fullEvent.title,
+            startTime: fullEvent.startTime,
+            notes: fullEvent.notes,
+            resourceCount: fullEvent.resources?.length ?? 0,
+          };
+        }
+      }
+    }
+
+    // evening_log: 20-22h, show unlogged habits
+    let eveningLogState: ProactiveState | null = null;
+    if (localHour >= 20 && localHour <= 22 && activeHabits.length > 0) {
+      const userLogsToday = await ctx.db
+        .query("habitLogs")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+
+      const loggedHabitIds = new Set(
+        userLogsToday
+          .filter((log) => log.dateString === todayDateString)
+          .map((log) => log.habitId),
+      );
+
+      const unloggedHabits = activeHabits
+        .filter((habit) => !loggedHabitIds.has(habit._id))
+        .sort((a, b) => {
+          if (a.currentStreak !== b.currentStreak) {
+            return b.currentStreak - a.currentStreak;
+          }
+          return a.createdAt - b.createdAt;
+        });
+
+      if (unloggedHabits.length > 0) {
+        eveningLogState = {
+          type: "evening_log",
+          unloggedHabitIds: unloggedHabits.map((h) => h._id),
+          unloggedHabitNames: unloggedHabits.map((h) => h.name),
+        };
+      }
+    }
+
     const attentionNeededState = await buildAttentionNeededState(
       ctx,
       userId,
@@ -625,7 +678,9 @@ export const getProactiveState = query({
       ...(attentionNeededState ? [attentionNeededState] : []),
       ...(reflectionState ? [reflectionState] : []),
       ...(taskTriageState ? [taskTriageState] : []),
+      ...(eventPrepState ? [eventPrepState] : []),
       ...(habitCheckState ? [habitCheckState] : []),
+      ...(eveningLogState ? [eveningLogState] : []),
       ...(morningBriefState ? [morningBriefState] : []),
     ];
 

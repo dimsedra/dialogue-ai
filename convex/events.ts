@@ -613,3 +613,81 @@ export const searchHistory = query({
     return results;
   },
 });
+
+/**
+ * Schedule a focus block: creates a 90-minute event at the next available slot.
+ * Used by the morning_brief card's "Schedule Focus Block" CTA.
+ * Finds the first gap of ≥90min between existing events today, or defaults to next hour.
+ */
+export const scheduleFocusBlock = mutation({
+  args: {
+    timezone: v.optional(v.string()),
+    timezoneOffset: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const now = Date.now();
+    const offset = args.timezoneOffset ?? 0;
+
+    // Get start of today (local) in epoch ms
+    const localNow = new Date(now - offset * 60000);
+    const todayStart = Date.UTC(
+      localNow.getUTCFullYear(),
+      localNow.getUTCMonth(),
+      localNow.getUTCDate(),
+      0, 0, 0, 0,
+    ) + offset * 60000;
+
+    // Get end of today (local) — 22:00 local
+    const todayEnd = Date.UTC(
+      localNow.getUTCFullYear(),
+      localNow.getUTCMonth(),
+      localNow.getUTCDate(),
+      22, 0, 0, 0,
+    ) + offset * 60000;
+
+    // Fetch all events for today (non-cancelled)
+    const allEvents = await ctx.db
+      .query("events")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const todayEvents = allEvents
+      .filter((e) => !e.cancelled && e.startTime < todayEnd && (e.endTime ?? e.startTime + 3600000) > todayStart)
+      .map((e) => ({
+        start: Math.max(e.startTime, todayStart),
+        end: Math.min(e.endTime ?? e.startTime + 3600000, todayEnd),
+      }))
+      .sort((a, b) => a.start - b.start);
+
+    // Find first gap of ≥90min (5400000ms)
+    const FOCUS_DURATION = 90 * 60 * 1000;
+    let focusStart = now > todayStart ? Math.max(now, todayStart) : todayStart;
+    // Round up to next hour
+    focusStart = Math.ceil(focusStart / 3600000) * 3600000;
+
+    for (const event of todayEvents) {
+      if (event.start - focusStart >= FOCUS_DURATION) {
+        break; // Found a gap
+      }
+      focusStart = Math.max(focusStart, event.end);
+      focusStart = Math.ceil(focusStart / 3600000) * 3600000;
+    }
+
+    // If no gap found before 22:00, use whatever we have
+    const focusEnd = focusStart + FOCUS_DURATION;
+
+    const eventId = await ctx.db.insert("events", {
+      title: "Focus Block",
+      startTime: focusStart,
+      endTime: focusEnd,
+      eventType: "interval",
+      userId,
+      createdAt: Date.now(),
+    });
+
+    return { eventId, startTime: focusStart, endTime: focusEnd };
+  },
+});
