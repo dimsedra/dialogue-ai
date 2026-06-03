@@ -11,6 +11,7 @@ interface MessageStreamProps {
     _id: string;
     author: string;
     text: string;
+    reasoning?: string;
     timestamp: number;
     toolCall?: unknown;
     toolCalls?: unknown[];
@@ -36,6 +37,10 @@ interface MessageStreamProps {
   keyboardOffset: number;
   onTypingDone: () => void;
   agentName?: string;
+  onLoadOlder?: () => void;
+  canLoadOlder?: boolean;
+  isLoadingOlder?: boolean;
+  children?: React.ReactNode;
 }
 
 export const MessageStream = React.memo(function MessageStream({
@@ -47,13 +52,40 @@ export const MessageStream = React.memo(function MessageStream({
   keyboardOffset,
   onTypingDone,
   agentName,
+  onLoadOlder,
+  canLoadOlder,
+  isLoadingOlder,
+  children,
 }: MessageStreamProps) {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const mainScrollRef = useRef<HTMLElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const loadOlderSentinelRef = useRef<HTMLDivElement>(null);
   const prevScrollSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
   const lastAnchoredSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
   const prevMessageCountRef = useRef(0);
+  const prevScrollHeightRef = useRef<number>(0);
+  const expectedLengthOnLoadRef = useRef<number | null>(null);
+
+  // Auto-load older messages when the top sentinel enters the viewport.
+  useEffect(() => {
+    const sentinel = loadOlderSentinelRef.current;
+    const scroller = mainScrollRef.current;
+    if (!sentinel || !scroller || !onLoadOlder || !canLoadOlder) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting && canLoadOlder && !isLoadingOlder) {
+          prevScrollHeightRef.current = scroller.scrollHeight;
+          expectedLengthOnLoadRef.current = messages?.length ?? 0;
+          onLoadOlder();
+        }
+      },
+      { root: scroller, rootMargin: "200px 0px 0px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [onLoadOlder, canLoadOlder, isLoadingOlder, messages?.length]);
 
   const anchorToMessage = useCallback((targetId?: string, block: ScrollLogicalPosition = "center") => {
     if (targetId) {
@@ -90,16 +122,41 @@ export const MessageStream = React.memo(function MessageStream({
     setShowScrollBottom(!isAtBottom);
   };
 
+  // Auto-scroll during streaming if user is already at the bottom
+  useLayoutEffect(() => {
+    if (!showScrollBottom && mainScrollRef.current) {
+      mainScrollRef.current.scrollTop = mainScrollRef.current.scrollHeight;
+    }
+  }, [messages, showScrollBottom]);
+
   // Instant session anchoring: useLayoutEffect fires synchronously after DOM commit,
   // BEFORE browser paint, so the first visible frame is already at the correct position.
   useLayoutEffect(() => {
-    if (activeSessionId && messages !== undefined && messages.length > 0) {
+    if (!messages) return;
+    const scroller = mainScrollRef.current;
+
+    // Preserve scroll position after loading older messages: the new batch is
+    // prepended to the visible list, so we offset scrollTop by the height delta
+    // so the user's view stays anchored to the same messages.
+    if (
+      expectedLengthOnLoadRef.current !== null &&
+      scroller &&
+      messages.length > expectedLengthOnLoadRef.current
+    ) {
+      const oldHeight = prevScrollHeightRef.current;
+      const newHeight = scroller.scrollHeight;
+      scroller.scrollTop = scroller.scrollTop + (newHeight - oldHeight);
+      expectedLengthOnLoadRef.current = null;
+      return;
+    }
+
+    if (activeSessionId && messages.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const isCorrectSessionData = (messages[0] && (messages[0] as any).sessionId === activeSessionId);
       if (isCorrectSessionData && activeSessionId !== lastAnchoredSessionIdRef.current) {
         lastAnchoredSessionIdRef.current = activeSessionId;
         setShowScrollBottom(false);
-        
+
         const targetMsg = [...messages].reverse().find(m => m.author === "User") || messages[messages.length - 1];
         const targetId = targetMsg?._id;
 
@@ -154,7 +211,7 @@ export const MessageStream = React.memo(function MessageStream({
       <main 
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 space-y-6 lg:space-y-12 custom-scrollbar lg:scrollbar-default scrollbar-hide"
+        className="absolute inset-0 overflow-y-auto px-4 lg:px-8 pt-24 lg:pt-32 space-y-6 lg:space-y-12 custom-scrollbar lg:scrollbar-default scrollbar-hide [overflow-anchor:none]"
       >
 
         <div className="max-w-4xl mx-auto flex flex-col">
@@ -221,23 +278,50 @@ export const MessageStream = React.memo(function MessageStream({
                 key={`chat-messages-${activeSessionId || "default"}`}
                 className="space-y-6 lg:space-y-12"
               >
+                {/* Sentinel + Load Older button at the top of the message list */}
+                {canLoadOlder && (
+                  <div className="flex flex-col items-center gap-2 pb-2">
+                    <div ref={loadOlderSentinelRef} className="h-px w-full" />
+                    {onLoadOlder && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const scroller = mainScrollRef.current;
+                          if (scroller) {
+                            prevScrollHeightRef.current = scroller.scrollHeight;
+                            expectedLengthOnLoadRef.current = messages.length;
+                          }
+                          onLoadOlder();
+                        }}
+                        disabled={isLoadingOlder}
+                        className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-[#2a2723]/60 text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/40 disabled:opacity-40 transition-all"
+                      >
+                        {isLoadingOlder ? "Loading…" : "Load older"}
+                      </button>
+                    )}
+                  </div>
+                )}
                 <AnimatePresence initial={false}>
-                  {[...messages].map((msg) => (
+                  {[...messages].map((msg, index) => (
                     <MessageBubble
                       key={msg._id}
                       msg={msg}
                       isLargeViewport={isLargeViewport}
                       agentName={agentName}
+                      isStreaming={isTyping && index === messages.length - 1 && msg.author === "AI"}
                     />
                   ))}
-                  
-                  {/* Typing Indicator */}
-                  {isTyping && <TypingIndicator agentName={agentName} />}
+
+                  {/* Typing Indicator \u2014 only show before the first streaming bubble appears */}
+                  {isTyping && !(messages[messages.length - 1]?.author === "AI") && <TypingIndicator agentName={agentName} />}
                 </AnimatePresence>
 
+              {/* Tool approval cards — inline in scroll */}
+              {children}
+
               {/* Ganjalan: Ensures last message is always pushed above the tray */}
-              <div 
-                style={{ height: isLargeViewport ? "180px" : `calc(120px + ${keyboardOffset}px)` }} 
+              <div
+                style={{ height: isLargeViewport ? "180px" : `calc(120px + ${keyboardOffset}px)` }}
                 className="w-full shrink-0"
               />
               <div ref={messagesEndRef} className="h-px w-full" />

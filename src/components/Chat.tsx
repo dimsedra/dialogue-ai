@@ -1244,12 +1244,10 @@ export function Chat({
               onLoadOlder={loadOlderMessages}
               canLoadOlder={messagesPaginated.status === "CanLoadMore"}
               isLoadingOlder={messagesPaginated.status === "LoadingMore"}
-            />
-
-            {/* Tool approval cards — positioned above input */}
-            {pendingApprovals.length > 0 && (
-              <div className="absolute bottom-20 left-0 right-0 z-10 flex flex-wrap justify-center gap-2 px-4 pointer-events-none">
-                <div className="pointer-events-auto flex flex-wrap gap-2">
+            >
+              {/* Tool approval cards — inline in scroll */}
+              {pendingApprovals.length > 0 && (
+                <div className="flex flex-wrap justify-center gap-2 px-4 py-2">
                   {pendingApprovals.map((approval: any) => {
                     const toolName = approval.type?.replace('tool-', '') || '';
                     return (
@@ -1274,8 +1272,8 @@ export function Chat({
                     );
                   })}
                 </div>
-              </div>
-            )}
+              )}
+            </MessageStream>
 
             <ChatInput
               activeSessionId={activeSessionId}
