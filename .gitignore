@@ -46,3 +46,15 @@ next-env.d.ts
 
 # landing page mockup
 /index.html
+
+# agent skill
+.agents/
+
+# local database files
+.dialogue-graph*
+
+# temporary scratch scripts
+scratch/
+
+# Xenova/Transformers local model downloads
+/src/lib/models/

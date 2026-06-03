@@ -8,10 +8,10 @@ interface ChatHeaderProps {
   activeWorkspaceId: Id<"workspaces"> | undefined;
   workspaces: Doc<"workspaces">[] | undefined;
   messageCount: number;
-  provider: "gemini" | "lmstudio" | "openai" | "anthropic";
+  provider: string;
   activeModelName: string;
   isLargeViewport?: boolean;
-  onProviderChange: (p: "gemini" | "lmstudio" | "openai" | "anthropic") => void;
+  onProviderChange: (p: string) => void;
   onSignOut: () => void;
   onShowHistory: () => void;
   onShowTasks?: () => void;

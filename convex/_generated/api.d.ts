@@ -9,9 +9,9 @@
  */
 
 import type * as ai from "../ai.js";
-import type * as ai_action from "../ai_action.js";
 import type * as ai_providers from "../ai_providers.js";
 import type * as auth from "../auth.js";
+import type * as background_jobs from "../background_jobs.js";
 import type * as crons from "../crons.js";
 import type * as dailySummary from "../dailySummary.js";
 import type * as dashboard from "../dashboard.js";
@@ -46,9 +46,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
-  ai_action: typeof ai_action;
   ai_providers: typeof ai_providers;
   auth: typeof auth;
+  background_jobs: typeof background_jobs;
   crons: typeof crons;
   dailySummary: typeof dailySummary;
   dashboard: typeof dashboard;

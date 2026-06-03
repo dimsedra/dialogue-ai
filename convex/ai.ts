@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { auth } from "./auth";
 import { encrypt, decrypt } from "./encryption";
@@ -816,14 +816,7 @@ export const updateProfile = mutation({
 
 export const updatePreferences = mutation({
   args: {
-    provider: v.optional(
-      v.union(
-        v.literal("gemini"),
-        v.literal("lmstudio"),
-        v.literal("openai"),
-        v.literal("anthropic"),
-      ),
-    ),
+    provider: v.optional(v.string()),
     searchProvider: v.optional(
       v.union(v.literal("tavily"), v.literal("serper")),
     ),
@@ -986,4 +979,95 @@ export const addTask = mutation({
       createdAt: Date.now(),
     });
   },
+});
+export const saveMemoryBackendSync = mutation({
+  args: {
+    text: v.string(),
+    embedding: v.array(v.number()),
+    hash: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // For backend sync, grab the first user since it's a personal app
+    const users = await ctx.db.query("users").take(1);
+    if (!users.length) throw new Error("No users found");
+    const userId = users[0]._id;
+    
+    if (args.hash) {
+      const existing = await ctx.db
+        .query("memories")
+        .withIndex("by_hash", (q) => q.eq("hash", args.hash))
+        .first();
+      if (existing) return existing._id;
+    }
+    
+    return await ctx.db.insert("memories", {
+      userId,
+      text: args.text,
+      embedding: args.embedding,
+      hash: args.hash,
+      createdAt: Date.now(),
+    });
+  }
+});
+export const wipeMemories = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const memories = await ctx.db.query('memories').collect();
+    for (const mem of memories) {
+      await ctx.db.delete(mem._id);
+    }
+    return memories.length;
+  }
+});
+export const getSystemProfileContext = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").take(1);
+    if (!users.length) return null;
+    const userId = users[0]._id;
+    const profile = await ctx.db
+      .query("userProfile")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+      
+    // Fetch latest weekly digest
+    const latestWeekly = await ctx.db
+      .query("weeklyDigests")
+      .withIndex("by_user_week", (q) => q.eq("userId", userId))
+      .order("desc")
+      .first();
+
+    return profile ? { 
+      name: profile.name, 
+      bio: profile.bio,
+      behavioralProfile: profile.behavioralProfile,
+      monthlyDigest: profile.monthlyNotesSummaries?.[0],
+      latestWeeklyDigest: latestWeekly?.digest
+    } : null;
+  }
+});
+
+export const getSearchConfig = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query('users').take(1);
+    if (!users.length) return null;
+    const userId = users[0]._id;
+    const profile = await ctx.db
+      .query('userProfile')
+      .withIndex('by_user', (q) => q.eq('userId', userId))
+      .first();
+    if (!profile || !profile.preferences) return null;
+    const searchProvider = profile.preferences.searchProvider || 'tavily';
+    const encryptedApiKey = profile.preferences.customConfigs?.[searchProvider]?.apiKey;
+    if (!encryptedApiKey) return { searchProvider, apiKey: null };
+    
+    try {
+      const apiKey = await decrypt(encryptedApiKey);
+      return { searchProvider, apiKey };
+    } catch (error) {
+      console.error("Decryption failed for search API key:", error);
+      return { searchProvider, apiKey: null };
+    }
+  }
 });

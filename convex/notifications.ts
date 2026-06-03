@@ -153,3 +153,43 @@ export const triggerDailyHabitReminders = internalMutation({
     }
   },
 });
+
+/**
+ * Creates a custom reminder that fires at a specific future date/time.
+ * Used by the AI agent's create_custom_reminder tool.
+ */
+export const createCustomReminder = mutation({
+  args: {
+    message: v.string(),
+    dueDate: v.string(), // ISO-8601 date string
+  },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) throw new Error("Unauthorized");
+
+    const dueMs = new Date(args.dueDate).getTime();
+    if (isNaN(dueMs) || dueMs <= Date.now()) {
+      throw new Error("Invalid or past due date");
+    }
+
+    // Insert the notification as unread with type "system"
+    await ctx.db.insert("notifications", {
+      userId,
+      title: "Custom Reminder",
+      message: args.message,
+      type: "system",
+      read: false,
+      createdAt: Date.now(),
+    });
+
+    // Schedule a push notification for the due time
+    const delayMs = dueMs - Date.now();
+    await ctx.scheduler.runAfter(delayMs, internal.push_actions.sendPushNotification, {
+      userId,
+      title: "Reminder",
+      message: args.message,
+    });
+
+    return { success: true };
+  },
+});

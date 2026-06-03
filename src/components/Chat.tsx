@@ -159,6 +159,12 @@ export function Chat({
   const profile = useQuery(api.ai.getProfile, {});
   const personas = useQuery(api.personas.list);
 
+  const [localScopes, setLocalScopes] = useState<Record<string, Scope>>({});
+
+  useEffect(() => {
+    setLocalScopes({});
+  }, [activeSessionId]);
+
   const activeSession = sessions?.find((s) => s._id === activeSessionId);
   const activePersona =
     personas?.find((p) => p._id === activeSession?.agentPersonaId) ||
@@ -188,6 +194,7 @@ export function Chat({
   const updatePreferences = useMutation(api.ai.updatePreferences);
 
   const convex = useConvex();
+  const idMapRef = useRef<Map<string, string>>(new Map());
 
   const [provider, setProvider] = useState<AIProvider>(() => {
     if (typeof window !== "undefined") {
@@ -314,7 +321,7 @@ export function Chat({
           
         const reasoningParts = message.parts ? message.parts.filter(p => p.type === 'reasoning') : [];
         const reasoning = reasoningParts.length > 0
-          ? reasoningParts.map(p => (p as any).reasoning || (p as any).text).join('\n\n')
+          ? reasoningParts.map(p => (p as any).reasoning || (p as any).text).join('\n[---DIALOGUE_REASONING_SPLIT---]\n')
           : (message as any).reasoning || undefined;
 
         const toolCalls = (message as any).toolInvocations && (message as any).toolInvocations.length > 0
@@ -325,13 +332,17 @@ export function Chat({
             }))
           : undefined;
 
-        await sendMessage({
+        const convexId = await sendMessage({
           sessionId: activeSessionId,
           text: textContent,
           author: "AI",
           reasoning,
           toolCalls,
         });
+
+        if (convexId && message.id) {
+          idMapRef.current.set(convexId, message.id);
+        }
 
         // Trigger AI title generation on first response (idempotent — skips if title already set)
         triggerAutoTitle({ sessionId: activeSessionId });
@@ -355,20 +366,33 @@ export function Chat({
       const hasConvexCaughtUp = messages.length > aiMessages.length;
 
       if (isSessionSwitch || hasConvexCaughtUp || aiMessages.length === 0) {
-        const mappedHistory = messages.map(m => ({
-          id: m._id,
-          role: (m.author === "User" ? "user" : "assistant") as "user" | "assistant",
-          content: m.text,
-          parts: [{ type: "text" as const, text: m.text }],
-          toolCalls: m.toolCalls,
-          toolCall: m.toolCall,
-          attachments: m.attachments,
-          storageId: m.storageId,
-          fileName: m.fileName,
-          fileType: m.fileType,
-          scope: m.scope,
-          reasoning: (m as any).reasoning,
-        }));
+        const mappedHistory = messages.map(m => {
+          const parts: any[] = [];
+          if (m.reasoning) {
+            const splitReasoning = m.reasoning.split('\n[---DIALOGUE_REASONING_SPLIT---]\n');
+            for (const rText of splitReasoning) {
+              parts.push({ type: "reasoning" as const, text: rText });
+            }
+          }
+          parts.push({ type: "text" as const, text: m.text });
+
+          const sdkId = idMapRef.current.get(m._id) || m._id;
+          return {
+            id: sdkId,
+            role: (m.author === "User" ? "user" : "assistant") as "user" | "assistant",
+            content: m.text,
+            parts,
+            toolCalls: m.toolCalls,
+            toolCall: m.toolCall,
+            attachments: m.attachments,
+            storageId: m.storageId,
+            fileName: m.fileName,
+            fileType: m.fileType,
+            scope: m.scope,
+            reasoning: (m as any).reasoning,
+            sessionId: m.sessionId,
+          };
+        });
         setMessages(mappedHistory);
         lastSyncedSessionIdRef.current = activeSessionId || null;
       }
@@ -430,6 +454,7 @@ export function Chat({
           author: m.role === "user" ? "User" : "AI",
           text,
           reasoning,
+          parts: m.parts,
           toolCalls: (m as any).toolCalls || ((m as any).toolInvocations ? (m as any).toolInvocations.map((ti: any) => ({
             name: ti.toolName,
             args: ti.args,
@@ -440,11 +465,12 @@ export function Chat({
           storageId: (m as any).storageId,
           fileName: (m as any).fileName,
           fileType: (m as any).fileType,
-          scope: (m as any).scope || scopeByContent.get(text),
+          scope: (m as any).scope || localScopes[text] || scopeByContent.get(text),
           timestamp: Date.now(),
+          sessionId: (m as any).sessionId || activeSessionId,
         };
     });
-  }, [aiMessages, activeSessionId, messagesPaginated.status, scopeByContent]);
+  }, [aiMessages, activeSessionId, messagesPaginated.status, scopeByContent, localScopes]);
 
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [confirmDeleteSession, setConfirmDeleteSession] = useState<{
@@ -1007,20 +1033,13 @@ export function Chat({
         } else {
           pendingScopeRef.current = scope ?? null;
           aiPromise = sendVercelMessage({ text: textMessageContent });
-          // Immediately patch scope onto the user message so the pin shows in real-time
-          // (sendVercelMessage creates the message without scope; Convex hasn't caught up yet)
-          if (scope) {
-            setMessages(prev => {
-              const updated = [...prev];
-              for (let i = updated.length - 1; i >= 0; i--) {
-                if (updated[i].role === 'user' && (updated[i] as any).scope === undefined) {
-                  updated[i] = { ...updated[i], scope } as any;
-                  break;
-                }
-              }
-              return updated;
-            });
-          }
+        }
+
+        if (scope) {
+          setLocalScopes(prev => ({
+            ...prev,
+            [textMessageContent]: scope,
+          }));
         }
 
         try {

@@ -133,10 +133,10 @@ At session start, the agent loads your stated **Identity (Bio)**, observes your 
 
 Dialogue is structured around three key engineering decisions designed to put you in control:
 
-### 1. Dual-Engine Inference Model (Cloud / Local)
+### 1. Unified Inference Model (Cloud / Local via Vercel AI SDK)
 
-* **What it is**: Hot-swapping between any standard Cloud LLM provider (such as Google Gemini, OpenAI, or Anthropic) and fully offline local models (via LM Studio, Ollama, etc.) running on your own machine.
-* **Why it matters**: You shouldn't be locked into a single AI provider or forced to pay a monthly subscription. If you need hyper-fast, cloud-based reasoning, plug in your preferred API key. If you want absolute, offline privacy for sensitive data, switch to a local model running on your computer with a single click.
+* **What it is**: Hot-swapping between any standard Cloud LLM provider (such as Google Gemini, OpenAI, or Anthropic) and fully offline local models (via Ollama, etc.) running on your own machine, all abstracted through **Vercel AI SDK Providers**.
+* **Why it matters**: You shouldn't be locked into a single AI provider or forced to maintain custom API fetch logic. Vercel AI SDK standardizes the model interface. If you need hyper-fast, cloud-based reasoning, plug in your preferred API key. If you want absolute, offline privacy for sensitive data, switch to a local model running on your computer with a single line of code change.
 
 ### 2. Timezone-Aware Server Architecture (IANA Timezone Sync)
 
@@ -202,24 +202,28 @@ The Dialogue agent interacts with your workspace by executing specific, permissi
 
 ---
 
-## Database Schema (Convex)
+## Database Architecture (Convex & LadybugDB)
 
-Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
+Dialogue uses a dual-database approach to maintain strict separation of concerns between real-time UI state and deep AI memory.
 
+### 1. Convex (Real-time Relational & Sync)
+Defined in `convex/schema.ts`, handling all UI reactivity and structured scheduling:
 * **`users`**: Manages authenticated profiles.
-* **`userProfile`**: Stores user-specific settings, including `preferences` (selected AI provider, search engine configurations, memory sensitivity sliders) and profile bio summaries.
-* **`workspaces`**: Silos containing a workspace name, branding color, default agent persona reference (`defaultAgentPersonaId`), context details, and user ownership mapping.
-* **`chatSessions`**: Conversation containers containing title, pinning status, workspace mapping, and creation stamps.
-* **`messages`**: Multi-turn chat message data. Stores text, author, attachments, extracted file contents, tool call logs, and active `scope` references.
-* **`tasks`**: Task entries containing title (`text`), priority (`low`/`medium`/`high`), category, notes (append-only ledger incorporating chronological links and document storage references), progress percentage (0-100), `statusHook`, time stamps (`dueDate`, `completedAt`), and background notification tracking details (`reminderOffset`, `scheduledNotificationId`).
-* **`events`**: Calendar events. Supports point-in-time entries (`point`) and duration blocks (`interval`). Contains recurrent event series mapping (`recurrence` rule schema), chronological notes ledger, and background notification tracking details (`reminderOffset`, `scheduledNotificationId`).
-* **`memories`**: Vector-indexed fact storage with automatic deduplication, time-decay weighting, and near-duplicate detection. Stores factual knowledge about the user (preferences, life context, tech stack).
-* **`reflections`**: Periodic summary logs containing the synthesized weekly, monthly, and yearly summaries, compiled focus statistics, behavioral observations, and optional user feedback comments.
-* **`habits`**: Habit definitions including name, workspace configuration mapping, target completion metrics, and cached streak stats.
-* **`habitLogs`**: Timezone-adjusted completion logs, recording exact timestamps, skipped/completed states, and contextual progress notes.
-* **`pushSubscriptions`**: Browser Web Push subscription registration endpoints and cryptographic keys (`p256dh`, `auth`) mapped to users for closed-tab background alerts.
-* **`graphNodes`**: Entities represented as graph nodes, mapping workspaces, tasks, events, habits, resources, and people.
-* **`graphEdges`**: Weighted, directed edges mapping relationships (`BLOCKED_BY`, `COLLABORATES_WITH`, `PREREQUISITE_FOR`, `REFERENCES`) between graph nodes.
+* **`userProfile`**: Stores user-specific settings, including `preferences` and profile bio summaries.
+* **`workspaces`**: Silos containing a workspace name, branding color, default agent persona reference, and context details.
+* **`chatSessions`**: Conversation containers mapping active threads to workspaces.
+* **`messages`**: Multi-turn chat message data. Stores text, author, tool call logs, and active `scope`.
+* **`tasks`**: Task entries containing title, category, progress, chronological notes ledger, and scheduled notification offsets.
+* **`events`**: Calendar events (point-in-time and duration blocks), recurrence rules, and notification tracking.
+* **`habits`** & **`habitLogs`**: Habit definitions, completion metrics, and timezone-adjusted execution logs.
+* **`reflections`** & **`oceanSnapshots`**: Periodic summary logs (weekly/monthly/yearly), compiled focus statistics, and behavioral Big 5 observations tracked over time via CRON jobs.
+* **`pushSubscriptions`**: Browser Web Push subscription registration endpoints for closed-tab background alerts.
+
+### 2. LadybugDB (Embedded Graph Memory)
+Operating directly on the Next.js server disk, LadybugDB acts as the "Brain's" local storage for vector embeddings and multi-hop relationships via the Cypher query language:
+* **`Memories`**: Vector-indexed semantic fact storage with automatic deduplication, time-decay weighting, and near-duplicate detection.
+* **`GraphNodes`**: Cypher-queryable entities representing convex IDs (Workspaces, Tasks, Events, People).
+* **`GraphEdges`**: Weighted, directed edges (`BLOCKED_BY`, `COLLABORATES_WITH`, `PREREQUISITE_FOR`, `REFERENCES`) allowing Mastra to traverse the knowledge graph instantly without network overhead.
 
 ---
 
@@ -228,11 +232,14 @@ Dialogue uses a real-time, reactive schema defined in `convex/schema.ts`:
 | Layer | Technology |
 | --- | --- |
 | **Framework** | Next.js 15 (App Router, React 19) |
-| **Backend & DB** | Convex (Real-time reactive database, vector search) |
+| **AI Orchestration** | Mastra (Agent Workflows, Tool Calling, MCP Client Integration) |
+| **AI Providers & UI** | Vercel AI SDK Core (`@ai-sdk/openai`, etc.) & UI (`useChat`) |
+| **Backend & UI State** | Convex (Real-time reactive database, CRON jobs) |
+| **Agentic Graph Memory**| LadybugDB (Embedded C++ Graph & Vector database) |
 | **Styling** | Tailwind CSS v4 |
 | **Animations** | Framer Motion (Glassmorphic cards, slide sheets) |
-| **AI Providers** | Any Cloud LLM (Gemini, OpenAI, Anthropic, etc.) & Local LLM (LM Studio, Ollama, etc.) |
-| **Integrations** | Tavily / Serper (Web Research), Mammoth (Docx Extraction), Web Push (Closed-Tab Encryption) |
+| **Supported Models** | Cloud LLMs (Gemini, OpenAI, Anthropic) & Local LLMs (Ollama) via Vercel AI SDK |
+| **Integrations** | Tavily / Serper (Web Research), Mammoth (Docx Extraction) |
 | **Auth** | Convex Auth (`@convex-dev/auth` for sovereign multi-device auth) |
 
 ---

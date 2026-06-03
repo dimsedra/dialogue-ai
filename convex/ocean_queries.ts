@@ -1,8 +1,8 @@
-import { internalQuery, internalMutation } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
 // Internal queries for OCEAN actions
-export const getUserProfileForOCEAN = internalQuery({
+export const getUserProfileForOCEAN = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     return await ctx.db
@@ -12,7 +12,7 @@ export const getUserProfileForOCEAN = internalQuery({
   },
 });
 
-export const getWeeklyDigestByWeek = internalQuery({
+export const getWeeklyDigestByWeek = query({
   args: {
     userId: v.id("users"),
     weekStart: v.number(),
@@ -25,7 +25,7 @@ export const getWeeklyDigestByWeek = internalQuery({
   },
 });
 
-export const insertWeeklyDigest = internalMutation({
+export const insertWeeklyDigest = mutation({
   args: {
     userId: v.id("users"),
     weekStart: v.number(),
@@ -45,7 +45,7 @@ export const insertWeeklyDigest = internalMutation({
   },
 });
 
-export const getWeeklyDigestsForMonthly = internalQuery({
+export const getWeeklyDigestsForMonthly = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     return await ctx.db
@@ -56,7 +56,7 @@ export const getWeeklyDigestsForMonthly = internalQuery({
   },
 });
 
-export const insertArchivedSummary = internalMutation({
+export const insertArchivedSummary = mutation({
   args: {
     userId: v.id("users"),
     type: v.union(v.literal("weekly"), v.literal("monthly")),
@@ -76,14 +76,14 @@ export const insertArchivedSummary = internalMutation({
   },
 });
 
-export const deleteWeeklyDigest = internalMutation({
+export const deleteWeeklyDigest = mutation({
   args: { id: v.id("weeklyDigests") },
   handler: async (ctx, args) => {
     await ctx.db.delete(args.id);
   },
 });
 
-export const updateUserProfileOCEAN = internalMutation({
+export const updateUserProfileOCEAN = mutation({
   args: {
     userId: v.id("users"),
     monthlyDigest: v.string(),
@@ -110,4 +110,21 @@ export const updateUserProfileOCEAN = internalMutation({
       });
     }
   },
+});
+export const getMemoriesInRange = query({
+  args: {
+    userId: v.id("users"),
+    startTime: v.number(),
+    endTime: v.number()
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("memories")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .filter(q => q.and(
+        q.gte(q.field("createdAt"), args.startTime),
+        q.lt(q.field("createdAt"), args.endTime)
+      ))
+      .collect();
+  }
 });

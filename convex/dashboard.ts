@@ -708,6 +708,282 @@ export const getProactiveState = query({
   },
 });
 
+// =============================================================================
+// Split proactive-state queries (Plan C).
+// Each query subscribes to a small, focused set of tables. The client composes
+// them into the cascade. Reduces invalidation scope: a checkbox toggle in
+// `tasks` no longer refetches `habitLogs`, `reflections`, or `cardState`.
+// The original `getProactiveState` is kept as a fallback.
+// =============================================================================
+
+const timeArgs = {
+  timezone: v.optional(v.string()),
+  timezoneOffset: v.optional(v.number()),
+};
+
+const buildTimeContext = (
+  timezone: string | undefined,
+  timezoneOffset: number | undefined,
+) => {
+  const now = Date.now();
+  const { dateString, hour } = getTimeContext(now, timezone, timezoneOffset);
+  return { now, dateString, hour };
+};
+
+export const getAttentionNeeded = query({
+  args: timeArgs,
+  handler: async (ctx, args): Promise<ProactiveState | null> => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return null;
+    const { now, dateString: todayDateString } = buildTimeContext(
+      args.timezone,
+      args.timezoneOffset,
+    );
+    const [tasks, habits] = await Promise.all([
+      ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("habits").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+    const reflectionCandidates = await Promise.all(
+      (["weekly", "monthly", "yearly"] as const).map((type) =>
+        ctx.db
+          .query("reflections")
+          .withIndex("by_user_type", (q) => q.eq("userId", userId).eq("type", type))
+          .order("desc")
+          .first(),
+      ),
+    );
+    const pendingReflection = reflectionCandidates
+      .filter((r): r is Doc<"reflections"> => Boolean(r))
+      .filter((r) => r.userReflection === undefined)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+
+    const activeHabits = habits.filter((h) => !h.archived);
+    return await buildAttentionNeededState(
+      ctx,
+      userId,
+      tasks,
+      activeHabits,
+      pendingReflection,
+      todayDateString,
+      now,
+    );
+  },
+});
+
+export const getReflectionReady = query({
+  args: timeArgs,
+  handler: async (ctx, args): Promise<ProactiveState | null> => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return null;
+    void args;
+    const reflectionCandidates = await Promise.all(
+      (["weekly", "monthly", "yearly"] as const).map((type) =>
+        ctx.db
+          .query("reflections")
+          .withIndex("by_user_type", (q) => q.eq("userId", userId).eq("type", type))
+          .order("desc")
+          .first(),
+      ),
+    );
+    const pending = reflectionCandidates
+      .filter((r): r is Doc<"reflections"> => Boolean(r))
+      .filter((r) => r.userReflection === undefined)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    if (!pending) return null;
+    return {
+      type: "reflection_ready",
+      reflectionId: pending._id,
+      periodLabel: pending.periodLabel,
+    };
+  },
+});
+
+export const getTaskTriage = query({
+  args: timeArgs,
+  handler: async (ctx, args): Promise<ProactiveState | null> => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return null;
+    void args;
+    const tasks = await ctx.db
+      .query("tasks")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const now = Date.now();
+    const overdue = tasks
+      .filter((t) => !t.completed && t.dueDate !== undefined && t.dueDate < now)
+      .sort((a, b) => (a.dueDate ?? 0) - (b.dueDate ?? 0));
+    if (overdue.length === 0) return null;
+    return {
+      type: "task_triage",
+      count: overdue.length,
+      taskIds: overdue.slice(0, 5).map((t) => t._id),
+    };
+  },
+});
+
+export const getMorningBrief = query({
+  args: timeArgs,
+  handler: async (ctx, args): Promise<ProactiveState | null> => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return null;
+    const { now, dateString: todayDateString, hour } = buildTimeContext(
+      args.timezone,
+      args.timezoneOffset,
+    );
+    if (hour < 6 || hour >= 12) return null;
+    const [tasks, events] = await Promise.all([
+      ctx.db.query("tasks").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("events").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+    const todayTasks = tasks.filter(
+      (t) =>
+        !t.completed &&
+        ((t.dueDateStr && t.dueDateStr === todayDateString) ||
+          (t.dueDate !== undefined &&
+            formatDateStringForTimestamp(
+              t.dueDate,
+              args.timezone,
+              args.timezoneOffset,
+            ) === todayDateString)),
+    );
+    const todayEvents = events.filter((e) =>
+      eventOccursOnDate(e, todayDateString, args.timezone, args.timezoneOffset),
+    );
+    const highlightedTask = getHighlightedTask(todayTasks);
+    return {
+      type: "morning_brief",
+      taskCount: todayTasks.length,
+      eventCount: todayEvents.length,
+      highlightTaskId: highlightedTask?._id,
+      highlightTaskTitle: highlightedTask?.text,
+    };
+  },
+});
+
+export const getEventPrep = query({
+  args: timeArgs,
+  handler: async (ctx, args): Promise<ProactiveState | null> => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return null;
+    const { now, dateString: todayDateString, hour } = buildTimeContext(
+      args.timezone,
+      args.timezoneOffset,
+    );
+    if (hour < 12 || hour >= 17) return null;
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const todayEvents = events.filter((e) =>
+      eventOccursOnDate(e, todayDateString, args.timezone, args.timezoneOffset),
+    );
+    const upcoming = todayEvents
+      .filter((e) => e.startTime > now && e.startTime - now <= 2 * 60 * 60 * 1000)
+      .sort((a, b) => a.startTime - b.startTime);
+    if (upcoming.length === 0) return null;
+    const next = upcoming[0];
+    return {
+      type: "event_prep",
+      eventId: next._id,
+      eventTitle: next.title,
+      startTime: next.startTime,
+      notes: next.notes,
+      resourceCount: next.resources?.length ?? 0,
+    };
+  },
+});
+
+export const getHabitCheck = query({
+  args: timeArgs,
+  handler: async (ctx, args): Promise<ProactiveState | null> => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return null;
+    const { now, dateString: todayDateString, hour } = buildTimeContext(
+      args.timezone,
+      args.timezoneOffset,
+    );
+    void now;
+    if (hour < 18 || hour > 22) return null;
+    const [habits, userLogsToday] = await Promise.all([
+      ctx.db.query("habits").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("habitLogs").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+    const activeHabits = habits.filter((h) => !h.archived);
+    if (activeHabits.length === 0) return null;
+    const loggedHabitIds = new Set(
+      userLogsToday
+        .filter((log) => log.dateString === todayDateString)
+        .map((log) => log.habitId),
+    );
+    const pending = activeHabits
+      .filter((h) => !loggedHabitIds.has(h._id))
+      .sort((a, b) => {
+        if (a.currentStreak !== b.currentStreak) {
+          return b.currentStreak - a.currentStreak;
+        }
+        return a.createdAt - b.createdAt;
+      })[0];
+    if (!pending) return null;
+    return {
+      type: "habit_check",
+      habitId: pending._id,
+      habitName: pending.name,
+      streak: pending.currentStreak,
+      dateString: todayDateString,
+    };
+  },
+});
+
+export const getEveningLog = query({
+  args: timeArgs,
+  handler: async (ctx, args): Promise<ProactiveState | null> => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return null;
+    const { dateString: todayDateString, hour } = buildTimeContext(
+      args.timezone,
+      args.timezoneOffset,
+    );
+    if (hour < 20 || hour > 22) return null;
+    const [habits, userLogsToday] = await Promise.all([
+      ctx.db.query("habits").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      ctx.db.query("habitLogs").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+    ]);
+    const activeHabits = habits.filter((h) => !h.archived);
+    if (activeHabits.length === 0) return null;
+    const loggedHabitIds = new Set(
+      userLogsToday
+        .filter((log) => log.dateString === todayDateString)
+        .map((log) => log.habitId),
+    );
+    const unlogged = activeHabits
+      .filter((h) => !loggedHabitIds.has(h._id))
+      .sort((a, b) => {
+        if (a.currentStreak !== b.currentStreak) {
+          return b.currentStreak - a.currentStreak;
+        }
+        return a.createdAt - b.createdAt;
+      });
+    if (unlogged.length === 0) return null;
+    return {
+      type: "evening_log",
+      unloggedHabitIds: unlogged.map((h) => h._id),
+      unloggedHabitNames: unlogged.map((h) => h.name),
+    };
+  },
+});
+
+export const getMutedCardStates = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) return [];
+    return await ctx.db
+      .query("cardState")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+  },
+});
+
 export const getLastSession = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {

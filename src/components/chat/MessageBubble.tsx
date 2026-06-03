@@ -1,93 +1,188 @@
-import React, { useState } from "react";
-import { User, Bot, Copy, Check, ExternalLink, File as FileIcon, ChevronDown, ChevronUp, Calendar, CheckCircle2, Flame } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import React from "react";
+import { 
+  User, Bot, Check, ExternalLink, File as FileIcon, ChevronDown, ChevronUp, Calendar, CheckCircle2, Flame,
+  Edit3, Trash2, Search, Sparkles, Layers, HelpCircle
+} from "lucide-react";
+import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { ToolCall } from "./types";
 import { ToolCard } from "./ToolCard";
+import { useSmoothText } from "./useSmoothText";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "../ai-elements/reasoning";
+import {
+  ChainOfThought,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+  ChainOfThoughtContent,
+  ChainOfThoughtSearchResults,
+  ChainOfThoughtSearchResult,
+} from "../ai-elements/chain-of-thought";
 
-const COLLAPSE_THRESHOLD = 3;
+// Code blocks pull in react-syntax-highlighter (~250 KB). Lazy-load so the
+// heavy highlighter only ships when a code block actually renders.
+const LazyCodeBlock = dynamic(
+  () => import("./LazyCodeBlock").then((m) => m.LazyCodeBlock),
+  {
+    ssr: false,
+    loading: () => (
+      <pre className="bg-[#0f0e0c] border border-[#2a2723] rounded-2xl p-5 text-sm font-mono text-[#a8a29e] overflow-x-auto">
+        <code>Loading…</code>
+      </pre>
+    ),
+  },
+);
 
 const escapeCurrency = (text: string) => {
   return text.replace(/(?<!\\)\$(\s*\d)/g, '\\$$$1');
 };
 
-const TOOL_BADGE_COLORS: Record<string, string> = {
-  addTask: "bg-[#d4a373]", // Gold
-  updateTask: "bg-orange-400", // Orange
-  completeTask: "bg-emerald-400", // Emerald
-  deleteTask: "bg-slate-400", // Slate
-  addEvent: "bg-[#8b5cf6]", // Purple
-  updateEvent: "bg-indigo-400", // Indigo
-  updateEventOccurrence: "bg-amber-400", // Amber
-  deleteEvent: "bg-rose-400", // Rose
-  searchWeb: "bg-[#3b82f6]", // Blue
-  multiSearch: "bg-[#3b82f6]", // Blue
-  updateUserBio: "bg-emerald-400", // Emerald
-  saveSemanticMemory: "bg-emerald-400", // Emerald
+const markdownComponents = {
+  p: ({ children }: any) => <p className="mb-4 last:mb-0">{children}</p>,
+  ul: ({ children }: any) => <ul className="list-disc pl-4 mb-4 space-y-1">{children}</ul>,
+  ol: ({ children }: any) => <ol className="list-decimal pl-4 mb-4 space-y-1">{children}</ol>,
+  li: ({ children }: any) => <li className="text-[#a8a29e]">{children}</li>,
+  strong: ({ children }: any) => <strong className="text-[#d4a373] font-bold">{children}</strong>,
+  pre: ({ children }: React.ComponentPropsWithoutRef<'pre'>) => {
+    return (
+      <div className="relative my-6 group/code min-w-0">
+        {children}
+      </div>
+    );
+  },
+  code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<'code'>) => {
+    const match = /language-(\w+)/.exec(className || "");
+    const isInline = !className;
+
+    if (isInline) {
+      return (
+        <code className="bg-[#0f0e0c] px-1.5 py-0.5 rounded text-[#d4a373] font-mono text-[13px]" {...props}>
+          {children}
+        </code>
+      );
+    }
+
+    const language = match ? match[1] : "text";
+    const codeString = String(children).replace(/\n$/, "");
+
+    return (
+      <LazyCodeBlock codeString={codeString} language={language} />
+    );
+  },
+  table: ({ children }: any) => (
+    <div className="overflow-x-auto mb-6">
+      <table className="w-full text-sm border-collapse">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: any) => <thead className="border-b border-[#2a2723]">{children}</thead>,
+  tbody: ({ children }: any) => <tbody className="divide-y divide-[#2a2723]">{children}</tbody>,
+  tr: ({ children }: any) => <tr className="hover:bg-[#1f1d19]/50 transition-colors">{children}</tr>,
+  th: ({ children }: any) => <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#d4a373]">{children}</th>,
+  td: ({ children }: any) => <td className="px-3 py-2 text-[#a8a29e]">{children}</td>,
 };
 
-function ToolCallGroup({ calls, isLargeViewport, msgId }: { calls: ToolCall[]; isLargeViewport: boolean; msgId: string }) {
-  const [expanded, setExpanded] = useState(isLargeViewport);
+const TOOL_ICONS: Record<string, any> = {
+  addTask: CheckCircle2,
+  updateTask: Edit3,
+  completeTask: Check,
+  deleteTask: Trash2,
+  addEvent: Calendar,
+  updateEvent: Calendar,
+  updateEventOccurrence: Calendar,
+  deleteEvent: Calendar,
+  searchWeb: Search,
+  multiSearch: Search,
+  updateUserBio: Sparkles,
+  saveSemanticMemory: Sparkles,
+  deleteSemanticMemory: Trash2,
+  listWorkspaces: Layers,
+  create_habit: Flame,
+  log_habit: Flame,
+  get_habit_consistency: Flame,
+  fetchUrl: ExternalLink,
+  searchHistoricalEntities: Search,
+};
 
-  return (
-    <div className="mt-3 w-full space-y-2">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-[#1f1d19] border border-[#2a2723] hover:border-[#d4a373]/30 transition-all text-left shadow-sm group cursor-pointer"
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-5 h-5 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-            <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
-          </div>
-          <span className="text-[12px] font-bold text-[#f2efeb] truncate">
-            {calls.length} Actions Completed
-          </span>
-          <div className="flex items-center gap-1 pl-1 shrink-0">
-            {calls.slice(0, 5).map((call, idx) => (
-              <div
-                key={idx}
-                className={`w-1.5 h-1.5 rounded-full ${TOOL_BADGE_COLORS[call.name] || "bg-[#d4a373]"}`}
-              />
-            ))}
-            {calls.length > 5 && (
-              <span className="text-[9px] font-bold text-[#a8a29e] pl-0.5">+{calls.length - 5}</span>
-            )}
-          </div>
-        </div>
-        <div className="p-1 rounded-lg bg-black/20 text-[#a8a29e] group-hover:text-[#d4a373] transition-colors shrink-0">
-          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </div>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="space-y-3 overflow-hidden"
-          >
-            {calls.map((tc, idx) => (
-              <ToolCard key={`${msgId}_tool_${idx}`} toolCall={tc} />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+function getToolStepLabel(toolCall: ToolCall): string {
+  const { name, args } = toolCall;
+  const a = args as any;
+  switch (name) {
+    case "addTask":
+      return `Creating task: "${a.text || "Untitled"}"`;
+    case "updateTask":
+      return `Updating task: "${a.titleHint || a.text || "Untitled"}"`;
+    case "completeTask":
+      return `Completing task: "${a.titleHint || "Task"}"`;
+    case "deleteTask":
+      return `Deleting task: "${a.titleHint || "Task"}"`;
+    case "addEvent":
+      return `Scheduling event: "${a.title || "Untitled"}"`;
+    case "updateEvent":
+      return `Updating event: "${a.titleHint || "Event"}"`;
+    case "deleteEvent":
+      return `Deleting event: "${a.titleHint || "Event"}"`;
+    case "searchWeb":
+      return `Researching web: "${a.query || ""}"`;
+    case "multiSearch":
+      return `Running broad research queries`;
+    case "updateUserBio":
+      return `Updating profile biography`;
+    case "saveSemanticMemory":
+      return `Retaining new semantic memory`;
+    case "deleteSemanticMemory":
+      return `Deleting semantic memory`;
+    case "listWorkspaces":
+      return `Listing user workspaces`;
+    case "create_habit":
+      return `Creating new habit: "${a.name || "Untitled"}"`;
+    case "log_habit":
+      return `Logging habit execution: "${a.titleHint || "Habit"}"`;
+    case "get_habit_consistency":
+      return `Checking habit consistency metrics`;
+    case "fetchUrl":
+      return `Reading content from: ${a.url || ""}`;
+    case "searchHistoricalEntities":
+      return `Searching historical completed tasks/events`;
+    default:
+      return name
+        .replace(/_/g, " ")
+        .replace(/([A-Z])/g, " $1")
+        .replace(/^./, (str) => str.toUpperCase());
+  }
 }
+
+function extractDomains(resultText?: string): string[] {
+  if (!resultText) return [];
+  const urlRegex = /https?:\/\/(?:www\.)?([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+)/gi;
+  const domains = new Set<string>();
+  let match;
+  while ((match = urlRegex.exec(resultText)) !== null) {
+    if (match[1]) {
+      domains.add(match[1].toLowerCase());
+    }
+  }
+  return Array.from(domains);
+}
+
 
 interface MessageBubbleProps {
   msg: {
     _id: string;
     author: string;
     text: string;
+    reasoning?: string;
+    parts?: Array<{
+      type: "text" | "reasoning";
+      text?: string;
+      reasoning?: string;
+    }>;
     timestamp: number;
     toolCall?: unknown;
     toolCalls?: unknown[];
@@ -107,11 +202,11 @@ interface MessageBubbleProps {
   };
   isLargeViewport: boolean;
   agentName?: string;
+  isStreaming?: boolean;
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport, agentName }: MessageBubbleProps) {
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
-
+export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport, agentName, isStreaming = false }: MessageBubbleProps) {
+  const smoothedText = useSmoothText(msg.text, isStreaming);
   return (
     <motion.div
       key={msg._id}
@@ -221,103 +316,86 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
           <p className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] whitespace-pre-wrap wrap-break-word font-sans min-w-0">{msg.text}</p>
         ) : (
           <div className="text-sm lg:text-[15px] leading-relaxed lg:leading-[1.7] text-[#f2efeb] font-sans prose prose-invert prose-sm max-w-none wrap-break-word w-full min-w-0">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkMath]}
-              rehypePlugins={[rehypeKatex]}
-              components={{
-                p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
-                ul: ({ children }) => <ul className="list-disc pl-4 mb-4 space-y-1">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal pl-4 mb-4 space-y-1">{children}</ol>,
-                li: ({ children }) => <li className="text-[#a8a29e]">{children}</li>,
-                strong: ({ children }) => <strong className="text-[#d4a373] font-bold">{children}</strong>,
-                pre: ({ children }: React.ComponentPropsWithoutRef<'pre'>) => {
-                  return (
-                    <div className="relative my-6 group/code min-w-0">
-                      {children}
-                    </div>
-                  );
-                },
-                code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<'code'>) => {
-                  const match = /language-(\w+)/.exec(className || "");
-                  const isInline = !className;
-                  
-                  if (isInline) {
+            {/* Thinking placeholder — shown only when still streaming with absolutely nothing generated yet */}
+            {isStreaming && !msg.text && !msg.reasoning && (
+              <div className="flex items-center gap-3 py-1 mb-4">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373]/60 animate-bounce [animation-delay:-0.32s]" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373]/60 animate-bounce [animation-delay:-0.16s]" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373]/60 animate-bounce" />
+                </div>
+                <span className="text-[11px] text-[#a8a29e]/50 font-medium tracking-wide animate-pulse">Thinking…</span>
+              </div>
+            )}
+            
+            {((): React.ReactNode => {
+              if (msg.parts && msg.parts.length > 0) {
+                let textCharIndex = 0;
+                return msg.parts.map((part, i) => {
+                  if (part.type === "reasoning") {
+                    const partText = part.text || (part as any).reasoning || "";
+                    if (!partText) return null;
                     return (
-                      <code className="bg-[#0f0e0c] px-1.5 py-0.5 rounded text-[#d4a373] font-mono text-[13px]" {...props}>
-                        {children}
-                      </code>
+                      <Reasoning 
+                        key={i} 
+                        className="w-full mb-4" 
+                        isStreaming={isStreaming && i === msg.parts!.length - 1}
+                      >
+                        <ReasoningTrigger />
+                        <ReasoningContent>{partText}</ReasoningContent>
+                      </Reasoning>
                     );
                   }
-
-                  const language = match ? match[1] : "text";
-                  const codeString = String(children).replace(/\n$/, "");
-
-                  return (
-                    <div className="relative">
-                      <div className="absolute top-0 right-4 -translate-y-1/2 flex items-center gap-2 z-10">
-                        {language && (
-                          <div className="px-2.5 py-1 rounded-lg bg-[#1a1814] border border-[#d4a373]/20 text-[9px] font-black uppercase tracking-[0.2em] text-[#d4a373] shadow-xl">
-                            {language}
-                          </div>
-                        )}
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(codeString);
-                            setCopiedCode(codeString);
-                            setTimeout(() => setCopiedCode(null), 2000);
-                          }}
-                          className="p-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all shadow-xl cursor-pointer"
-                          title="Copy Code"
-                        >
-                          {copiedCode === codeString ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                      <SyntaxHighlighter
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        style={vscDarkPlus as any}
-                        language={language}
-                        PreTag="div"
-                        customStyle={{
-                          margin: 0,
-                          padding: "1.25rem",
-                          background: "#0f0e0c",
-                          borderRadius: "1.5rem",
-                          border: "1px solid #2a2723",
-                          fontSize: "0.85rem",
-                          lineHeight: "1.6",
-                          boxShadow: "inset 0 2px 4px rgba(0,0,0,0.3)"
-                        }}
-                        codeTagProps={{
-                          style: {
-                            fontFamily: "inherit",
-                            background: "transparent"
-                          }
-                        }}
-                        {...props}
+                  if (part.type === "text") {
+                    const partText = part.text || "";
+                    if (!partText) return null;
+                    
+                    const startIdx = textCharIndex;
+                    const endIdx = startIdx + partText.length;
+                    textCharIndex = endIdx;
+                    
+                    const renderedText = smoothedText.slice(startIdx, endIdx);
+                    
+                    return (
+                      <ReactMarkdown
+                        key={i}
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={markdownComponents}
                       >
-                        {codeString}
-                      </SyntaxHighlighter>
-                    </div>
-                  );
-                },
-                table: ({ children }) => (
-                  <div className="overflow-x-auto mb-6">
-                    <table className="w-full text-sm border-collapse">{children}</table>
-                  </div>
-                ),
-                thead: ({ children }) => <thead className="border-b border-[#2a2723]">{children}</thead>,
-                tbody: ({ children }) => <tbody className="divide-y divide-[#2a2723]">{children}</tbody>,
-                tr: ({ children }) => <tr className="hover:bg-[#1f1d19]/50 transition-colors">{children}</tr>,
-                th: ({ children }) => <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-widest text-[#d4a373]">{children}</th>,
-                td: ({ children }) => <td className="px-3 py-2 text-[#a8a29e]">{children}</td>,
-              }}
-            >
-              {escapeCurrency(msg.text)}
-            </ReactMarkdown>
+                        {escapeCurrency(renderedText)}
+                      </ReactMarkdown>
+                    );
+                  }
+                  return null;
+                });
+              }
+
+              // Fallback for database records
+              return (
+                <>
+                  {msg.reasoning && (
+                    <Reasoning className="w-full mb-4" isStreaming={false}>
+                      <ReasoningTrigger />
+                      <ReasoningContent>{msg.reasoning}</ReasoningContent>
+                    </Reasoning>
+                  )}
+                  {msg.text && (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={markdownComponents}
+                    >
+                      {escapeCurrency(smoothedText)}
+                    </ReactMarkdown>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
-        {/* Consolidated Tool Calls with Progressive Disclosure */}
+        {/* Consolidated Tool Calls rendered as ChainOfThought, collapsed by default */}
         {msg.author === "AI" && (msg.toolCalls || msg.toolCall) ? ((): React.ReactNode => {
           const allToolCalls = (
             (msg.toolCalls as ToolCall[]) ||
@@ -326,20 +404,68 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
 
           if (allToolCalls.length === 0) return null;
 
-          if (allToolCalls.length < COLLAPSE_THRESHOLD) {
-            return (
-              <div className="space-y-3 mt-3 w-full">
-                {allToolCalls.map((tc, idx) => (
-                  <ToolCard key={`${msg._id}_tool_${idx}`} toolCall={tc} />
-                ))}
-              </div>
-            );
-          }
+          const completedCount = allToolCalls.filter(tc => tc.result !== undefined).length;
 
-          return <ToolCallGroup calls={allToolCalls} isLargeViewport={isLargeViewport} msgId={msg._id} />;
+          return (
+            <ChainOfThought className="mt-4" defaultOpen={false}>
+              <ChainOfThoughtHeader>
+                <div className="flex items-center gap-2">
+                  <span>Chain of Thought</span>
+                  <span className="text-[9px] bg-[#d4a373]/10 text-[#d4a373] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                    {completedCount}/{allToolCalls.length} Steps
+                  </span>
+                </div>
+              </ChainOfThoughtHeader>
+              <ChainOfThoughtContent>
+                <div className="space-y-4 pl-1 pt-1.5">
+                  {allToolCalls.map((tc, idx) => {
+                    const Icon = TOOL_ICONS[tc.name] || HelpCircle;
+                    const label = getToolStepLabel(tc);
+                    const isComplete = tc.result !== undefined;
+                    const status = isComplete ? "complete" : (isStreaming ? "active" : "pending");
+                    const domains = (tc.name === "searchWeb" || tc.name === "multiSearch") 
+                      ? extractDomains(tc.result as any) 
+                      : [];
+
+                    return (
+                      <ChainOfThoughtStep
+                        key={idx}
+                        icon={Icon}
+                        label={label}
+                        status={status}
+                      >
+                        {domains.length > 0 && (
+                          <ChainOfThoughtSearchResults className="mt-1.5">
+                            {domains.slice(0, 3).map((domain, dIdx) => (
+                              <ChainOfThoughtSearchResult key={dIdx}>
+                                {domain}
+                              </ChainOfThoughtSearchResult>
+                            ))}
+                          </ChainOfThoughtSearchResults>
+                        )}
+                        <div className="mt-2.5">
+                          <ToolCard toolCall={tc} />
+                        </div>
+                      </ChainOfThoughtStep>
+                    );
+                  })}
+                </div>
+              </ChainOfThoughtContent>
+            </ChainOfThought>
+          );
         })() : null}
       </div>
     </div>
     </motion.div>
+  );
+}, (prev, next) => {
+  return (
+    prev.msg._id === next.msg._id &&
+    prev.msg.text === next.msg.text &&
+    prev.msg.reasoning === next.msg.reasoning &&
+    prev.isLargeViewport === next.isLargeViewport &&
+    prev.agentName === next.agentName &&
+    prev.isStreaming === next.isStreaming &&
+    (prev.msg.toolCalls?.length ?? 0) === (next.msg.toolCalls?.length ?? 0)
   );
 });

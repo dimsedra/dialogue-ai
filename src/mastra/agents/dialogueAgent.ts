@@ -12,7 +12,6 @@ import { createDeepInfra } from '@ai-sdk/deepinfra';
 import { createTogetherAI } from '@ai-sdk/togetherai';
 import { createFireworks } from '@ai-sdk/fireworks';
 import { createAlibaba } from '@ai-sdk/alibaba';
-import { createBaseten } from '@ai-sdk/baseten';
 import { huggingface } from '@ai-sdk/huggingface';
 import { createMinimax } from 'vercel-minimax-ai-provider';
 import { ollama } from 'ollama-ai-provider';
@@ -76,9 +75,7 @@ export function createDialogueAgent(
     case 'alibaba':
       model = createAlibaba(opts)(modelId || 'qwen-turbo');
       break;
-    case 'baseten':
-      model = createBaseten(opts)(modelId || 'meta-llama/Llama-3.3-70B-Instruct');
-      break;
+
     case 'huggingface':
       model = huggingface(modelId || 'meta-llama/Meta-Llama-3.3-70B-Instruct');
       break;

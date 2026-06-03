@@ -62,6 +62,7 @@ export default defineSchema({
       args: v.any(),
       result: v.optional(v.any()),
     }))),
+    reasoning: v.optional(v.string()),
     storageId: v.optional(v.id("_storage")),
     fileType: v.optional(v.string()),
     fileName: v.optional(v.string()),
@@ -120,7 +121,7 @@ export default defineSchema({
     .index("by_hash", ["hash"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
-      dimensions: 768,
+      dimensions: 384,
       filterFields: ["userId"],
     }),
 

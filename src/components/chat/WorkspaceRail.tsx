@@ -60,7 +60,7 @@ export function WorkspaceRail({
               className="absolute -left-3 w-1.5 h-8 bg-[#d4a373] rounded-r-full shadow-[2px_0_10px_rgba(212,163,115,0.5)] z-20"
             />
           )}
-          <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
+          <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
             Dashboard
           </div>
         </button>
@@ -95,7 +95,7 @@ export function WorkspaceRail({
                 className="absolute left-0 w-1.5 h-8 bg-[#d4a373] rounded-r-full shadow-[2px_0_10px_rgba(212,163,115,0.4)] z-20"
               />
             )}
-            <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
+            <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
               {ws.name}
             </div>
           </div>
@@ -108,7 +108,7 @@ export function WorkspaceRail({
           >
             <Plus className="w-5 h-5" />
           </button>
-          <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
+          <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
             New Workspace
           </div>
         </div>
@@ -121,7 +121,7 @@ export function WorkspaceRail({
           className="w-12 h-12 rounded-[20px] bg-[#1a1814] border border-[#2a2723] flex items-center justify-center text-[#a8a29e] hover:text-[#d4a373] hover:border-[#d4a373]/30 transition-all shadow-lg group relative"
         >
           <Settings className="w-5 h-5" />
-          <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 group-hover:opacity-100 pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
+          <div className="absolute left-full ml-4 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[10px] font-bold uppercase tracking-widest text-[#f2efeb] opacity-0 invisible group-hover:opacity-100 group-hover:visible pointer-events-none transition-all -translate-x-2.5 group-hover:translate-x-0 z-100 whitespace-nowrap shadow-2xl">
             Settings
           </div>
         </Link>

@@ -19,12 +19,16 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageCustomizer } from "./PageCustomizer";
 import { usePageSettings } from "../../hooks/usePageSettings";
 import { DASHBOARD_DEFAULTS, getCardBgStyle } from "../../utils/color";
 import { NotificationBell } from "../notifications-bell";
 import { CardMenu } from "./CardMenu";
+
+// Plan C feature flag. Flip to false to roll back to the monolithic
+// getProactiveState query (still available as a fallback).
+const USE_SPLIT_PROACTIVE_STATE = true;
 
 type ProactiveState = FunctionReturnType<
   typeof api.dashboard.getProactiveState
@@ -199,10 +203,118 @@ export function Dashboard({
 
   const cardBgStyle = getCardBgStyle(bgSettings);
 
-  const proactiveState = useQuery(api.dashboard.getProactiveState, {
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    timezoneOffset: new Date().getTimezoneOffset(),
-  });
+  const now = useMemo(() => new Date(), []);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timezoneOffset = new Date().getTimezoneOffset();
+  const timeArgs = useMemo(
+    () => ({ timezone, timezoneOffset }),
+    [timezone, timezoneOffset],
+  );
+
+  const legacyProactiveState = useQuery(
+    api.dashboard.getProactiveState,
+    USE_SPLIT_PROACTIVE_STATE ? "skip" : timeArgs,
+  );
+
+  const splitAttention = useQuery(
+    api.dashboard.getAttentionNeeded,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const splitReflectionReady = useQuery(
+    api.dashboard.getReflectionReady,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const splitTaskTriage = useQuery(
+    api.dashboard.getTaskTriage,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const splitEventPrep = useQuery(
+    api.dashboard.getEventPrep,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const splitHabitCheck = useQuery(
+    api.dashboard.getHabitCheck,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const splitEveningLog = useQuery(
+    api.dashboard.getEveningLog,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const splitMorningBrief = useQuery(
+    api.dashboard.getMorningBrief,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const splitMutedStates = useQuery(
+    api.dashboard.getMutedCardStates,
+    USE_SPLIT_PROACTIVE_STATE ? {} : "skip",
+  );
+
+  // Client-side cascade. Order matches the original server cascade.
+  const proactiveState: ProactiveState = useMemo(() => {
+    if (!USE_SPLIT_PROACTIVE_STATE) {
+      return legacyProactiveState ?? { type: "all_caught_up" };
+    }
+    // Loading state: any of the split queries still resolving on first mount.
+    if (
+      splitAttention === undefined ||
+      splitReflectionReady === undefined ||
+      splitTaskTriage === undefined ||
+      splitEventPrep === undefined ||
+      splitHabitCheck === undefined ||
+      splitEveningLog === undefined ||
+      splitMorningBrief === undefined ||
+      splitMutedStates === undefined
+    ) {
+      return { type: "all_caught_up" };
+    }
+    const candidates: ProactiveState[] = [
+      ...(splitAttention ? [splitAttention as ProactiveState] : []),
+      ...(splitReflectionReady ? [splitReflectionReady as ProactiveState] : []),
+      ...(splitTaskTriage ? [splitTaskTriage as ProactiveState] : []),
+      ...(splitEventPrep ? [splitEventPrep as ProactiveState] : []),
+      ...(splitHabitCheck ? [splitHabitCheck as ProactiveState] : []),
+      ...(splitEveningLog ? [splitEveningLog as ProactiveState] : []),
+      ...(splitMorningBrief ? [splitMorningBrief as ProactiveState] : []),
+    ];
+    const nowMs = now.getTime();
+    for (const candidate of candidates) {
+      const cid = getCardIdForState(candidate);
+      const stateRow = splitMutedStates.find(
+        (r) => r.cardType === candidate.type && (r.cardId ?? "") === (cid ?? ""),
+      );
+      if (!stateRow) {
+        return candidate;
+      }
+      if (stateRow.mutedAt !== undefined) continue;
+      if (stateRow.snoozedUntil !== undefined && stateRow.snoozedUntil > nowMs) {
+        continue;
+      }
+      if (stateRow.dismissedAt !== undefined) {
+        if (
+          candidate.type === "habit_check" ||
+          candidate.type === "morning_brief" ||
+          candidate.type === "evening_log"
+        ) {
+          if (stateRow.dismissedAt >= nowMs - 24 * 60 * 60 * 1000) continue;
+        } else {
+          continue;
+        }
+      }
+      return candidate;
+    }
+    return { type: "all_caught_up" };
+  }, [
+    legacyProactiveState,
+    splitAttention,
+    splitReflectionReady,
+    splitTaskTriage,
+    splitEventPrep,
+    splitHabitCheck,
+    splitEveningLog,
+    splitMorningBrief,
+    splitMutedStates,
+    now,
+  ]);
 
   const lastTrackedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -225,8 +337,6 @@ export function Dashboard({
       console.error("markCardShown failed:", err);
     });
   }, [proactiveState, markCardShown]);
-
-  const now = new Date();
 
   const todayDateString = `${now.getFullYear()}-${String(
     now.getMonth() + 1,

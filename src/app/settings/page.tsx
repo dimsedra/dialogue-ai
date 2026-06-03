@@ -22,11 +22,18 @@ import {
   Eye,
   EyeOff,
   Bell,
+  ChevronDown,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { getProviderIcon } from "@/components/ProviderIcons";
+import { checkEmbeddingModel } from "@/app/actions/checkEmbeddingModel";
+
+import TavilyIcon from "@/img/icon/search/tavily.svg";
+import SerperIcon from "@/img/icon/search/serper.png";
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -65,20 +72,18 @@ export default function SettingsPage() {
 
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
-  type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic";
+  type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic" | "deepseek" | "xai" | "mistral" | "groq" | "cohere" | "moonshotai" | "deepinfra" | "togetherai" | "fireworks" | "alibaba" | "baseten" | "huggingface" | "minimax" | "ollama" | "opencode" | "openrouter" | "zhipu";
   const [provider, setProvider] = useState<AIProvider>("gemini");
   const [customConfigs, setCustomConfigs] = useState<
     Record<string, { apiKey?: string; baseUrl?: string; modelId?: string }>
   >({});
   const [taskModels, setTaskModels] = useState<Record<string, string>>({});
-  const [searchProvider, setSearchProvider] = useState<"tavily" | "serper">(
-    "tavily",
-  );
-  const [prevProfileId, setPrevProfileId] = useState<Id<"userProfile"> | null>(
-    null,
-  );
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [searchProvider, setSearchProvider] = useState<"tavily" | "serper">("tavily");
+  const [searchApiKey, setSearchApiKey] = useState("");
   const [showSearchApiKey, setShowSearchApiKey] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isLocalEmbeddingReady, setIsLocalEmbeddingReady] = useState(false);
+  const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"profile" | "ai" | "memory">(
     "profile",
@@ -90,6 +95,9 @@ export default function SettingsPage() {
   const [editMemoryText, setEditMemoryText] = useState("");
   const [newMemoryText, setNewMemoryText] = useState("");
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [prevProfileId, setPrevProfileId] = useState<Id<"userProfile"> | null>(
+    null,
+  );
 
   // Sync state during render when profile loads/changes
   if (profile && profile._id !== prevProfileId) {
@@ -114,6 +122,10 @@ export default function SettingsPage() {
       setPushEnabled(!!profile.preferences.pushEnabled);
     }
   }
+
+  useEffect(() => {
+    checkEmbeddingModel().then(setIsLocalEmbeddingReady);
+  }, []);
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
@@ -209,12 +221,36 @@ export default function SettingsPage() {
 
   const handleAddMemory = async () => {
     if (!newMemoryText.trim()) return;
-    const dummyEmbedding = Array(768)
+    const dummyEmbedding = Array(384)
       .fill(0)
-      .map(() => Math.random());
+      .map(() => Math.random() * 2 - 1);
     await addMemory({ text: newMemoryText, embedding: dummyEmbedding });
     setNewMemoryText("");
   };
+
+  const AI_PROVIDERS = [
+    { id: "gemini", name: "Google Gemini", desc: "Cloud-based reasoning and large context." },
+    { id: "openai", name: "OpenAI", desc: "GPT-4 and compatible endpoints." },
+    { id: "anthropic", name: "Anthropic", desc: "Claude 3.5 Sonnet and Opus." },
+    { id: "deepseek", name: "DeepSeek", desc: "DeepSeek Coder and Chat models." },
+    { id: "xai", name: "xAI (Grok)", desc: "Grok 2 and upcoming models." },
+    { id: "mistral", name: "Mistral AI", desc: "Open-weight and enterprise models." },
+    { id: "groq", name: "Groq", desc: "Ultra-fast inference via LPU." },
+    { id: "cohere", name: "Cohere", desc: "Command R+ and enterprise models." },
+    { id: "moonshotai", name: "Moonshot AI", desc: "Kimi models with long context." },
+    { id: "deepinfra", name: "DeepInfra", desc: "Serverless inference for OS models." },
+    { id: "togetherai", name: "Together AI", desc: "Fast inference for OS models." },
+    { id: "fireworks", name: "Fireworks AI", desc: "Blazing fast OS model serving." },
+    { id: "alibaba", name: "Alibaba (Qwen)", desc: "Qwen series of powerful OS models." },
+    { id: "baseten", name: "Baseten", desc: "Managed model inference." },
+    { id: "huggingface", name: "Hugging Face", desc: "Open source community models." },
+    { id: "minimax", name: "MiniMax", desc: "Powerful models including MiniMax M3." },
+    { id: "ollama", name: "Ollama", desc: "Run models locally with ease." },
+    { id: "opencode", name: "OpenCode", desc: "Terminal-based AI coding assistant." },
+    { id: "openrouter", name: "OpenRouter", desc: "Unified API for many AI models." },
+    { id: "zhipu", name: "Zhipu AI (GLM)", desc: "GLM series models by Zhipu AI." },
+    { id: "lmstudio", name: "LM Studio", desc: "Local execution for maximum privacy." },
+  ] as const;
 
   return (
     <div className="settings-container bg-[#0f0e0c] text-[#f2efeb] selection:bg-[#d4a373]/30 custom-scrollbar">
@@ -415,75 +451,86 @@ export default function SettingsPage() {
                       </h2>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2">
-                      {(
-                        [
-                          {
-                            id: "gemini",
-                            name: "Google Gemini",
-                            desc: "Cloud-based reasoning and large context.",
-                            icon: Zap,
-                          },
-                          {
-                            id: "openai",
-                            name: "OpenAI",
-                            desc: "GPT-4 and compatible endpoints.",
-                            icon: Sparkles,
-                          },
-                          {
-                            id: "anthropic",
-                            name: "Anthropic",
-                            desc: "Claude 3.5 Sonnet and Opus.",
-                            icon: Brain,
-                          },
-                          {
-                            id: "lmstudio",
-                            name: "LM Studio",
-                            desc: "Local execution for maximum privacy.",
-                            icon: Bot,
-                          },
-                        ] as const
-                      ).map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => {
-                            setProvider(p.id);
-                            setShowApiKey(false);
-                          }}
-                          className={`p-3 rounded-lg border transition-all text-left flex items-center justify-between group ${
-                            provider === p.id
-                              ? "bg-[#0f0e0c] border-[#d4a373]/40"
-                              : "bg-[#1a1814]/50 border-[#2a2723] hover:border-[#3a3733]"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3.5">
-                            <p.icon
-                              className={`w-4 h-4 ${provider === p.id ? "text-[#d4a373]" : "text-[#a8a29e]"}`}
-                            />
-                            <div>
-                              <h3
-                                className={`text-[13px] font-bold ${provider === p.id ? "text-[#f2efeb]" : "text-[#a8a29e]"}`}
-                              >
-                                {p.name}
-                              </h3>
-                              <p className="text-[10px] text-[#a8a29e] leading-tight">
-                                {p.desc}
-                              </p>
-                            </div>
-                          </div>
-                          <div
-                            className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
-                              provider === p.id
-                                ? "border-[#d4a373]"
-                                : "border-[#2a2723]"
-                            }`}
-                          >
-                            {provider === p.id && (
-                              <div className="h-2 w-2 rounded-full bg-[#d4a373]" />
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                    <div className="space-y-4">
+                      <div 
+                        className="space-y-2 relative"
+                        tabIndex={0}
+                        onBlur={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                            setIsProviderDropdownOpen(false);
+                          }
+                        }}
+                      >
+                        <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">
+                          Select Provider
+                        </label>
+                        
+                        {(() => {
+                          const activeProvider = AI_PROVIDERS.find(p => p.id === provider);
+                          if (!activeProvider) return null;
+                          const ProviderIcon = getProviderIcon(activeProvider.id);
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setIsProviderDropdownOpen(!isProviderDropdownOpen)}
+                              className="w-full text-left p-3 rounded-lg bg-[#0f0e0c] border border-[#2a2723] hover:border-[#3a3733] flex items-center justify-between gap-3.5 transition-all focus:outline-none focus:border-[#d4a373]/40"
+                            >
+                              <div className="flex items-center gap-3.5">
+                                <ProviderIcon className="w-5 h-5 text-[#d4a373]" />
+                                <div>
+                                  <h3 className="text-[13px] font-bold text-[#f2efeb]">
+                                    {activeProvider.name}
+                                  </h3>
+                                  <p className="text-[11px] text-[#a8a29e] leading-tight">
+                                    {activeProvider.desc}
+                                  </p>
+                                </div>
+                              </div>
+                              <ChevronDown className={`w-4 h-4 text-[#a8a29e] transition-transform ${isProviderDropdownOpen ? "rotate-180" : ""}`} />
+                            </button>
+                          );
+                        })()}
+
+                        <AnimatePresence>
+                          {isProviderDropdownOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -5 }}
+                              transition={{ duration: 0.15 }}
+                              className="absolute z-20 w-full mt-2 bg-[#0f0e0c] border border-[#2a2723] rounded-lg shadow-2xl max-h-64 overflow-y-auto"
+                            >
+                              {AI_PROVIDERS.map((p) => {
+                                const Icon = getProviderIcon(p.id);
+                                return (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setProvider(p.id as AIProvider);
+                                      setShowApiKey(false);
+                                      setIsProviderDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left p-3 flex items-center gap-3.5 hover:bg-[#1a1815] transition-colors border-b border-[#2a2723]/50 last:border-b-0 ${
+                                      provider === p.id ? "bg-[#1a1815]" : ""
+                                    }`}
+                                  >
+                                    <Icon className="w-5 h-5 text-[#d4a373]" />
+                                    <div>
+                                      <h3 className="text-[13px] font-bold text-[#f2efeb]">
+                                        {p.name}
+                                      </h3>
+                                      <p className="text-[11px] text-[#a8a29e] leading-tight">
+                                        {p.desc}
+                                      </p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
 
                     <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
@@ -710,6 +757,45 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="mt-6 pt-5 border-t border-[#2a2723]">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2.5">
+                          <Brain className="w-4 h-4 text-[#d4a373]" />
+                          <h2 className="text-base font-bold text-[#f2efeb]">
+                            Semantic Memory Engine
+                          </h2>
+                        </div>
+                        {isLocalEmbeddingReady ? (
+                          <div className="px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                              Local Engine Active
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="px-2 py-1 rounded-full bg-red-500/10 border border-red-500/20 flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider">
+                              Engine Missing
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className={`p-4 rounded-xl border ${isLocalEmbeddingReady ? "bg-[#d4a373]/5 border-[#d4a373]/20" : "bg-red-500/5 border-red-500/20"}`}>
+                        <div className="flex flex-col gap-1">
+                          <h3 className={`text-xs font-bold ${isLocalEmbeddingReady ? "text-[#d4a373]" : "text-red-400"}`}>
+                            Transformers.js (multilingual-e5-small)
+                          </h3>
+                          <p className="text-[11px] text-[#a8a29e] leading-relaxed">
+                            {isLocalEmbeddingReady 
+                              ? "The local embedding model is successfully bundled and cached. Dialogue is ready to securely vectorize your semantic memory entirely offline." 
+                              : "The local embedding model is missing from your models directory. Please run the download script to enable offline semantic memory."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-5 border-t border-[#2a2723]">
                       <div className="flex items-center gap-2.5 mb-4">
                         <Search className="w-4 h-4 text-[#d4a373]" />
                         <h2 className="text-base font-bold text-[#f2efeb]">
@@ -724,13 +810,13 @@ export default function SettingsPage() {
                               id: "tavily",
                               name: "Tavily AI",
                               desc: "Optimized for LLM research.",
-                              icon: Zap,
+                              imageSrc: TavilyIcon,
                             },
                             {
                               id: "serper",
                               name: "Serper.dev",
                               desc: "Google Search API power.",
-                              icon: Globe,
+                              imageSrc: SerperIcon,
                             },
                           ] as const
                         ).map((s) => (
@@ -747,8 +833,12 @@ export default function SettingsPage() {
                             }`}
                           >
                             <div className="flex items-center justify-between mb-1.5">
-                              <s.icon
-                                className={`w-3.5 h-3.5 ${searchProvider === s.id ? "text-[#d4a373]" : "text-[#a8a29e]"}`}
+                              <Image 
+                                src={s.imageSrc} 
+                                alt={s.name} 
+                                width={16} 
+                                height={16}
+                                className={`object-contain ${searchProvider === s.id ? "opacity-100" : "opacity-50 grayscale"}`}
                               />
                               <div
                                 className={`h-3.5 w-3.5 rounded-full border-2 flex items-center justify-center ${

@@ -1,7 +1,24 @@
 "use node";
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenerativeAI, Part } from "@google/generative-ai";
+import { generateText, jsonSchema } from "ai";
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createXai } from '@ai-sdk/xai';
+import { createMistral } from '@ai-sdk/mistral';
+import { createGroq } from '@ai-sdk/groq';
+import { createCohere } from '@ai-sdk/cohere';
+import { createMoonshotAI } from '@ai-sdk/moonshotai';
+import { createDeepInfra } from '@ai-sdk/deepinfra';
+import { createTogetherAI } from '@ai-sdk/togetherai';
+import { createFireworks } from '@ai-sdk/fireworks';
+import { createAlibaba } from '@ai-sdk/alibaba';
+import { huggingface } from '@ai-sdk/huggingface';
+import { createMinimax } from 'vercel-minimax-ai-provider';
+import { ollama } from 'ollama-ai-provider';
+import { opencode } from 'ai-sdk-provider-opencode-sdk';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { zhipu } from 'zhipu-ai-provider';
 
 export const PROVIDER_CAPABILITIES: Record<string, { multimodal: boolean }> = {
   gemini: { multimodal: true },
@@ -16,21 +33,19 @@ export interface ChatEngineOptions {
   systemInstruction: string;
   transcript: string;
   userMessage: string;
-  mediaParts: Part[];
+  mediaParts: any[];
   extractedTexts: string[];
   tools: any[];
 }
 
 export interface ChatEngineResult {
   text: string;
-  calls: Array<{ name: string; args: Record<string, unknown>; originalGeminiCall?: any }>;
+  calls: Array<{ name: string; args: Record<string, unknown> }>;
   reasoningContent?: string;
-  rawModelParts?: any[];
 }
 
 function parseXmlToolCalls(text: string): Array<{ name: string; args: Record<string, unknown> }> {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
-  // Match both plain <tool_calls> and <||DSML||tool_calls> variants
   const toolCallsRegex = /<(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>([\s\S]*?)<\/(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>/g;
   let match;
   while ((match = toolCallsRegex.exec(text)) !== null) {
@@ -62,191 +77,175 @@ function parseXmlToolCalls(text: string): Array<{ name: string; args: Record<str
   return calls;
 }
 
-export async function runChatEngine(options: ChatEngineOptions): Promise<ChatEngineResult> {
-  const { provider, customConfigs, systemInstruction, transcript, userMessage, mediaParts, extractedTexts, tools } = options;
+export const PROVIDER_BASE_URLS: Record<string, string> = {
+  openai: "https://api.openai.com/v1",
+  deepseek: "https://api.deepseek.com/v1",
+  xai: "https://api.x.ai/v1",
+  groq: "https://api.groq.com/openai/v1",
+  togetherai: "https://api.together.xyz/v1",
+  fireworks: "https://api.fireworks.ai/inference/v1",
+  openrouter: "https://openrouter.ai/api/v1",
+  deepinfra: "https://api.deepinfra.com/v1/openai",
+  ollama: "http://localhost:11434/v1",
+  lmstudio: "http://localhost:1234/v1",
+  mistral: "https://api.mistral.ai/v1",
+  cohere: "https://api.cohere.com/v1",
+  moonshotai: "https://api.moonshot.cn/v1",
+  zhipu: "https://open.bigmodel.cn/api/paas/v4",
+};
 
+export const PROVIDER_ENV_KEYS: Record<string, string> = {
+  openai: "OPENAI_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  xai: "XAI_API_KEY",
+  groq: "GROQ_API_KEY",
+  togetherai: "TOGETHERAI_API_KEY",
+  fireworks: "FIREWORKS_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+  deepinfra: "DEEPINFRA_API_KEY",
+  mistral: "MISTRAL_API_KEY",
+  cohere: "COHERE_API_KEY",
+  moonshotai: "MOONSHOTAI_API_KEY",
+  zhipu: "ZHIPU_API_KEY",
+};
+
+export function getVercelModel(provider: string, customConfigs: any, modelId?: string): any {
   const config = customConfigs?.[provider] || {};
   let apiKey = config.apiKey || "";
   let baseUrl = config.baseUrl || undefined;
+  
   if (!baseUrl && provider === "lmstudio") {
     baseUrl = "http://localhost:1234/v1";
   }
-  const modelId = config.modelId || undefined;
+  
+  if (!apiKey) {
+    const envKeyName = PROVIDER_ENV_KEYS[provider] || "OPENAI_API_KEY";
+    apiKey = process.env[envKeyName] || "";
+    if (provider === "lmstudio" && !apiKey) apiKey = "lm-studio";
+    if (provider === "gemini" && !apiKey) apiKey = process.env.GEMINI_API_KEY || "";
+    if (provider === "anthropic" && !apiKey) apiKey = process.env.ANTHROPIC_API_KEY || "";
+  }
 
-  // Format attached files
+  const opts = { apiKey: apiKey || undefined, baseURL: baseUrl || undefined };
+  const resolvedModelId = modelId || config.modelId;
+
+  switch (provider) {
+    case 'anthropic':
+      return createAnthropic(opts)(resolvedModelId || 'claude-3-5-haiku-latest');
+    case 'gemini':
+      return createGoogleGenerativeAI(opts)(resolvedModelId || 'gemini-2.0-flash-lite');
+    case 'deepseek':
+      return createDeepSeek(opts)(resolvedModelId || 'deepseek-chat');
+    case 'xai':
+      return createXai(opts)(resolvedModelId || 'grok-2-latest');
+    case 'mistral':
+      return createMistral(opts)(resolvedModelId || 'mistral-large-latest');
+    case 'groq':
+      return createGroq(opts)(resolvedModelId || 'llama3-8b-8192');
+    case 'cohere':
+      return createCohere(opts)(resolvedModelId || 'command-r-plus');
+    case 'moonshotai':
+      return createMoonshotAI(opts)(resolvedModelId || 'moonshot-v1-8k');
+    case 'deepinfra':
+      return createDeepInfra(opts)(resolvedModelId || 'meta-llama/Meta-Llama-3.3-70B-Instruct');
+    case 'togetherai':
+      return createTogetherAI(opts)(resolvedModelId || 'meta-llama/Llama-3.3-70B-Instruct-Turbo');
+    case 'fireworks':
+      return createFireworks(opts)(resolvedModelId || 'accounts/fireworks/models/llama-v3p3-70b-instruct');
+    case 'alibaba':
+      return createAlibaba(opts)(resolvedModelId || 'qwen-turbo');
+    case 'huggingface':
+      return huggingface(resolvedModelId || 'meta-llama/Meta-Llama-3.3-70B-Instruct');
+    case 'minimax':
+      return createMinimax(opts)(resolvedModelId || 'minimax/minimax-m3');
+    case 'ollama':
+      return ollama(resolvedModelId || 'llama3.3');
+    case 'opencode':
+      return opencode(resolvedModelId || 'anthropic/claude-3-5-sonnet-20241022');
+    case 'openrouter':
+      return createOpenRouter(opts)(resolvedModelId || 'anthropic/claude-3.5-sonnet:beta');
+    case 'zhipu':
+      return zhipu(resolvedModelId || 'glm-4-plus');
+    case 'lmstudio':
+      return createOpenAI(opts)(resolvedModelId || 'default');
+    default:
+      return createOpenAI(opts)(resolvedModelId || 'gpt-4o-mini');
+  }
+}
+
+export async function runChatEngine(options: ChatEngineOptions): Promise<ChatEngineResult> {
+  const { provider, customConfigs, systemInstruction, transcript, userMessage, mediaParts, extractedTexts, tools } = options;
+
+  const model = getVercelModel(provider, customConfigs) as any;
+  
   const attachedTexts = extractedTexts.length > 0 
     ? `\n\nADDITIONAL ATTACHED FILE CONTENTS:\n${extractedTexts.join("\n\n---\n\n")}` 
     : "";
 
-  if (provider === "openai" || provider === "lmstudio") {
-    if (!apiKey && provider === "openai") apiKey = process.env.OPENAI_API_KEY || "";
-    // LMStudio might not need an API key
-    if (!apiKey && provider === "lmstudio") apiKey = "lm-studio";
+  const contentArray: any[] = [];
+  contentArray.push({ type: "text", text: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}${attachedTexts}` });
 
-    const openai = new OpenAI({ apiKey, baseURL: baseUrl });
-
-    const openAiTools = tools.flatMap((t: any) => t.functionDeclarations).map((fd: any) => {
-      return {
-        type: "function" as const,
-        function: {
-          name: fd.name,
-          description: fd.description,
-          parameters: {
-            type: "object" as const,
-            properties: fd.parameters.properties,
-            required: fd.parameters.required || []
-          }
-        }
-      };
-    });
-
-    const contentArray: any[] = [];
-    contentArray.push({ type: "text", text: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}${attachedTexts}` });
-
-    for (const part of mediaParts) {
-      if (part.inlineData) {
-        contentArray.push({
-          type: "image_url",
-          image_url: {
-            url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
-          }
-        });
-      }
+  for (const part of mediaParts) {
+    if (part.inlineData) {
+      contentArray.push({
+        type: "image",
+        image: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
+      });
     }
+  }
 
-    const response = await openai.chat.completions.create({
-      model: modelId || "gpt-5.5",
-      messages: [
-        { role: "system", content: systemInstruction },
-        { role: "user", content: contentArray as any }
-      ],
-      tools: openAiTools,
-      tool_choice: "auto",
-    });
-
-    const msg = response.choices[0].message;
-    let text = msg.content || "";
-    const calls: any[] = msg.tool_calls?.map(tc => {
-      if (tc.type === "function") {
-        return {
-          name: tc.function.name,
-          args: JSON.parse(tc.function.arguments)
-        };
-      }
-      return null;
-    }).filter(Boolean) || [];
-
-    const xmlCalls = parseXmlToolCalls(text);
-    if (xmlCalls.length > 0) {
-      calls.push(...xmlCalls);
-      text = text.replace(/<(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>[\s\S]*?<\/(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>/g, "").trim();
-    }
-
-    const reasoningContent = (msg as any).reasoning_content || (msg as any).thinking || undefined;
-    return { text, calls, reasoningContent };
-
-  } else if (provider === "anthropic") {
-    if (!apiKey) apiKey = process.env.ANTHROPIC_API_KEY || "";
-
-    const anthropic = new Anthropic({ apiKey, baseURL: baseUrl });
-
-    const anthropicTools = tools.flatMap((t: any) => t.functionDeclarations).map((fd: any) => {
-      const inputSchema = {
-        type: "object" as const,
+  const vercelTools: Record<string, any> = {};
+  for (const fd of tools.flatMap((t: any) => t.functionDeclarations || [])) {
+    vercelTools[fd.name] = {
+      description: fd.description,
+      parameters: jsonSchema({
+        type: "object",
         properties: fd.parameters.properties,
         required: fd.parameters.required || []
-      };
-      return {
-        name: fd.name,
-        description: fd.description,
-        input_schema: inputSchema
-      };
-    });
-
-    const contentArray: any[] = [];
-    
-    for (const part of mediaParts) {
-      if (part.inlineData) {
-        contentArray.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: part.inlineData.mimeType as any,
-            data: part.inlineData.data
-          }
-        });
-      }
-    }
-    
-    contentArray.push({ type: "text", text: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}${attachedTexts}` });
-
-    const response = await anthropic.messages.create({
-      model: modelId || "claude-sonnet-4.6",
-      max_tokens: 4096,
-      system: systemInstruction,
-      messages: [
-        { role: "user", content: contentArray as any }
-      ],
-      tools: anthropicTools,
-    });
-
-    let text = "";
-    const calls: Array<{name: string, args: any}> = [];
-
-    for (const block of response.content) {
-      if (block.type === "text") {
-        text += block.text;
-      } else if (block.type === "tool_use") {
-        calls.push({
-          name: block.name,
-          args: block.input as any
-        });
-      }
-    }
-
-    return { text, calls };
-
-  } else {
-    // Default to Gemini
-    if (!apiKey) apiKey = process.env.GEMINI_API_KEY || "";
-    
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: modelId || "gemini-2.0-flash",
-      systemInstruction,
-      tools,
-    }, { baseUrl });
-
-    const promptParts: (string | Part)[] = [
-      `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}${attachedTexts}`,
-      ...mediaParts,
-    ];
-
-    let result;
-    try {
-      result = await model.generateContent(promptParts);
-    } catch (err: any) {
-      if (err?.status === 429 || err?.message?.includes("429")) {
-        throw new Error("Rate Limit");
-      }
-      throw err;
-    }
-
-    const response = result.response;
-    const text = response.text() || "";
-    const fnCalls = response.functionCalls();
-    
-    const calls = fnCalls ? fnCalls.map(c => ({
-      name: c.name,
-      args: c.args as Record<string, unknown>,
-      originalGeminiCall: c
-    })) : [];
-
-    const rawModelParts = response.candidates?.[0]?.content?.parts;
-
-    return { text, calls, rawModelParts };
+      })
+    };
   }
+
+  const result = await generateText({
+    model,
+    system: systemInstruction,
+    messages: [
+      { role: "user", content: contentArray }
+    ],
+    tools: vercelTools,
+  });
+
+  const text = result.text;
+  const calls = result.toolCalls ? result.toolCalls.map((tc: any) => ({
+    name: tc.toolName,
+    args: tc.args
+  })) : [];
+
+  const xmlCalls = parseXmlToolCalls(text);
+  let cleanedText = text;
+  if (xmlCalls.length > 0) {
+    calls.push(...xmlCalls);
+    cleanedText = cleanedText.replace(/<(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>[\s\S]*?<\/(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>/g, "").trim();
+  }
+
+  let reasoningContent: string | undefined = undefined;
+  if (result.reasoning) {
+    if (typeof result.reasoning === "string") {
+      reasoningContent = result.reasoning;
+    } else if (Array.isArray(result.reasoning)) {
+      reasoningContent = (result.reasoning as any[])
+        .map((part) => (part.type === "text" ? part.text : ""))
+        .join("");
+    }
+  }
+
+  return {
+    text: cleanedText,
+    calls,
+    reasoningContent
+  };
 }
+
 function cleanFollowUpText(text: string): string {
   return text.replace(/<(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>[\s\S]*?<\/(?:[|｜][|｜]DSML[|｜][|｜])?tool_calls>/g, "").trim();
 }
@@ -257,21 +256,13 @@ export interface FollowUpOptions {
   systemInstruction: string;
   transcript: string;
   userMessage: string;
-  calls: Array<{ name: string; args: Record<string, unknown>; result?: any; originalGeminiCall?: any }>;
+  calls: Array<{ name: string; args: Record<string, unknown>; result?: any }>;
   executedActionSummaries: { name: string; summary: string; isSearch?: boolean }[];
   reasoningContent?: string;
-  rawModelParts?: any[];
 }
 
 export async function executeChatFollowUp(options: FollowUpOptions): Promise<string> {
-  const { provider, customConfigs, systemInstruction, transcript, userMessage, calls, executedActionSummaries, reasoningContent, rawModelParts } = options;
-  const config = customConfigs?.[provider] || {};
-  let apiKey = config.apiKey || "";
-  let baseUrl = config.baseUrl || undefined;
-  if (!baseUrl && provider === "lmstudio") {
-    baseUrl = "http://localhost:1234/v1";
-  }
-  const modelId = config.modelId || undefined;
+  const { provider, customConfigs, systemInstruction, transcript, userMessage, calls, executedActionSummaries } = options;
 
   const hasSearch = executedActionSummaries.some(s => s.isSearch);
   const hasDbAction = executedActionSummaries.some(s => !s.isSearch);
@@ -285,7 +276,6 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
     promptInstruction = "The requested actions were successfully executed in the database. Now, output ONLY your natural, conversational confirmation addressed directly to the user, using the EXACT same language the user used in their query. CRITICAL: Do NOT repeat or output any internal prompt instructions, scratchpad notes, or thought processes.";
   }
 
-  // Clean system instruction to strip tool definitions and skills rules
   let cleanSystemInstruction = systemInstruction;
   const skillsIndex = systemInstruction.indexOf("## Agent Skills Reference");
   if (skillsIndex !== -1) {
@@ -305,122 +295,48 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
     3. Do NOT greet the user (e.g. do not say "Hi", "Hello") since this is a continuation of the conversation turn.
   `;
 
-  if (provider === "openai" || provider === "lmstudio") {
-    if (!apiKey && provider === "openai") apiKey = process.env.OPENAI_API_KEY || "";
-    if (!apiKey && provider === "lmstudio") apiKey = "lm-studio";
+  const model = getVercelModel(provider, customConfigs) as any;
 
-    const openai = new OpenAI({ apiKey, baseURL: baseUrl });
+  const messages: any[] = [
+    { role: "user", content: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}` }
+  ];
 
-    const isDeepSeek = modelId?.toLowerCase().includes("deepseek") || provider === "lmstudio";
-
-    if (isDeepSeek) {
-      const assistantText = calls.map(c => `[Tool Call]: ${c.name}(${JSON.stringify(c.args)})`).join("\n");
-      const toolResponseText = executedActionSummaries.map(s => `[Tool Output - ${s.name}]:\n${s.summary}`).join("\n\n");
-
-      const messages: any[] = [
-        { role: "system", content: cleanSystemInstruction },
-        { role: "user", content: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}` },
-        { role: "assistant", content: assistantText },
-        { role: "user", content: `Here are the tool execution results:\n\n${toolResponseText}\n\n${promptInstruction}` }
-      ];
-
-      const response = await openai.chat.completions.create({
-        model: modelId || "default",
-        messages
-      });
-
-      return cleanFollowUpText(response.choices[0].message.content || "");
-    }
-
-    const assistantMsg: any = { 
-      role: "assistant", 
-      tool_calls: calls.map((c, i) => ({ id: `call_${i}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.args) } }))
-    };
-    if (reasoningContent) {
-      assistantMsg.reasoning_content = reasoningContent;
-    }
-
-    const messages: any[] = [
-      { role: "system", content: cleanSystemInstruction },
-      { role: "user", content: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}` },
-      assistantMsg
-    ];
-
-    calls.forEach((c, i) => {
-      const summary = executedActionSummaries.find(s => s.name === c.name)?.summary || "Success";
-      messages.push({
-        role: "tool",
-        tool_call_id: `call_${i}`,
-        name: c.name,
-        content: summary
-      });
+  if (calls.length > 0) {
+    messages.push({
+      role: "assistant",
+      content: calls.map((c, i) => ({
+        type: "tool-call",
+        toolCallId: `call_${i}`,
+        toolName: c.name,
+        args: c.args
+      }))
     });
 
-    if (promptInstruction) {
-      messages.push({ role: "user", content: promptInstruction });
-    }
-
-    const response = await openai.chat.completions.create({
-      model: modelId || "gpt-5.5",
-      messages
+    messages.push({
+      role: "tool",
+      content: calls.map((c, i) => {
+        const summary = executedActionSummaries.find(s => s.name === c.name)?.summary || "Success";
+        return {
+          type: "tool-result",
+          toolCallId: `call_${i}`,
+          toolName: c.name,
+          result: summary
+        };
+      })
     });
-
-    return cleanFollowUpText(response.choices[0].message.content || "");
-
-  } else if (provider === "anthropic") {
-    if (!apiKey) apiKey = process.env.ANTHROPIC_API_KEY || "";
-    const anthropic = new Anthropic({ apiKey, baseURL: baseUrl });
-
-    const messages: any[] = [
-      { role: "user", content: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}` },
-      {
-        role: "assistant",
-        content: calls.map((c, i) => ({ type: "tool_use", id: `toolu_${i}`, name: c.name, input: c.args }))
-      }
-    ];
-
-    const toolResultContent = calls.map((c, i) => {
-      const summary = executedActionSummaries.find(s => s.name === c.name)?.summary || "Success";
-      return { type: "tool_result", tool_use_id: `toolu_${i}`, content: summary };
-    });
-
-    messages.push({ role: "user", content: toolResultContent as any });
-    
-    if (promptInstruction) {
-      messages.push({ role: "user", content: promptInstruction });
-    }
-
-    const response = await anthropic.messages.create({
-      model: modelId || "claude-sonnet-4.6",
-      max_tokens: 4096,
-      system: cleanSystemInstruction,
-      messages
-    });
-
-    const rawText = response.content.filter(c => c.type === "text").map((c: any) => c.text).join("") || "";
-    return cleanFollowUpText(rawText);
-
-  } else {
-    if (!apiKey) apiKey = process.env.GEMINI_API_KEY || "";
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelId || "gemini-2.0-flash", systemInstruction: cleanSystemInstruction }, { baseUrl });
-
-    const functionCalls = calls.map(c => ({ functionCall: { name: c.name, args: c.args } }));
-    const functionResponses = calls.map(c => {
-      const summary = executedActionSummaries.find(s => s.name === c.name)?.summary || "Success";
-      return { functionResponse: { name: c.name, response: { status: "success", executionDetails: summary, result: summary } } };
-    });
-
-    const promptParts = [
-      { role: "user", parts: [{ text: `Conversation History:\n${transcript}\n\nUser's New Message: ${userMessage}` }] },
-      { role: "model", parts: rawModelParts || functionCalls },
-      { role: "user", parts: [...functionResponses, ...(promptInstruction ? [{ text: promptInstruction }] : [])] }
-    ];
-
-    const response = await model.generateContent({ contents: promptParts as any });
-    const rawText = response.response.text() || "";
-    return cleanFollowUpText(rawText);
   }
+
+  if (promptInstruction) {
+    messages.push({ role: "user", content: promptInstruction });
+  }
+
+  const result = await generateText({
+    model,
+    system: cleanSystemInstruction,
+    messages,
+  });
+
+  return cleanFollowUpText(result.text);
 }
 
 export interface TaskOptions {
@@ -431,64 +347,63 @@ export interface TaskOptions {
   modelId?: string;
 }
 
-export async function runSimpleTask(options: TaskOptions): Promise<string> {
-  const { provider, customConfigs, prompt, systemInstruction, modelId } = options;
-  const config = customConfigs?.[provider] || {};
-  let apiKey = config.apiKey || "";
-  let baseUrl = config.baseUrl || undefined;
-  if (!baseUrl && provider === "lmstudio") {
-    baseUrl = "http://localhost:1234/v1";
-  }
-  const resolvedModelId = modelId || config.modelId;
-
-  if (provider === "openai" || provider === "lmstudio") {
-    if (!apiKey && provider === "openai") apiKey = process.env.OPENAI_API_KEY || "";
-    if (!apiKey && provider === "lmstudio") apiKey = "lm-studio";
-
-    const openai = new OpenAI({ apiKey, baseURL: baseUrl });
-    const messages = [];
-    if (systemInstruction) {
-      messages.push({ role: "system" as const, content: systemInstruction });
+export function getTaskProviderAndModel(profile: any, task: string): { provider: string; modelId: string } {
+  const models = (profile?.preferences as any)?.taskModels || {};
+  const taskModel = models[task];
+  
+  const mainProvider = (profile?.preferences as any)?.provider || "gemini";
+  
+  if (taskModel) {
+    const lowerModel = taskModel.toLowerCase();
+    if (lowerModel.includes("gpt-") || lowerModel.includes("dall-e") || lowerModel.startsWith("text-embedding")) {
+      return { provider: "openai", modelId: taskModel };
     }
-    messages.push({ role: "user" as const, content: prompt });
-
-    const response = await openai.chat.completions.create({
-      model: resolvedModelId || "gpt-4o-mini",
-      messages,
-      temperature: 0.1,
-    });
-    return response.choices[0].message.content || "";
-
-  } else if (provider === "anthropic") {
-    if (!apiKey) apiKey = process.env.ANTHROPIC_API_KEY || "";
-
-    const anthropic = new Anthropic({ apiKey, baseURL: baseUrl });
-    const response = await anthropic.messages.create({
-      model: resolvedModelId || "claude-3-5-haiku-latest",
-      max_tokens: 1000,
-      system: systemInstruction,
-      messages: [{ role: "user" as const, content: prompt }],
-      temperature: 0.1,
-    });
-    let text = "";
-    for (const block of response.content) {
-      if (block.type === "text") {
-        text += block.text;
+    if (lowerModel.includes("claude-")) {
+      return { provider: "anthropic", modelId: taskModel };
+    }
+    if (lowerModel.includes("gemini-")) {
+      return { provider: "gemini", modelId: taskModel };
+    }
+    if (lowerModel.includes("deepseek-")) {
+      return { provider: "deepseek", modelId: taskModel };
+    }
+    if (lowerModel.includes("grok-")) {
+      return { provider: "xai", modelId: taskModel };
+    }
+    if (lowerModel.includes("mistral-")) {
+      return { provider: "mistral", modelId: taskModel };
+    }
+    if (lowerModel.includes("llama") || lowerModel.includes("qwen") || lowerModel.includes("phi")) {
+      if (mainProvider === "lmstudio" || mainProvider === "ollama") {
+        return { provider: mainProvider, modelId: taskModel };
       }
+      return { provider: mainProvider, modelId: taskModel };
     }
-    return text;
-
-  } else {
-    // Default to Gemini
-    if (!apiKey) apiKey = process.env.GEMINI_API_KEY || "";
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: resolvedModelId || "gemini-2.0-flash-lite",
-      systemInstruction,
-    }, { baseUrl });
-
-    const result = await model.generateContent(prompt);
-    return result.response.text() || "";
+    return { provider: mainProvider, modelId: taskModel };
   }
+  
+  const configs = (profile?.preferences as any)?.customConfigs || {};
+  const mainModel = configs[mainProvider]?.modelId;
+  
+  let fallbackModel = mainModel;
+  if (!fallbackModel) {
+    if (mainProvider === "openai") fallbackModel = "gpt-4o-mini";
+    else if (mainProvider === "anthropic") fallbackModel = "claude-3-5-haiku-latest";
+    else if (mainProvider === "lmstudio") fallbackModel = "";
+    else fallbackModel = "gemini-2.0-flash-lite";
+  }
+  
+  return { provider: mainProvider, modelId: fallbackModel };
 }
 
+export async function runSimpleTask(options: TaskOptions): Promise<string> {
+  const { provider, customConfigs, prompt, systemInstruction, modelId } = options;
+  const model = getVercelModel(provider, customConfigs, modelId) as any;
+  const result = await generateText({
+    model,
+    prompt,
+    system: systemInstruction,
+    temperature: 0.1,
+  });
+  return result.text;
+}

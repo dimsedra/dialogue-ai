@@ -66,6 +66,12 @@ export const MessageStream = React.memo(function MessageStream({
   const prevMessageCountRef = useRef(0);
   const prevScrollHeightRef = useRef<number>(0);
   const expectedLengthOnLoadRef = useRef<number | null>(null);
+  const anchoredMessageIdsRef = useRef<Set<string>>(new Set());
+
+  // Reset anchored message IDs when switching chat sessions
+  useEffect(() => {
+    anchoredMessageIdsRef.current.clear();
+  }, [activeSessionId]);
 
   // Auto-load older messages when the top sentinel enters the viewport.
   useEffect(() => {
@@ -185,14 +191,24 @@ export const MessageStream = React.memo(function MessageStream({
 
       // User's own message just appeared → anchor it to the top of the viewport
       if (newestMsg.author === "User") {
-        anchorToMessage(newestMsg._id, "start");
+        if (!anchoredMessageIdsRef.current.has(newestMsg._id)) {
+          anchoredMessageIdsRef.current.add(newestMsg._id);
+          anchorToMessage(newestMsg._id, "start");
+        }
       }
       // AI response arrived → re-anchor to user's last message at "start"
-      // so the user sees their prompt at top with AI response flowing below
+      // so the user sees their prompt at top with AI response flowing below.
+      // We only run this anchoring when the AI first starts its response
+      // and the user has not explicitly scrolled up to read history (showScrollBottom is false).
       else if (newestMsg.author === "AI") {
-        const lastUserMsg = [...messages].reverse().find(m => m.author === "User");
-        if (lastUserMsg) {
-          anchorToMessage(lastUserMsg._id, "start");
+        if (!anchoredMessageIdsRef.current.has(newestMsg._id)) {
+          anchoredMessageIdsRef.current.add(newestMsg._id);
+          if (!showScrollBottom) {
+            const lastUserMsg = [...messages].reverse().find(m => m.author === "User");
+            if (lastUserMsg) {
+              anchorToMessage(lastUserMsg._id, "start");
+            }
+          }
         }
       }
     }
@@ -204,7 +220,7 @@ export const MessageStream = React.memo(function MessageStream({
         setTimeout(() => onTypingDone(), 0);
       }
     }
-  }, [messages, isTyping, anchorToMessage, onTypingDone]);
+  }, [messages, isTyping, anchorToMessage, onTypingDone, showScrollBottom]);
 
   return (
     <>

@@ -49,7 +49,7 @@ export const cronTriggerWeekly = internalMutation({
       if (existing) continue; // Already generated this week
 
       // OCEAN prompt (agent-facing)
-      await ctx.scheduler.runAfter(0, internal.ai_action.generateWeeklyOCEAN, {
+      await ctx.scheduler.runAfter(0, internal.background_jobs.generateWeeklyOCEAN, {
         userId: user._id,
         timezone,
         timezoneOffset: offset,
@@ -85,10 +85,72 @@ export const cronTriggerMonthly = internalMutation({
         .first();
       const timezone = lastSession?.timezone || "UTC";
 
-      await ctx.scheduler.runAfter(0, internal.ai_action.generateMonthlyOCEAN, {
+      await ctx.scheduler.runAfter(0, internal.background_jobs.generateMonthlyOCEAN, {
         userId: user._id,
         timezone,
       });
     }
   },
+});
+import { query } from "./_generated/server";
+import { v } from "convex/values";
+
+export const checkPendingOCEAN = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const lastSession = await ctx.db
+      .query("chatSessions")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .first();
+
+    const timezone = lastSession?.timezone || "UTC";
+    const offset = getOffsetMinutes(timezone);
+
+    const now = new Date();
+    const localNow = new Date(now.getTime() - offset * 60000);
+    const dayOfWeek = localNow.getUTCDay(); // 0=Sun, 1=Mon
+
+    // Calculate Monday of this week (most recent Monday before or on today)
+    const daysSinceMonday = (dayOfWeek + 6) % 7; // Mon=0, Sun=6
+    const localMonday = new Date(Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate() - daysSinceMonday));
+    const weekStartTime = localMonday.getTime() - offset * 60000;
+    
+    // We always want to generate a digest for the PREVIOUS week (which ended right before this weekStartTime)
+    const prevWeekStart = weekStartTime - 7 * 24 * 60 * 60 * 1000;
+
+    // Do we have a digest for the previous week?
+    const existingWeekly = await ctx.db
+      .query("weeklyDigests")
+      .withIndex("by_user_week", (q) => q.eq("userId", args.userId).eq("weekStart", prevWeekStart))
+      .first();
+
+    if (!existingWeekly) {
+      return {
+        type: "weekly",
+        prevWeekStart,
+        timezone,
+        timezoneOffset: offset
+      };
+    }
+
+    // Check Monthly: If it's a new month, do we have an archived summary for the previous month?
+    // Wait, monthly is a bit trickier. We check if there are 4 weekly digests since the last monthly summary.
+    const weeklies = await ctx.db
+      .query("weeklyDigests")
+      .withIndex("by_user_week", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .take(4);
+
+    if (weeklies.length >= 4) {
+      // Check if we already synthesized a monthly summary for the most recent week in this batch
+      // For simplicity, we just trigger it if there are 4 un-archived weeklies
+      return {
+        type: "monthly",
+        timezone
+      };
+    }
+
+    return null; // Nothing to do
+  }
 });
