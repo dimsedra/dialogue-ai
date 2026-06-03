@@ -17,7 +17,7 @@ import { MessageStream } from "./chat/MessageStream";
 import { ChatInput } from "./chat/ChatInput";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
-import { ToolApprovalCard } from "./chat/ToolApprovalCard";
+
 
 // Heavy modals / dashboard: lazy-load so they don't sit in the initial bundle.
 // Dashboard is only mounted on the landing view (no active session).
@@ -284,7 +284,7 @@ export function Chat({
 
   const authToken = useAuthToken();
 
-  const { messages: aiMessages, setMessages, sendMessage: sendVercelMessage, status, addToolApprovalResponse } = useChat({
+  const { messages: aiMessages, setMessages, sendMessage: sendVercelMessage, status } = useChat({
     transport: new DefaultChatTransport({ 
       api: `/api/chat?sessionId=${activeSessionId || ""}&provider=${provider}&modelId=${getActiveModelName}`,
       fetch: async (input, init) => {
@@ -329,26 +329,9 @@ export function Chat({
         });
       }
     },
-    sendAutomaticallyWhen: ({ messages }) => {
-      const lastMsg = messages[messages.length - 1];
-      if (!lastMsg?.parts) return false;
-      return (lastMsg.parts as any[]).some(
-        (p: any) => p.type?.startsWith('tool-') && p.state === 'approval-responded'
-      );
-    },
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
-
-  // Detect pending tool approval requests from the last assistant message
-  const pendingApprovals = useMemo(() => {
-    if (aiMessages.length === 0) return [];
-    const lastMsg = aiMessages[aiMessages.length - 1];
-    if (!lastMsg?.parts) return [];
-    return (lastMsg.parts as any[]).filter(
-      (p: any) => p.type?.startsWith('tool-') && p.state === 'approval-requested'
-    );
-  }, [aiMessages]);
 
   const lastSyncedSessionIdRef = useRef<string | null>(null);
   // Holds the initial message that needs to be sent to the AI after a new
@@ -1244,36 +1227,7 @@ export function Chat({
               onLoadOlder={loadOlderMessages}
               canLoadOlder={messagesPaginated.status === "CanLoadMore"}
               isLoadingOlder={messagesPaginated.status === "LoadingMore"}
-            >
-              {/* Tool approval cards — inline in scroll */}
-              {pendingApprovals.length > 0 && (
-                <div className="flex flex-wrap justify-center gap-2 px-4 py-2">
-                  {pendingApprovals.map((approval: any) => {
-                    const toolName = approval.type?.replace('tool-', '') || '';
-                    return (
-                      <ToolApprovalCard
-                        key={approval.toolCallId}
-                        approvalId={approval.approval?.id || approval.toolCallId}
-                        toolName={toolName}
-                        args={approval.input || {}}
-                        onApprove={() => {
-                          addToolApprovalResponse({
-                            id: approval.approval?.id || approval.toolCallId,
-                            approved: true,
-                          });
-                        }}
-                        onDecline={() => {
-                          addToolApprovalResponse({
-                            id: approval.approval?.id || approval.toolCallId,
-                            approved: false,
-                          });
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </MessageStream>
+            />
 
             <ChatInput
               activeSessionId={activeSessionId}
