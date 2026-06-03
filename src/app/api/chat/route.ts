@@ -18,6 +18,11 @@ export async function POST(req: Request) {
     const baseUrl = req.headers.get('x-base-url');
     const timezone = req.headers.get('x-timezone') || 'UTC';
     const authToken = req.headers.get('x-convex-auth-token') || undefined;
+    const scopeHeader = req.headers.get('x-active-scope');
+    let scope: { type: string; id: string; title: string } | null = null;
+    if (scopeHeader) {
+      try { scope = JSON.parse(scopeHeader); } catch {}
+    }
 
     // Create an authenticated Convex client for this request
     const authenticatedClient = new ConvexHttpClient(convexUrl);
@@ -74,7 +79,8 @@ export async function POST(req: Request) {
       latestWeeklyDigest,
       timezone,
       personaName,
-      personaPrompt
+      personaPrompt,
+      scope
     );
     
     // Create a temporary Mastra instance for this request

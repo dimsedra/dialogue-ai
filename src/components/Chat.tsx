@@ -289,6 +289,9 @@ export function Chat({
     transport: new DefaultChatTransport({ 
       api: `/api/chat?sessionId=${activeSessionId || ""}&provider=${provider}&modelId=${getActiveModelName}`,
       fetch: async (input, init) => {
+        const scopeHeader = pendingScopeRef.current !== undefined
+          ? JSON.stringify(pendingScopeRef.current)
+          : undefined;
         return fetch(input, {
           ...init,
           headers: {
@@ -296,7 +299,8 @@ export function Chat({
             'x-api-key': getActiveConfig.apiKey || "",
             'x-base-url': getActiveConfig.baseUrl || "",
             'x-timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
-            'x-convex-auth-token': authToken || ""
+            'x-convex-auth-token': authToken || "",
+            ...(scopeHeader ? { 'x-active-scope': scopeHeader } : {}),
           }
         });
       }
@@ -342,6 +346,7 @@ export function Chat({
   // session is created. We store it as a ref so that the useEffect below can
   // read the latest value without stale-closure issues.
   const pendingInitialMessageRef = useRef<{ sessionId: string; text: string } | null>(null);
+  const pendingScopeRef = useRef<Scope | null | undefined>(undefined);
 
   // Vercel AI SDK vs Convex Sync (Hybrid Approach)
   useEffect(() => {
@@ -987,6 +992,7 @@ export function Chat({
         if (provider === "lmstudio") {
           aiPromise = runLocalLLMForSession(activeSessionId, userText, { scope });
         } else {
+          pendingScopeRef.current = scope ?? null;
           aiPromise = sendVercelMessage({ text: textMessageContent });
         }
 
@@ -1005,6 +1011,7 @@ export function Chat({
             aiPromise
           ]);
         } finally {
+          pendingScopeRef.current = undefined;
           setIsTyping(false);
         }
       } catch (err) {
