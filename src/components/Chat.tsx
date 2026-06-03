@@ -1007,6 +1007,20 @@ export function Chat({
         } else {
           pendingScopeRef.current = scope ?? null;
           aiPromise = sendVercelMessage({ text: textMessageContent });
+          // Immediately patch scope onto the user message so the pin shows in real-time
+          // (sendVercelMessage creates the message without scope; Convex hasn't caught up yet)
+          if (scope) {
+            setMessages(prev => {
+              const updated = [...prev];
+              for (let i = updated.length - 1; i >= 0; i--) {
+                if (updated[i].role === 'user' && (updated[i] as any).scope === undefined) {
+                  updated[i] = { ...updated[i], scope } as any;
+                  break;
+                }
+              }
+              return updated;
+            });
+          }
         }
 
         try {
