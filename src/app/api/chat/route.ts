@@ -91,6 +91,16 @@ export async function POST(req: Request) {
     // Vercel AI SDK 'useChat' sends the body payload here automatically
     const params = await req.json();
     
+    // Inject scope as a system message so the model sees it prominently
+    // in the conversation, not just buried in the agent instructions
+    if (scope) {
+      const scopeMsg = {
+        role: 'system' as const,
+        content: `[Active Scope Pin]\nThe user has pinned a specific item to this message. When they say "this", "it", "that task", "reschedule it", "mark it done", "add a note to it", etc., they are referring to:\nType: ${scope.type.toUpperCase()}\nTitle: ${scope.title}\nConvex ID: ${scope.id}\n\nUse the above Convex ID directly in any tool calls (e.g. updateTask({ taskId: "${scope.id}", ... }), completeTask({ taskId: "${scope.id}" }), deleteTask({ taskId: "${scope.id}" })).`
+      };
+      params.messages = [scopeMsg, ...(params.messages || [])];
+    }
+    
     // Run agent execution within the authenticated Convex context
     const stream = await requestContext.run(authenticatedClient, async () => {
       return handleChatStream({

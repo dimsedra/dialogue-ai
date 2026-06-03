@@ -396,6 +396,19 @@ export function Chat({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
+  // Build a scope lookup from Convex messages so newly-sent messages
+  // immediately show their scope pin (before Convex query catches up).
+  const scopeByContent = useMemo(() => {
+    if (!messages) return new Map<string, Scope>();
+    const map = new Map<string, Scope>();
+    for (const cm of messages) {
+      if (cm.scope && cm.author === "User") {
+        map.set(cm.text, cm.scope);
+      }
+    }
+    return map;
+  }, [messages]);
+
   const displayMessages = useMemo(() => {
     if (!activeSessionId) return undefined;
     if (messagesPaginated.status === "LoadingFirstPage") return undefined;
@@ -427,11 +440,11 @@ export function Chat({
           storageId: (m as any).storageId,
           fileName: (m as any).fileName,
           fileType: (m as any).fileType,
-          scope: (m as any).scope,
+          scope: (m as any).scope || scopeByContent.get(text),
           timestamp: Date.now(),
         };
     });
-  }, [aiMessages, activeSessionId, messagesPaginated.status]);
+  }, [aiMessages, activeSessionId, messagesPaginated.status, scopeByContent]);
 
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [confirmDeleteSession, setConfirmDeleteSession] = useState<{
