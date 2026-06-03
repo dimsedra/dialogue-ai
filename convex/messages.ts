@@ -1,5 +1,6 @@
 import { query, mutation, internalMutation, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
 import { Id } from "./_generated/dataModel";
@@ -19,6 +20,25 @@ export const list = query({
       .query("messages")
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId!))
       .collect();
+  },
+});
+
+export const listPaginated = query({
+  args: {
+    sessionId: v.id("chatSessions"),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.userId !== userId) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
@@ -155,6 +175,22 @@ export const renameSession = mutation({
   },
 });
 
+export const triggerAutoTitle = mutation({
+  args: { sessionId: v.id("chatSessions") },
+  handler: async (ctx, args) => {
+    const userId = await auth.getUserId(ctx);
+    if (!userId) throw new Error("Unauthorized");
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.userId !== userId) return;
+    // Only generate title if it's still the default pattern
+    if (session.title && !session.title.startsWith("Chat ") && !session.title.startsWith("New Chat")) return;
+    await ctx.scheduler.runAfter(0, internal.background_jobs.generateSessionTitle, {
+      sessionId: args.sessionId,
+      userId,
+    });
+  },
+});
+
 export const updateSessionTitle = internalMutation({
   args: { id: v.id("chatSessions"), title: v.string(), userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -172,7 +208,7 @@ const sendArgs = {
   timezoneOffset: v.optional(v.number()),
   timezone: v.optional(v.string()),  // IANA timezone (e.g. "Asia/Jakarta")
   brief: v.optional(v.boolean()),
-  provider: v.optional(v.union(v.literal("gemini"), v.literal("lmstudio"), v.literal("openai"), v.literal("anthropic"))),
+  provider: v.optional(v.string()),
   toolCall: v.optional(v.object({
     name: v.string(),
     args: v.any(),
@@ -183,6 +219,7 @@ const sendArgs = {
     args: v.any(),
     result: v.optional(v.any()),
   }))),
+  reasoning: v.optional(v.string()),
   storageId: v.optional(v.id("_storage")),
   fileType: v.optional(v.string()),
   fileName: v.optional(v.string()),
@@ -207,31 +244,9 @@ export const send = mutation({
 
     const messageId = await sendImplementation(ctx, args);
 
-    if (args.author !== "AI" && args.provider !== "lmstudio") {
-      await ctx.scheduler.runAfter(0, internal.ai_action.chat, { 
-        sessionId: args.sessionId, 
-        userId: userId!,
-        messageId,
-        text: args.text, 
-        author: args.author, 
-        timezone: args.timezone,
-        timezoneOffset: args.timezoneOffset, 
-        brief: args.brief,
-        storageId: args.storageId,
-        fileName: args.fileName,
-        fileType: args.fileType,
-        attachments: args.attachments,
-        scope: args.scope,
-      });
-    }
-
-    if (args.author === "User") {
-      await ctx.scheduler.runAfter(0, internal.ai_action.extractAndSaveMemory, {
-        sessionId: args.sessionId,
-        userId: userId!,
-        messageId,
-      });
-    }
+    // LEGACY: The chat orchestration (ai_action.chat) and background memory extraction (ai_action.extractAndSaveMemory)
+    // were previously scheduled here. In the V2 Sovereign Architecture, the Next.js API route (/api/chat) 
+    // with Mastra handles AI interactions and semantic memory extraction.
 
     // Update session timezone from user messages
     if (args.author === "User" && args.timezone) {
@@ -256,13 +271,14 @@ async function sendImplementation(ctx: MutationCtx, args: {
   timezoneOffset?: number;
   toolCall?: { name: string; args: Record<string, unknown>; result?: unknown };
   toolCalls?: { name: string; args: Record<string, unknown>; result?: unknown }[];
+  reasoning?: string;
   storageId?: Id<"_storage">;
   fileType?: string;
   fileName?: string;
   attachments?: { storageId: Id<"_storage">; fileName: string; fileType: string }[];
   scope?: { type: "date" | "task" | "event" | "habit"; id: string; title: string };
 }) {
-  const { sessionId, text, author, timezoneOffset, toolCall, toolCalls, storageId, fileType, fileName, attachments, scope } = args;
+  const { sessionId, text, author, timezoneOffset, toolCall, toolCalls, reasoning, storageId, fileType, fileName, attachments, scope } = args;
   
   const messageId = await ctx.db.insert("messages", {
     sessionId,
@@ -272,6 +288,7 @@ async function sendImplementation(ctx: MutationCtx, args: {
     timezoneOffset,
     toolCall,
     toolCalls,
+    reasoning,
     storageId,
     fileType,
     fileName,

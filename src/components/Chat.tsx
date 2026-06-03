@@ -169,6 +169,7 @@ export function Chat({
   const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
   const createSession = useMutation(api.messages.createSession);
   const deleteSession = useMutation(api.messages.deleteSession);
+  const triggerAutoTitle = useMutation(api.messages.triggerAutoTitle);
 
   const { signOut } = useAuthActions();
 
@@ -327,6 +328,9 @@ export function Chat({
           reasoning,
           toolCalls,
         });
+
+        // Trigger AI title generation on first response (idempotent — skips if title already set)
+        triggerAutoTitle({ sessionId: activeSessionId });
       }
     },
   });
