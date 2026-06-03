@@ -27,11 +27,19 @@ crons.cron(
   {}
 );
 
-// Monthly OCEAN + Reflection: runs on the 1st of every month at 00:05 UTC
+// Monthly OCEAN: runs on the 1st of every month at 00:05 UTC
 crons.cron(
-  "monthly-ocean-reflection",
+  "monthly-ocean",
   "5 0 1 * *",
   internal.ocean.cronTriggerMonthly,
+  {}
+);
+
+// Monthly Reflection: runs on the 1st of every month at 00:10 UTC
+crons.cron(
+  "monthly-reflection",
+  "10 0 1 * *",
+  internal.reflections.cronTriggerMonthlyReflection,
   {}
 );
 

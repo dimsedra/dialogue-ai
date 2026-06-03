@@ -1,11 +1,12 @@
 "use client";
 
-import { useQuery, useMutation, useConvex, useAction } from "convex/react";
+import { useQuery, useMutation, useConvex, useAction, usePaginatedQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useState, useEffect, useCallback } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Doc, Id } from "../../convex/_generated/dataModel";
-import { useAuthActions } from "@convex-dev/auth/react";
-import { processLocalLLMRequest } from "../lib/lmstudio";
+import { useAuthActions, useAuthToken } from "@convex-dev/auth/react";
 import { EnrichedToolArgs, Scope } from "./chat/types";
 import { CreateWorkspaceModal } from "./chat/CreateWorkspaceModal";
 import { DeleteSessionModal } from "./chat/DeleteSessionModal";
@@ -13,13 +14,41 @@ import { WorkspaceRail } from "./chat/WorkspaceRail";
 import { SessionSidebar } from "./chat/SessionSidebar";
 import { ChatHeader } from "./chat/ChatHeader";
 import { MessageStream } from "./chat/MessageStream";
-import { Dashboard } from "./chat/Dashboard";
-import { ReflectionWrappedModal } from "./chat/ReflectionWrappedModal";
-import { exportReflectionAsImage } from "../utils/exportReflectionImage";
 import { ChatInput } from "./chat/ChatInput";
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
+import { ToolApprovalCard } from "./chat/ToolApprovalCard";
 
-type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic";
+// Heavy modals / dashboard: lazy-load so they don't sit in the initial bundle.
+// Dashboard is only mounted on the landing view (no active session).
+const Dashboard = dynamic(
+  () => import("./chat/Dashboard").then((m) => m.Dashboard),
+  { ssr: false, loading: () => null },
+);
+const ReflectionWrappedModal = dynamic(
+  () =>
+    import("./chat/ReflectionWrappedModal").then(
+      (m) => m.ReflectionWrappedModal,
+    ),
+  { ssr: false, loading: () => null },
+);
+// Image export is invoked from a button click — no need to ship the SVG/Canvas
+// pipeline in the initial bundle.
+const exportReflectionAsImage = async (
+  ...args: Parameters<typeof import("../utils/exportReflectionImage").exportReflectionAsImage>
+) => {
+  const mod = await import("../utils/exportReflectionImage");
+  return mod.exportReflectionAsImage(...args);
+};
+// LM Studio client is only used when the user picks the local provider.
+const processLocalLLMRequest = async (
+  ...args: Parameters<typeof import("../lib/lmstudio").processLocalLLMRequest>
+) => {
+  const mod = await import("../lib/lmstudio");
+  return mod.processLocalLLMRequest(...args);
+};
+
+type AIProvider = string;
 type ProviderConfig = { apiKey?: string; baseUrl?: string; modelId?: string };
 type ProviderConfigs = Record<string, ProviderConfig>;
 type RecurrenceInput = {
@@ -109,10 +138,24 @@ export function Chat({
   const allSessions = useQuery(api.messages.listSessions, {
     allWorkspaces: true,
   });
-  const messages = useQuery(
-    api.messages.list,
+  const messagesPaginated = usePaginatedQuery(
+    api.messages.listPaginated,
     activeSessionId ? { sessionId: activeSessionId } : "skip",
+    { initialNumItems: 50 },
   );
+  // usePaginatedQuery returns newest-first; downstream consumers expect
+  // chronological (oldest first). Reverse once via useMemo so the array
+  // reference is stable per paginated refetch.
+  const messages = useMemo(() => {
+    if (!activeSessionId) return undefined;
+    if (messagesPaginated.status === "LoadingFirstPage") return undefined;
+    return [...messagesPaginated.results].reverse();
+  }, [messagesPaginated.results, messagesPaginated.status, activeSessionId]);
+  const loadOlderMessages = useCallback(() => {
+    if (messagesPaginated.status === "CanLoadMore") {
+      void messagesPaginated.loadMore(50);
+    }
+  }, [messagesPaginated]);
   const profile = useQuery(api.ai.getProfile, {});
   const personas = useQuery(api.personas.list);
 
@@ -139,20 +182,11 @@ export function Chat({
   const deleteTask = useMutation(api.tasks.deleteTask);
   const updateTask = useMutation(api.tasks.updateTask);
   const updateUserBio = useMutation(api.ai.updateProfile);
-  const saveSemanticMemory = useAction(api.ai_action.saveSemanticMemoryAction);
+  const saveSemanticMemory = useAction(api.background_jobs.saveSemanticMemoryAction);
   const deleteSemanticMemory = useMutation(api.ai.deleteMemory);
   const updatePreferences = useMutation(api.ai.updatePreferences);
 
   const convex = useConvex();
-
-  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [confirmDeleteSession, setConfirmDeleteSession] = useState<{
-    id: Id<"chatSessions">;
-    title: string;
-  } | null>(null);
-  const [openReflectionId, setOpenReflectionId] = useState<Id<"reflections"> | null>(null);
-  const [isTyping, setIsTyping] = useState(false);
-  const isSyncing = !!(activeSessionId && messages === undefined);
 
   const [provider, setProvider] = useState<AIProvider>(() => {
     if (typeof window !== "undefined") {
@@ -187,7 +221,7 @@ export function Chat({
     }
   };
 
-  const getActiveModelName = (): string => {
+  const getActiveModelName = useMemo((): string => {
     const customConfigs = profile?.preferences?.customConfigs as
       | ProviderConfigs
       | undefined;
@@ -197,17 +231,224 @@ export function Chat({
     }
     switch (provider) {
       case "gemini":
-        return "gemini-3.1-flash";
+        return "gemini-3.5-flash";
       case "openai":
-        return "gpt-5.5";
+        return "gpt-5.5-pro";
       case "anthropic":
-        return "claude-sonnet";
+        return "claude-sonnet-4.6";
+      case "deepseek":
+        return "deepseek-chat";
+      case "xai":
+        return "grok-2-latest";
+      case "mistral":
+        return "mistral-large-latest";
+      case "groq":
+        return "llama3-8b-8192";
+      case "cohere":
+        return "command-r-plus";
+      case "moonshotai":
+        return "moonshot-v1-8k";
+      case "deepinfra":
+        return "meta-llama/Meta-Llama-3.3-70B-Instruct";
+      case "togetherai":
+        return "meta-llama/Llama-3.3-70B-Instruct-Turbo";
+      case "fireworks":
+        return "accounts/fireworks/models/llama-v3p3-70b-instruct";
+      case "alibaba":
+        return "qwen-turbo";
+      case "baseten":
+        return "meta-llama/Llama-3.3-70B-Instruct";
+      case "huggingface":
+        return "meta-llama/Meta-Llama-3.3-70B-Instruct";
+      case "minimax":
+        return "minimax/minimax-m3";
+      case "ollama":
+        return "llama3.3";
+      case "opencode":
+        return "anthropic/claude-3-5-sonnet-20241022";
+      case "openrouter":
+        return "anthropic/claude-3.5-sonnet:beta";
+      case "zhipu":
+        return "glm-4-plus";
       case "lmstudio":
         return "local";
       default:
         return "ai";
     }
-  };
+  }, [profile?.preferences?.customConfigs, provider]);
+
+  const getActiveConfig = useMemo(() => {
+    const customConfigs = profile?.preferences?.customConfigs as ProviderConfigs | undefined;
+    return customConfigs?.[provider] || {};
+  }, [profile?.preferences?.customConfigs, provider]);
+
+  const authToken = useAuthToken();
+
+  const { messages: aiMessages, setMessages, sendMessage: sendVercelMessage, status, addToolApprovalResponse } = useChat({
+    transport: new DefaultChatTransport({ 
+      api: `/api/chat?sessionId=${activeSessionId || ""}&provider=${provider}&modelId=${getActiveModelName}`,
+      fetch: async (input, init) => {
+        return fetch(input, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            'x-api-key': getActiveConfig.apiKey || "",
+            'x-base-url': getActiveConfig.baseUrl || "",
+            'x-timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
+            'x-convex-auth-token': authToken || ""
+          }
+        });
+      }
+    }),
+    id: activeSessionId || "default",
+    onFinish: async ({ message }) => {
+      if (activeSessionId) {
+        const textContent = message.parts 
+          ? message.parts.filter(p => p.type === 'text').map(p => (p as any).text).join('') 
+          : (message as any).content || '';
+          
+        const reasoningParts = message.parts ? message.parts.filter(p => p.type === 'reasoning') : [];
+        const reasoning = reasoningParts.length > 0
+          ? reasoningParts.map(p => (p as any).reasoning || (p as any).text).join('\n\n')
+          : (message as any).reasoning || undefined;
+
+        const toolCalls = (message as any).toolInvocations && (message as any).toolInvocations.length > 0
+          ? (message as any).toolInvocations.map((ti: any) => ({
+              name: ti.toolName,
+              args: ti.args,
+              result: ti.result
+            }))
+          : undefined;
+
+        await sendMessage({
+          sessionId: activeSessionId,
+          text: textContent,
+          author: "AI",
+          reasoning,
+          toolCalls,
+        });
+      }
+    },
+    sendAutomaticallyWhen: ({ messages }) => {
+      const lastMsg = messages[messages.length - 1];
+      if (!lastMsg?.parts) return false;
+      return (lastMsg.parts as any[]).some(
+        (p: any) => p.type?.startsWith('tool-') && p.state === 'approval-responded'
+      );
+    },
+  });
+
+  const isLoading = status === 'submitted' || status === 'streaming';
+
+  // Detect pending tool approval requests from the last assistant message
+  const pendingApprovals = useMemo(() => {
+    if (aiMessages.length === 0) return [];
+    const lastMsg = aiMessages[aiMessages.length - 1];
+    if (!lastMsg?.parts) return [];
+    return (lastMsg.parts as any[]).filter(
+      (p: any) => p.type?.startsWith('tool-') && p.state === 'approval-requested'
+    );
+  }, [aiMessages]);
+
+  const lastSyncedSessionIdRef = useRef<string | null>(null);
+  // Holds the initial message that needs to be sent to the AI after a new
+  // session is created. We store it as a ref so that the useEffect below can
+  // read the latest value without stale-closure issues.
+  const pendingInitialMessageRef = useRef<{ sessionId: string; text: string } | null>(null);
+
+  // Vercel AI SDK vs Convex Sync (Hybrid Approach)
+  useEffect(() => {
+    if (messages && !isLoading) {
+      const isSessionSwitch = activeSessionId !== lastSyncedSessionIdRef.current;
+      const hasConvexCaughtUp = messages.length > aiMessages.length;
+
+      if (isSessionSwitch || hasConvexCaughtUp || aiMessages.length === 0) {
+        const mappedHistory = messages.map(m => ({
+          id: m._id,
+          role: (m.author === "User" ? "user" : "assistant") as "user" | "assistant",
+          content: m.text,
+          parts: [{ type: "text" as const, text: m.text }],
+          toolCalls: m.toolCalls,
+          toolCall: m.toolCall,
+          attachments: m.attachments,
+          storageId: m.storageId,
+          fileName: m.fileName,
+          fileType: m.fileType,
+          scope: m.scope,
+          reasoning: (m as any).reasoning,
+        }));
+        setMessages(mappedHistory);
+        lastSyncedSessionIdRef.current = activeSessionId || null;
+      }
+    }
+  }, [messages, isLoading, setMessages, aiMessages.length, activeSessionId]);
+
+  // Fire the AI call for new-chat initial messages once the activeSessionId
+  // has actually settled in the useChat transport URL.
+  useEffect(() => {
+    const pending = pendingInitialMessageRef.current;
+    if (!pending || pending.sessionId !== activeSessionId || isLoading) return;
+    pendingInitialMessageRef.current = null;
+
+    const trigger = async () => {
+      setIsTyping(true);
+      try {
+        await sendVercelMessage({ text: pending.text });
+      } catch (err) {
+        console.error("Failed to trigger AI for initial message:", err);
+      } finally {
+        setIsTyping(false);
+      }
+    };
+    trigger();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
+
+  const displayMessages = useMemo(() => {
+    if (!activeSessionId) return undefined;
+    if (messagesPaginated.status === "LoadingFirstPage") return undefined;
+    
+    return aiMessages.map((m) => {
+      const textParts = m.parts ? m.parts.filter(p => p.type === 'text') : [];
+      const reasoningParts = m.parts ? m.parts.filter(p => p.type === 'reasoning') : [];
+      
+      const text = textParts.length > 0 
+        ? textParts.map(p => (p as any).text).join('') 
+        : (m as any).content || '';
+        
+      const reasoning = reasoningParts.length > 0
+        ? reasoningParts.map(p => (p as any).reasoning || (p as any).text).join('\n\n')
+        : (m as any).reasoning || undefined;
+
+        return {
+          _id: m.id,
+          author: m.role === "user" ? "User" : "AI",
+          text,
+          reasoning,
+          toolCalls: (m as any).toolCalls || ((m as any).toolInvocations ? (m as any).toolInvocations.map((ti: any) => ({
+            name: ti.toolName,
+            args: ti.args,
+            result: ti.result,
+          })) : undefined),
+          toolCall: (m as any).toolCall,
+          attachments: (m as any).attachments,
+          storageId: (m as any).storageId,
+          fileName: (m as any).fileName,
+          fileType: (m as any).fileType,
+          scope: (m as any).scope,
+          timestamp: Date.now(),
+        };
+    });
+  }, [aiMessages, activeSessionId, messagesPaginated.status]);
+
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState<{
+    id: Id<"chatSessions">;
+    title: string;
+  } | null>(null);
+  const [openReflectionId, setOpenReflectionId] = useState<Id<"reflections"> | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const isSyncing = !!(activeSessionId && messages === undefined);
 
   useEffect(() => {
     if (
@@ -219,6 +460,18 @@ export function Chat({
       setActiveSessionIdAction(sessions[0]._id);
     }
   }, [sessions, activeSessionId, setActiveSessionIdAction, activeWorkspaceId]);
+
+  // OCEAN Heartbeat: Automatically trigger background OCEAN digest generation if pending
+  useEffect(() => {
+    if (profile?.userId) {
+      // Fire and forget
+      fetch('/api/cron/ocean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.userId })
+      }).catch(err => console.error("OCEAN heartbeat failed", err));
+    }
+  }, [profile?.userId]);
 
   // ---- Shared helper: run LM Studio logic for a given session + text ----
   const runLocalLLMForSession = useCallback(
@@ -469,8 +722,6 @@ export function Chat({
             } else if (name === "updateUserBio") {
               await updateUserBio({ bio: args.bio as string });
               enrichedArgs.oldBio = profile?.bio;
-            } else if (name === "saveSemanticMemory") {
-              await saveSemanticMemory({ text: args.text as string });
             } else if (name === "deleteSemanticMemory") {
               await deleteSemanticMemory({
                 id: args.memoryId as Id<"memories">,
@@ -700,8 +951,15 @@ export function Chat({
       } finally {
         setIsTyping(false);
       }
+    } else {
+      try {
+        await sendVercelMessage({
+          text: syncText,
+        });
+      } finally {
+        setIsTyping(false);
+      }
     }
-    // Gemini path: the Convex scheduler handles it automatically via messages.send
   };
 
   // Expose handleSync to parent via ref (placed after declaration)
@@ -733,30 +991,34 @@ export function Chat({
 
         const uploadedAttachments = await Promise.all(uploadPromises);
 
-        await sendMessage({
-          sessionId: activeSessionId,
-          text:
-            userText ||
-            (uploadedAttachments.length > 0
-              ? `Attached ${uploadedAttachments.length} files`
-              : ""),
-          author: "User",
-          timezoneOffset: new Date().getTimezoneOffset(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          provider,
-          attachments:
-            uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
-          scope: scope || undefined,
-        });
+        const textMessageContent = userText || (uploadedAttachments.length > 0 ? `Attached ${uploadedAttachments.length} files` : "");
 
         setIsTyping(true);
 
+        // Start Vercel AI SDK stream immediately to set isLoading=true, preventing Convex sync flicker
+        let aiPromise;
         if (provider === "lmstudio") {
-          try {
-            await runLocalLLMForSession(activeSessionId, userText, { scope });
-          } finally {
-            setIsTyping(false);
-          }
+          aiPromise = runLocalLLMForSession(activeSessionId, userText, { scope });
+        } else {
+          aiPromise = sendVercelMessage({ text: textMessageContent });
+        }
+
+        try {
+          await Promise.all([
+            sendMessage({
+              sessionId: activeSessionId,
+              text: textMessageContent,
+              author: "User",
+              timezoneOffset: new Date().getTimezoneOffset(),
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              provider,
+              attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+              scope: scope || undefined,
+            }),
+            aiPromise
+          ]);
+        } finally {
+          setIsTyping(false);
         }
       } catch (err) {
         console.error("Failed to send message:", err);
@@ -802,6 +1064,12 @@ export function Chat({
     }
 
     if (initialMessage) {
+      // Store the pending message BEFORE setting activeSessionId so the useEffect
+      // can read it when it fires after the state update is flushed.
+      if (provider !== "lmstudio") {
+        pendingInitialMessageRef.current = { sessionId: id, text: initialMessage };
+      }
+
       try {
         await sendMessage({
           sessionId: id,
@@ -812,9 +1080,8 @@ export function Chat({
           provider,
         });
 
-        setIsTyping(true);
-
         if (provider === "lmstudio") {
+          setIsTyping(true);
           try {
             await runLocalLLMForSession(id, initialMessage);
           } finally {
@@ -957,7 +1224,7 @@ export function Chat({
               workspaces={workspaces}
               messageCount={messages?.length || 0}
               provider={provider}
-              activeModelName={getActiveModelName()}
+              activeModelName={getActiveModelName}
               isLargeViewport={isLargeViewport}
               onProviderChange={handleProviderChange}
               onSignOut={() => signOut()}
@@ -966,7 +1233,7 @@ export function Chat({
             />
 
             <MessageStream
-              messages={messages}
+              messages={displayMessages as any}
               activeSessionId={activeSessionId}
               isTyping={isTyping}
               isSyncing={isSyncing}
@@ -974,7 +1241,39 @@ export function Chat({
               keyboardOffset={keyboardOffset}
               onTypingDone={handleTypingDone}
               agentName={activePersona?.name}
+              onLoadOlder={loadOlderMessages}
+              canLoadOlder={messagesPaginated.status === "CanLoadMore"}
+              isLoadingOlder={messagesPaginated.status === "LoadingMore"}
             />
+
+            {/* Tool approval cards */}
+            {pendingApprovals.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-4 py-2">
+                {pendingApprovals.map((approval: any) => {
+                  const toolName = approval.type?.replace('tool-', '') || '';
+                  return (
+                    <ToolApprovalCard
+                      key={approval.toolCallId}
+                      approvalId={approval.approval?.id || approval.toolCallId}
+                      toolName={toolName}
+                      args={approval.input || {}}
+                      onApprove={() => {
+                        addToolApprovalResponse({
+                          id: approval.approval?.id || approval.toolCallId,
+                          approved: true,
+                        });
+                      }}
+                      onDecline={() => {
+                        addToolApprovalResponse({
+                          id: approval.approval?.id || approval.toolCallId,
+                          approved: false,
+                        });
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
 
             <ChatInput
               activeSessionId={activeSessionId}

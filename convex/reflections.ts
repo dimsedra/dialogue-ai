@@ -732,7 +732,7 @@ export const cronTriggerWeeklyReflection = internalMutation({
 
       if (existing) continue; // Already generated this week
 
-      await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
+      await ctx.scheduler.runAfter(0, internal.background_jobs.generateCronReflection, {
         userId: user._id,
         type: "weekly",
         timezone,
@@ -784,9 +784,57 @@ export const cronTriggerYearlyReflection = internalMutation({
 
       if (existing) continue; // Already generated this year
 
-      await ctx.scheduler.runAfter(0, internal.ai_action.generateCronReflection, {
+      await ctx.scheduler.runAfter(0, internal.background_jobs.generateCronReflection, {
         userId: user._id,
         type: "yearly",
+        timezone,
+      });
+    }
+  },
+});
+
+/**
+ * Monthly Reflection cron: fires on the 1st of every month.
+ * Checks each user's LOCAL date (not UTC) to determine if it's the 1st.
+ * Generates a reflection for the previous month.
+ */
+export const cronTriggerMonthlyReflection = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+
+    for (const user of users) {
+      const lastSession = await ctx.db
+        .query("chatSessions")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .order("desc")
+        .first();
+      const timezone = lastSession?.timezone || "UTC";
+
+      // Check if it's the 1st of the month in the user's LOCAL time
+      const localDateStr = getLocalDateString(timezone);
+      const [localYear, localMonth, localDay] = localDateStr.split("-").map(Number);
+      if (localDay !== 1) continue;
+
+      // Calculate previous month's start (epoch ms)
+      const prevMonth = localMonth === 1 ? 12 : localMonth - 1;
+      const prevYear = localMonth === 1 ? localYear - 1 : localYear;
+      const periodStart = Date.UTC(prevYear, prevMonth - 1, 1, 0, 0, 0, 0);
+
+      // Idempotency check: does a monthly reflection already exist for this period?
+      const existing = await ctx.db
+        .query("reflections")
+        .withIndex("by_user_type", (q) =>
+          q.eq("userId", user._id).eq("type", "monthly"),
+        )
+        .filter((q) => q.eq(q.field("periodStart"), periodStart))
+        .first();
+
+      if (existing) continue;
+
+      await ctx.scheduler.runAfter(0, internal.background_jobs.generateCronReflection, {
+        userId: user._id,
+        type: "monthly",
         timezone,
       });
     }
