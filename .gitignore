@@ -59,3 +59,6 @@ scratch/
 
 # Xenova/Transformers local model downloads
 /src/lib/models/
+
+# Tauri dev artefacts (background-run logs and pid files)
+/.tauri-dev.*
