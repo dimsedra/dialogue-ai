@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getConvexClient } from '../../lib/convex-server';
 import { api } from '../../../convex/_generated/api';
+import { Id } from '../../../convex/_generated/dataModel';
 
 export const completeTaskTool = createTool({
   id: 'completeTask',
@@ -13,7 +14,7 @@ export const completeTaskTool = createTool({
   execute: async (input) => {
     const client = getConvexClient();
     await client.mutation(api.tasks.completeTask, {
-      id: input.taskId as any,
+      id: input.taskId as Id<"tasks">,
     });
     return { success: true, taskId: input.taskId };
   }

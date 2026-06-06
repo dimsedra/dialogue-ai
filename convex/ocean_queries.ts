@@ -1,7 +1,16 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
-// Internal queries for OCEAN actions
+// Internal queries for OCEAN actions.
+//
+// NOTE: These are intentionally exported as public `query`/`mutation` (not
+// `internalQuery`/`internalMutation`) because `src/app/api/cron/ocean/route.ts`
+// calls them directly via the public Convex client, not from inside another
+// Convex function. This is a security gap: the auth check relies on the
+// caller passing a valid `userId`, and the route runs unauthenticated from
+// the client's perspective. The PocketBase migration will move this logic
+// into a Convex action that performs the auth check server-side, at which
+// point these can be downgraded to `internalQuery`/`internalMutation`.
 export const getUserProfileForOCEAN = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {

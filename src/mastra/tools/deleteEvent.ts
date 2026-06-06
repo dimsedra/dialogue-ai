@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getConvexClient } from '../../lib/convex-server';
 import { api } from '../../../convex/_generated/api';
+import { Id } from '../../../convex/_generated/dataModel';
 
 export const deleteEventTool = createTool({
   id: 'deleteEvent',
@@ -13,7 +14,7 @@ export const deleteEventTool = createTool({
   execute: async (input) => {
     const client = getConvexClient();
     await client.mutation(api.events.remove, {
-      id: input.eventId as any,
+      id: input.eventId as Id<"events">,
     });
     return { success: true, eventId: input.eventId };
   }

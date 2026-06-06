@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useConvex, useAction, usePaginatedQuery } from "convex/react";
+import { useQuery, useMutation, useConvex, usePaginatedQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -189,7 +189,6 @@ export function Chat({
   const deleteTask = useMutation(api.tasks.deleteTask);
   const updateTask = useMutation(api.tasks.updateTask);
   const updateUserBio = useMutation(api.ai.updateProfile);
-  const saveSemanticMemory = useAction(api.background_jobs.saveSemanticMemoryAction);
   const deleteSemanticMemory = useMutation(api.ai.deleteMemory);
   const updatePreferences = useMutation(api.ai.updatePreferences);
 
@@ -940,7 +939,6 @@ export function Chat({
       messages,
       profile?.bio,
       profile?.name,
-      saveSemanticMemory,
       sendMessage,
       updateEvent,
       updateOccurrence,

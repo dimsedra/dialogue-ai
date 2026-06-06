@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getConvexClient } from '../../lib/convex-server';
 import { api } from '../../../convex/_generated/api';
+import { Id } from '../../../convex/_generated/dataModel';
 
 export const searchWebTool = createTool({
   id: 'searchWeb',
@@ -142,7 +143,7 @@ export const getTaskNotesTool = createTool({
   inputSchema: z.object({ taskId: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
-    const task = await client.query(api.tasks.get, { id: input.taskId as any });
+    const task = await client.query(api.tasks.get, { id: input.taskId as Id<"tasks"> });
     return { notes: task?.notes || 'No notes found.', task };
   }
 });
@@ -200,7 +201,7 @@ export const getTaskResourcesTool = createTool({
   inputSchema: z.object({ taskId: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
-    const task = await client.query(api.tasks.get, { id: input.taskId as any });
+    const task = await client.query(api.tasks.get, { id: input.taskId as Id<"tasks"> });
     return { resources: task?.resources || [] };
   }
 });
@@ -211,7 +212,7 @@ export const getEventResourcesTool = createTool({
   inputSchema: z.object({ eventId: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
-    const event = await client.query(api.events.get, { id: input.eventId as any });
+    const event = await client.query(api.events.get, { id: input.eventId as Id<"events"> });
     return { resources: event?.resources || [] };
   }
 });
@@ -262,7 +263,7 @@ export const logHabitTool = createTool({
   execute: async (input) => {
     const client = getConvexClient();
     const logId = await client.mutation(api.habits.logHabit, {
-      habitId: input.habitId as any,
+      habitId: input.habitId as Id<"habits">,
       dateString: input.dateString,
       status: input.status as "completed" | "skipped",
       notes: input.notes,
@@ -309,7 +310,7 @@ export const createCustomReminderTool = createTool({
   outputSchema: z.object({ success: z.boolean(), scheduledFor: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
-    await client.mutation(api.notifications.createCustomReminder as any, {
+    await client.mutation(api.notifications.createCustomReminder, {
       message: input.message,
       dueDate: input.dueDate,
     });

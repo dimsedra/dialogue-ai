@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getConvexClient } from '../../lib/convex-server';
 import { api } from '../../../convex/_generated/api';
+import { Id } from '../../../convex/_generated/dataModel';
 
 export const updateEventTool = createTool({
   id: 'updateEvent',
@@ -35,7 +36,7 @@ export const updateEventTool = createTool({
     } : undefined;
 
     await client.mutation(api.events.update, {
-      id: input.eventId as any,
+      id: input.eventId as Id<"events">,
       title: input.title,
       startTime: input.startTime ? new Date(input.startTime).getTime() : undefined,
       endTime: input.endTime ? new Date(input.endTime).getTime() : undefined,

@@ -3,12 +3,12 @@
 const ALGORITHM = "AES-GCM";
 const IV_LENGTH = 12;
 
-function bufToHex(buffer: ArrayBuffer | Uint8Array): string {
+function bufToHex(buffer: ArrayBuffer | Uint8Array<ArrayBuffer>): string {
   const arr = new Uint8Array(buffer);
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function hexToBuf(hex: string): Uint8Array {
+function hexToBuf(hex: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(Math.ceil(hex.length / 2));
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
@@ -27,7 +27,7 @@ async function getKey(): Promise<CryptoKey> {
   }
   return crypto.subtle.importKey(
     "raw",
-    keyBytes as any,
+    keyBytes,
     { name: ALGORITHM },
     false,
     ["encrypt", "decrypt"]
@@ -40,13 +40,13 @@ async function getKey(): Promise<CryptoKey> {
  */
 export async function encrypt(text: string): Promise<string> {
   const key = await getKey();
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-  const encoded = new TextEncoder().encode(text);
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH)) as Uint8Array<ArrayBuffer>;
+  const encoded = new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>;
   
   const encryptedBuf = await crypto.subtle.encrypt(
-    { name: ALGORITHM, iv: iv as any },
+    { name: ALGORITHM, iv },
     key,
-    encoded as any
+    encoded
   );
   
   return `${bufToHex(iv)}:${bufToHex(encryptedBuf)}`;
@@ -66,24 +66,25 @@ export async function decrypt(ciphertext: string): Promise<string> {
   }
 
   const iv = hexToBuf(parts[0]);
-  let encryptedBytes: Uint8Array;
+  let encryptedBytes: Uint8Array<ArrayBuffer>;
   
   if (parts.length === 3) {
     // Old format: iv:authTag:encryptedData -> Web Crypto combines encryptedData + authTag
     const authTag = hexToBuf(parts[1]);
     const encData = hexToBuf(parts[2]);
-    encryptedBytes = new Uint8Array(encData.length + authTag.length);
-    encryptedBytes.set(encData, 0);
-    encryptedBytes.set(authTag, encData.length);
+    const combined = new Uint8Array(encData.length + authTag.length);
+    combined.set(encData, 0);
+    combined.set(authTag, encData.length);
+    encryptedBytes = combined;
   } else {
     // New format
     encryptedBytes = hexToBuf(parts[1]);
   }
 
   const decryptedBuf = await crypto.subtle.decrypt(
-    { name: ALGORITHM, iv: iv as any },
+    { name: ALGORITHM, iv },
     key,
-    encryptedBytes as any
+    encryptedBytes
   );
   
   return new TextDecoder().decode(decryptedBuf);
