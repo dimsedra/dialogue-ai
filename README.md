@@ -1,246 +1,135 @@
 # Dialogue
 
-**A sovereign, agent-native productivity workspace.**
+> *Let your personal growth be assisted.*
 
-Dialogue is built on a simple premise: **your AI should work *for* you, not just respond *to* you.**
+Most productivity tools are built around a flawed assumption: that what you need is a better system to manage your life.
 
-Most modern productivity tools treat artificial intelligence as a marketing feature—a chat bubble bolted onto a traditional database, or a text summarizer floating beside a calendar. In these setups, you are still the manual coordinate executor. You read the AI's suggestions, copy-paste the text, create the task rows, and schedule the calendar events.
+You don't. You need someone in your corner.
 
-Dialogue inverts this entire paradigm. Here, the AI agent is the **core runtime engine** — not a chatbot with database access, but an autonomous operator that builds your schedule, logs your progress, learns how you work, and adapts its behavior to match your rhythm. The longer you use it, the less you need to tell it. It evolves with you.
+Dialogue is not a smarter todo list. It is not a calendar with AI features. It is an AI companion that learns who you are, remembers what matters to you, and shows up every day ready to help you grow — on your terms, with your data, on your own machine.
 
----
-
-## Core Features & System Capabilities
-
-### Core Productivity Pillars (Primary Engines)
-
-#### Living Chronological Journals
-Traditional to-do list apps are static black holes where history goes to die. Once a task is completed, the struggles, decisions, and micro-milestones that got you there are lost forever. Dialogue turns this on its head by capturing a timestamped stream of your active consciousness. Every struggle, shift in scope, or design choice is appended as a live cognitive node with full chronological context. Because the agent understands the context of *how* you do things, it can resume paused tasks, trace technical blockers, and act as an automated developer diary that grows with you. These journals are the primary input for the behavioral analysis pipeline—see **How Memory Works** below. Your notes become the raw material the agent uses to understand not just what you did, but *how you operate.*
-
-#### Native Habits & Routine Tracking
-Checked off your habits twenty days in a row? Standard checklists break down when forced to manage repeating daily and weekly identities—they lack streak math, consistency grids, and agent intelligence. Dialogue treats habits as first-class schemas distinct from one-off tasks. The agent silently monitors your routines, updates streaks without blocking you with authorization cards, handles timezone-aware plan-approved skips (streak freezes), and automatically links routine trends directly to your reflections. It's the difference between a checklist you manage and a routine the agent helps you protect.
-
-#### Semantic Memory (Facts)
-Standard AI assistants suffer from total amnesia—requiring you to re-introduce yourself, your goals, and your work style at the start of every new chat session. Dialogue remembers. It stores durable facts about your life, preferences, and technical stack in a vector-indexed memory layer with automatic deduplication and time-decay weighting. Automatic near-duplicate detection prevents contradictions, and a delete tool lets you correct wrong facts on the spot. You shouldn't have to repeat yourself. Ever.
-
-#### Graph-Based Relational Memory (Relationships)
-Tabular databases separate your tasks, events, and memories into isolated drawers, forcing the AI to guess how they relate. Dialogue solves this by mapping your entire workspace into a structured, schema-gated knowledge graph. It defines workspaces, tasks, events, habits, and resources as nodes, and maps their relationships (`BLOCKED_BY`, `COLLABORATES_WITH`, `PREREQUISITE_FOR`, `REFERENCES`) as edges. When you query the agent, it runs a spreading activation traversal from semantic entry nodes, assembling a highly contextual, structured briefing of dependencies and connections instantly.
-
-#### Bidirectional OCEAN Processing (Patterns)
-Facts tell the agent *what* you like. Patterns tell it *who you are*. Dialogue captures daily activity snapshots across all workspaces and performs a weekly/monthly **Bidirectional Cognitive Processing** compile. It reads the feed backward (**Retrograde Analysis**) to understand context and justify behaviors, and forward (**Anterograde Analysis**) to map user trajectory momentum. It frames these insights using the **Big 5 (OCEAN)** personality model (Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism) with bulleted evidence. The agent reads these digests at session start to optimize prompt context and caching, adapting its coaching tone. Instead of starting fresh, it refines and updates the existing monthly profile, discarding raw details over time to protect storage.
-
-#### User Bio (Identity)
-Your core identity and communication preferences are stored as a single bio text, always loaded at session start. The agent updates it on request, and previous versions are retained for rollback. This is your permanent context—who you are changes slower than what you're doing or how you're feeling.
-
-#### Interactive Periodic Reflections
-Productivity isn't just about crossing items off a list; it is about recognizing your growth. Dialogue periodically aggregates your task velocity, habit streaks, journaled milestones, and narrative context from your chronological logs, compiling them into a visual, gamified summary—a "Spotify Wrapped" for your life. By reflecting on your output, the agent helps you celebrate wins and identify cognitive bottlenecks, transforming checklist compliance into a satisfying journey of self-reflection. Each reflection blends statistical breakdowns with a narrative arc drawn directly from the struggles and breakthroughs you recorded in your task and event journals.
+The difference is not in the features. It is in the relationship.
 
 ---
 
-### Supporting Workspace Mechanics (Secondary Layer)
+## What Makes Dialogue Different
 
-* **Custom Agent Personas**: Mold your AI's personality, behavior, and instructions. Create specific agent profiles (e.g. Tech Lead, Fitness Coach, Life Mentor) with custom system prompt instructions and descriptive summaries managed in a mobile-optimized cards gallery.
-* **Multimodal Ingestion & Web Research**: Drag PDFs, images, or briefs directly into your chat. The agent reads the content and launches real-time web searches to fact-check, synthesize, and execute schedule updates in a single turn.
-* **Closed-Tab & Context-Aware Smart Notifications**: No more timezone-broken reminders that vanish when you close the tab. Dialogue utilizes background Service Workers and native Web Push APIs to deliver scheduled alerts (tasks, events, habits) even when the browser is shut. Each notification is packed with active workspace shortcuts to jump you directly to the correct tools.
-* **Contextual Scope Pinning**: Pin specific Tasks, Events, or Dates to the chat with a single click. Pinning displays a floating badge in the chat input and injects the target's exact metadata and ledger history into the agent's active system prompt, allowing you to run relative commands ("reschedule this," "resolve this blocker") with absolute precision.
-* **Context-Isolated Workspaces & Universal Center**: Silo chats, tasks, and memory context into dedicated project workspaces (e.g. "Work", "Sovereign"). Each workspace can be configured with its own default **Agent Persona** that automatically loads for new sessions in that context. Step back into the **Universal Space**—a dashboard that aggregates today's tasks, events, and journal summaries across all workspaces in a single view. The Universal Space runs its own neutral agent capable of cross-workspace queries ("what's my day look like?"), inline actions (mark done, reschedule, pin), and weekly reflections that draw from your entire activity, not just one silo. Full isolation when you need focus. Full visibility when you need the big picture.
-* **Task & Event Resource Tray**: A clean visual panel that aggregates external links, Figma specs, and PDF documents attached directly to your chronological logs, putting your active references a single click away.
+Every productivity app puts you in the same position: you open it, you do the work, you close it. The app is passive. You are the operator.
 
----
+Dialogue inverts this. The agent is active. It notices when a habit streak is at risk. It remembers that you mentioned feeling overwhelmed last Tuesday. It knows your thesis deadline is approaching and that you tend to work better with buffer time. It asks how you are doing before you ask it anything.
 
-## Three Sovereign Pillars
+This is not automation. The agent never acts without your confirmation. It does not reschedule your meetings or delete your tasks on its own. What it does is pay attention — and use that attention to be genuinely useful, not just responsive.
 
-### 1. Agent-Native Architecture
-
-* **What it means**: The agent doesn't just format text responses—it operates your workspace. It creates tasks, schedules events, logs habits, saves memories, and adapts its behavior based on your patterns. You talk to Dialogue like a colleague, and the app responds by doing, not just replying.
-* **Why it matters**: Every other productivity tool makes you the operator. Dialogue makes the agent the operator, and you the director. You set priorities, the agent executes.
-
-### 2. Dual-Pane Reactive Workspace
-
-* **What it means**: Dialogue rejects static layouts. The UI is a real-time reactive workstation that updates instantly as the agent works:
-  * **Interactive Left Rail**: Quick navigation between colored workspace contexts.
-  * **Session Controller Sidebar**: Manages conversational threads and hot-swaps between AI providers mid-conversation.
-  * **Consent-Gated Chat Feed**: When the agent triggers an action, it renders an inline glassmorphic card showing what it plans to do. You approve or modify with a click before anything executes.
-  * **Collapsible Companion Pane**: Houses the living task list, calendar grid, and habit tracker—all updating in real time as the agent makes changes.
-* **Why it matters**: No reloads, no "saving changes," no stale data. The workspace is a live view into the agent's understanding of your life.
-
-### 3. Absolute Ownership (Private & BYOK)
-
-* **What it means**: Dialogue operates under a Bring-Your-Own-Keys model. All chat histories, task logs, calendar details, and memories are stored in your own private Convex instance. No vendor lock-in, no telemetry, no centralized database harvesting your daily routines.
-* **Why it matters**: When the agent knows everything about your work and life, that data should belong to you—not to a startup's data center. You bring the API keys, you own the database, you decide what stays private.
+The longer you use Dialogue, the better it knows you. Not because it was trained on your data, but because it remembers your conversations, tracks your patterns, and builds a real picture of who you are and how you work.
 
 ---
 
-## How Memory Works: The Agent That Grows With You
+## Core Features
 
-Most AI assistants start fresh every conversation. Dialogue is built on a different premise: **the agent should be smarter on day 365 than it was on day 1.** Not because we feed it more data—because we designed four complementary, cross-referencing memory systems that see you from different angles: **Identity (User Bio)**, **Behaviors (Bidirectional OCEAN)**, **Facts (Semantic Memory)**, and **Relationships (Graph Memory)**.
+### Living Chronological Journals
+When you complete a task in a standard app, everything that got you there disappears. The late nights, the blockers, the decisions — gone. Dialogue keeps a running, timestamped ledger attached to every task and event. Every update, struggle, or note is appended in order. The agent reads this history when you return to something, so you never have to re-explain where you left off.
 
-| Subsystem | What it stores | Core Retrieval Method | Compounding & Pruning Mechanics |
-|---|---|---|---|
-| **Stated Identity (User Bio)** | Stated biography, names, communication style, instructions | Loaded globally on every message turn | Manual edit overrides with revision history rollbacks |
-| **Observed Patterns (OCEAN)** | Psychometric profile (Big 5), behavior, energy, vector trajectory | Top-of-prompt instruction context (Cache-Optimized) | Daily snapshotting, weekly compile, monthly cascade (prunes weekly digests) |
-| **Explicit Facts (Semantic)** | Long-term preferences, technology stacks, static details | Cosine similarity vector search (top-5 matches) | Point deduplication, 30-day recency boost, linear decay |
-| **Relational Context (Graph)** | Entity-relationship nodes (Tasks, Events, Habits) and typed, weighted edges | Spreading activation traversal (1-2 degrees of separation) | Node/edge indexing, OCEAN weight scaling, and UserBio policy filtering |
+### Native Habits & Routine Tracking
+Habits are not tasks. They are identities you are building. Dialogue treats them that way — tracking streaks, handling intentional skips (streak freezes), and monitoring consistency over time. The agent notices when a long streak is about to break and mentions it. Logging a habit takes one message. No confirmation cards, no friction.
 
----
+### Semantic Memory
+The agent remembers facts about you — your preferences, your projects, your working style — and retrieves the ones relevant to your current conversation. You never have to re-introduce yourself. Memories are automatically deduplicated, and you can delete any specific memory if it becomes outdated or incorrect.
 
-### 1. Explicit Facts (Semantic Memory)
-When you tell the agent about your preferences ("I prefer writing frontend code in TypeScript") or record details ("Figma design is located at this link"), it is committed to a vector-indexed database. 
-- **Point Deduplication**: Every fact is normalized and hashed using SHA-256. If you repeat a fact, the mutation patches the existing document's timestamp rather than writing duplicate rows.
-- **Semantic Write Guard**: Before saving, the system performs a similarity search. If a memory matches with a cosine similarity `score > 0.85`, writing is skipped to prevent duplicate clutter.
-- **Time-Decay Rescoring**: Older facts decay linearly. Recent facts (under 30 days old) receive a 10% relevance boost: `final_score = vector_score * (1 + 0.1 * recency_factor)`. This keeps active context top-of-mind.
-- **Explicit Delete Hook**: The agent has a `deleteSemanticMemory` tool. If a fact changes, the user can explicitly instruct the agent to "forget this," deleting the vector document instantly.
+### Behavioral Understanding
+Every time you open Dialogue, the agent quietly reviews your recent conversations and activity. It notices patterns — when you tend to be most focused, what kinds of tasks drain you, how you respond under pressure — and uses that understanding to inform how it talks to you and what it prioritizes. This synthesis happens on app open, not on a server schedule. No always-on infrastructure required.
 
----
+### User Bio
+Your core identity lives in a persistent bio the agent loads at the start of every session. It captures who you are, how you like to communicate, and any standing instructions you have for the agent. Previous versions are saved so you can roll back if an update goes wrong.
 
-### 2. Behavioral Patterns (Bidirectional OCEAN)
-Facts only represent what you *tell* the agent. Your actual behavior is a richer dataset. Dialogue compiles a cognitive profile based on the **Big 5 (OCEAN)** traits (Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism) using a multi-step bidirectional pipeline:
-- **Daily Ingestion**: Every night at 23:59 (local timezone), a cron creates a `dailyActivities` record containing all completed tasks, scheduled events, skipped habits, cancelled meetings, and a 2-line agent-synthesized chat reflection. Inactivity is recorded as "No activity".
-- **Deletion Interception**: If a task or event is deleted, the mutation intercepts the action and logs its final state to the day's snapshot before purging it, ensuring full activity logs.
-- **Retrograde & Anterograde weekly analysis**: Every Monday, the compiler runs two passes:
-  - *Retrograde Analysis (Day 7 → Day 1)*: Reads backward to find causal links (e.g. realizing a skipped workout on Tuesday was caused by a late-night coding crunch logged on Monday), eliminating false negative assessments.
-  - *Anterograde Analysis (Day 1 → Day 7)*: Reads forward to map your behavioral trajectory (momentum vector) rather than a single static snapshot.
-- **No-Bias Inactivity Guard**: Days or weeks with zero activity do not penalize scores. Inactivity is treated as neutral (insufficient data), retaining the baseline scores.
-- **OCEAN Percentile Scale**: Behaviors are scored against a standardized scale (Very Low: 0–10% to Very High: 90–100%) and justified with bulleted evidence.
-- **Monthly Cascade**: After 4 weeks, the weekly digests are compiled into a Monthly Digest and deleted to preserve storage.
-- **Stable Refinement**: The LLM refines the previous monthly summary rather than rewriting it from scratch, keeping the behavioral profile slow-moving and stable.
-- **Cache-Optimized Prompt Injection**: The monthly and weekly digests are hoisted to the **very top** of the system prompt. Since these files change slowly, they stay hot in the LLM's prefix cache, dramatically reducing token latency.
+### Periodic Reflections
+At the end of the week, the month, and the year, Dialogue synthesizes your completed tasks, habit consistency, and journal entries into a narrative summary — something closer to a personal retrospective than a dashboard. It celebrates what you accomplished and surfaces patterns worth examining. Think Spotify Wrapped, but for your actual life.
 
 ---
 
-### 3. Stated Identity (User Bio)
-Your stated biography and communication preferences (such as preferred tone, username, or guidelines) are loaded globally. Unlike behavioral patterns (which are *observed*), this is what you *want* the agent to know. Updates overwrite the active bio, but all historic revisions are saved for instant rollbacks.
+## Supporting Capabilities
+
+* **Custom Agent Personas** — Each workspace can have its own agent personality and instruction set. Your work workspace can be direct and focused. Your personal workspace can be warmer and more reflective. You define the behavior.
+* **Multimodal Ingestion & Web Research** — Drop a PDF, image, or document into the conversation. The agent reads it and can act on it — scheduling follow-ups from a meeting brief, comparing two reports, answering questions from a manual. Real-time web search is available for anything that needs current information.
+* **Context-Aware Smart Notifications** — Reminders that know what they are reminding you about. Instead of "Task due in 15 minutes," you get "Lab 5 in 15 minutes — last you mentioned you had two questions left." Delivered natively on your machine.
+* **Scope Pinning** — Click any task or event to pin it to the chat. The agent loads its full context and history into the conversation, so you can say "reschedule this" or "what's blocking this" without further explanation.
+* **Context-Isolated Workspaces** — Each workspace is a complete silo: its own conversations, tasks, events, habits, and agent memory context. Switch between them without bleed. Step into the Universal Space for a cross-workspace view of your entire day.
+* **Task & Event Resource Tray** — Attach links, files, and documents directly to tasks and events via conversation. They appear as a visual tray when you open that item — your references, one click away.
 
 ---
 
-### 4. Relational Context (Graph Memory)
-Dialogue maps your entire workspace into a structured, schema-gated knowledge graph. It defines concrete entities (Workspaces, Tasks, Events, Habits, Resources, People) as nodes and typed relationships (`BLOCKED_BY`, `COLLABORATES_WITH`, `PREREQUISITE_FOR`, `REFERENCES`) as edges.
-- **Spreading Activation**: Recreates thought association. Locating a node automatically activates neighboring nodes (e.g., matching a person node pulls active tasks and resources connected to them).
-- **Sub-Graph Extraction**: Instead of injecting raw lists of all tasks/events, the compiler extracts only the local neighborhood of active nodes, saving context window space.
-- **MCP Node Syncing**: Workspace-specific MCP integrations (such as GitHub, Overleaf, or Zotero) dynamically populate the graph with external commit logs, references, and edit states.
-- **Causal Warnings**: Graph edges track timeline dependencies in real time, allowing the agent to predict and warn about schedule conflicts (e.g. late coding sessions threatening habit streaks).
+## How the Agent Knows You
 
-### Quad-Triangulation: How the Subsystems Collaborate
-At session start, the agent loads your stated **Identity (Bio)**, observes your **Behavioral Patterns (OCEAN Digests)**, fetches matching **Factual Context (Semantic Memory)**, and traverses the **Relational Network (Graph Memory)**. The agent integrates these four signals:
-- *Bio* sets global rules, username, and prunes graph paths that violate user constraints.
-- *OCEAN* observes behavioral patterns and dynamically tunes graph edge weights (e.g. prioritizing blocker resolution during high-stress periods).
-- *Semantic Memory* acts as an entry portal to match query vectors to starting nodes in the graph.
-- *Graph Memory* acts as the central connective tissue, walking paths to retrieve related tasks, calendar events, habits, and synced external MCP resources in a clean structural briefing.
+Dialogue uses three memory systems that work together to give the agent a complete picture of who you are.
 
----
+| System | What it holds | How it works |
+|---|---|---|
+| **User Bio** | Your identity, communication preferences, standing instructions | Always loaded. Updated on request. Versioned for rollback. |
+| **Semantic Memory** | Explicit facts — preferences, projects, context, technical details | Vector search retrieves what is relevant to the current conversation. Deduplicated automatically. |
+| **Behavioral Understanding** | Patterns — how you work, what drains you, how you respond to pressure | Synthesized from your conversation history when you open the app. Free-form, not scored. Gets more accurate over time. |
 
-## Technical Architecture & Paradigm
+These three systems answer different questions. The bio answers who you are. Semantic memory answers what the agent knows about your life. Behavioral understanding answers how you actually operate.
 
-Dialogue is structured around three key engineering decisions designed to put you in control:
-
-### 1. Unified Inference Model (Cloud / Local via Vercel AI SDK)
-
-* **What it is**: Hot-swapping between any standard Cloud LLM provider (such as Google Gemini, OpenAI, or Anthropic) and fully offline local models (via Ollama, etc.) running on your own machine, all abstracted through **Vercel AI SDK Providers**.
-* **Why it matters**: You shouldn't be locked into a single AI provider or forced to maintain custom API fetch logic. Vercel AI SDK standardizes the model interface. If you need hyper-fast, cloud-based reasoning, plug in your preferred API key. If you want absolute, offline privacy for sensitive data, switch to a local model running on your computer with a single line of code change.
-
-### 2. Timezone-Aware Server Architecture (IANA Timezone Sync)
-
-* **What it is**: Synchronizing the user's current browser IANA timezone (e.g., `America/New_York` or `Asia/Tokyo`) with active chat sessions, allowing the Convex backend to dynamically calculate offsets, local hours, and midnight boundaries.
-* **Why it matters**: Standard cloud databases calculate days based on UTC, causing daily habits to reset at the wrong time and background crons (like nightly OCEAN activity compilations) to fire in the middle of your workday depending on where you live. Dialogue runs server-side timezone calibration using `convex/timezones.ts`. Your timezone is dynamically synced from the client, ensuring server crons, timezone-locked habit logs, and scheduled push notification jobs update relative to your local clock, resolving UTC timezone drift permanently.
-
-### 3. Human-in-the-Loop Consent Gate (Verification Protocol)
-
-* **What it is**: A strict rule where the AI must propose a plan before calling database mutations, coupled with secure prompt sanitization.
-* **Why it matters**: Autopilot agents are dangerous—they delete files, schedule ghost meetings, and hallucinate tasks. Dialogue builds trust. The agent drafts a plan, and you click "Confirm" on a physical card to execute it. No surprises, no accidental wipes.
+Together, they mean the agent on day 365 knows you far better than the agent on day 1 — without you having to do anything except use it.
 
 ---
 
-## Agent Capability Library (Tools & Skills)
+## Ownership & Privacy
 
-The Dialogue agent interacts with your workspace by executing specific, permission-gated actions. Here is the full library of tools available to the agent:
+This is not a privacy feature. It is the architecture.
 
-### 1. Task Management Suite
+* **Runs on your machine.** Dialogue is a desktop application. Your data does not pass through our servers. There is no subscription, no telemetry, no vendor with access to your conversations.
+* **Bring your own API keys.** Connect whichever AI provider you prefer — Gemini, OpenAI, Anthropic, or a local model running on your own machine via Ollama or LM Studio. Switch providers at any time.
+* **Local embeddings.** Semantic memory uses a lightweight 384-dimension embedding model that runs entirely on your device. No embedding API key required. No data leaves your machine for this step.
+* **Self-host with one binary.** Dialogue's backend runs on PocketBase — a single executable file. Download it, run it, and you have a fully functional local server. No cloud account required, no complex deployment, no always-on VPS. Open the app and it works.
 
-* **`addTask`**: Creates a single task with custom priority, category, progress, and initial status hooks.
-* **`batchAddTasks`**: Groups multiple task creations into a single instant database transaction (e.g. when dumping a checklist).
-* **`updateTask`**: Updates task details, progress percentage, and attaches resource references (external URLs or document storage IDs) by appending standardized markdown asset logs chronologically to the task ledger.
-* **`completeTask`**: Safely signs off on completed tasks, updating their status and storing their completion metadata.
-* **`deleteTask`**: Permanently deletes a task.
-* **`getTaskNotes`**: Retrieves the full, detailed chronological progress logs of a specific task only when requested, keeping the chat interface fast and lightweight.
-* **`getTaskResources`**: Retrieves the linked resources (external web links and file attachments) associated with a specific task.
-
-### 2. Time & Calendar Scheduling
-
-* **`addEvent`**: Schedules calendar blocks (point-in-time launches or duration-based focus sessions).
-* **`updateEvent`**: Modifies event metadata, prep instructions, location details, and summaries.
-* **`updateEventOccurrence`**: Targets and reschedules a single occurrence of a repeating event series without breaking the master recurrence pattern.
-* **`deleteEvent`**: Deletes calendar bookings.
-* **`getEventResources`**: Retrieves the linked resources (external web links and file attachments) associated with a specific calendar event.
-
-### 3. Long-Term Memory & Search
-
-* **`saveSemanticMemory`**: Silently records persistent facts about the user (preferences, life context, technical stack, work details) on every turn, building a durable vector-indexed knowledge base that persists across sessions.
-* **`deleteSemanticMemory`**: Removes a specific fact from the semantic memory store by its memory ID, letting the user correct wrong memories.
-* **`updateUserBio`**: Refines and updates the user's permanent biography summary based on behavioral insights. Previous bio versions are retained for rollback.
-* **`searchHistoricalEntities`**: Allows keyword and date range searches across completed tasks and past meetings, giving the agent a backward-looking historical perspective.
-* **`listWorkspaces`**: Reads all active workspaces to help users route, organize, and categorize items.
-
-### 4. Real-Time Research & Reading
-
-* **`searchWeb`**: Executes parallel search queries across Tavily or Serper, feeding live internet search results directly into the conversation.
-* **`fetchUrl`**: Fetches and parses the text content of a user-shared URL link, letting the agent read articles or documents directly.
-
-### 5. Periodic Reflections
-
-* **`triggerReflection`**: Aggregates workspace metrics (completed tasks, streaks, active categories) and narrative context from your chronological journals, then invokes the LLM to generate an engaging, Spotify-Wrapped style narrative summary for a given period (weekly, monthly, or yearly).
-
-### 6. Native Habits & Routine Tracking
-
-* **`create_habit`**: Creates a new habit routine with custom frequency structures (daily, weekly, specific days) isolated to a workspace context.
-* **`log_habit`**: Logs an execution instance (`completed` or `skipped`) for an active habit. This tool is exempt from confirmation gates, running instantly and silently when the user reports routine progress.
-* **`get_habit_consistency`**: Queries completion logs, streaks, and focus metrics for active habits across specific date ranges to generate consistency statistics.
-
-### 7. System Notifications & Custom Reminders
-
-* **`list_unread_notifications`**: Retrieves a list of unread notifications, reminders, or system alerts for the active user.
-* **`create_custom_reminder`**: Schedules a custom reminder message to trigger as a system notification at a specific future date and time.
+The agent learns deeply personal things about you. That information should belong to you.
 
 ---
 
-## Database Architecture (Convex & LadybugDB)
+## Technical Architecture
 
-Dialogue uses a dual-database approach to maintain strict separation of concerns between real-time UI state and deep AI memory.
+Dialogue is packaged as a Tauri desktop application. The Tauri shell (Rust) spawns and supervises two child processes on startup, then opens a webview pointed at the local Next.js server.
 
-### 1. Convex (Real-time Relational & Sync)
-Defined in `convex/schema.ts`, handling all UI reactivity and structured scheduling:
-* **`users`**: Manages authenticated profiles.
-* **`userProfile`**: Stores user-specific settings, including `preferences` and profile bio summaries.
-* **`workspaces`**: Silos containing a workspace name, branding color, default agent persona reference, and context details.
-* **`chatSessions`**: Conversation containers mapping active threads to workspaces.
-* **`messages`**: Multi-turn chat message data. Stores text, author, tool call logs, and active `scope`.
-* **`tasks`**: Task entries containing title, category, progress, chronological notes ledger, and scheduled notification offsets.
-* **`events`**: Calendar events (point-in-time and duration blocks), recurrence rules, and notification tracking.
-* **`habits`** & **`habitLogs`**: Habit definitions, completion metrics, and timezone-adjusted execution logs.
-* **`reflections`** & **`oceanSnapshots`**: Periodic summary logs (weekly/monthly/yearly), compiled focus statistics, and behavioral Big 5 observations tracked over time via CRON jobs.
-* **`pushSubscriptions`**: Browser Web Push subscription registration endpoints for closed-tab background alerts.
+| Process | Role |
+|---|---|
+| **Tauri shell (Rust)** | Lifecycle, system tray, OS notifications, on-open reminder scan, port coordination. The single binary the user downloads. |
+| **PocketBase (Go)** | Primary store, reactive subscriptions, auth, file storage, on-device DB. Single executable, no Docker. |
+| **Next.js (Node)** | UI, Mastra agent, embedding model loader (Xenova multilingual-e5-small), chat API, periodic reflection jobs. |
+| **LadybugDB (embedded)** | Vector search (384d cosine) and graph store for semantic memory. Local file on disk, queried via Cypher. |
 
-### 2. LadybugDB (Embedded Graph Memory)
-Operating directly on the Next.js server disk, LadybugDB acts as the "Brain's" local storage for vector embeddings and multi-hop relationships via the Cypher query language:
-* **`Memories`**: Vector-indexed semantic fact storage with automatic deduplication, time-decay weighting, and near-duplicate detection.
-* **`GraphNodes`**: Cypher-queryable entities representing convex IDs (Workspaces, Tasks, Events, People).
-* **`GraphEdges`**: Weighted, directed edges (`BLOCKED_BY`, `COLLABORATES_WITH`, `PREREQUISITE_FOR`, `REFERENCES`) allowing Mastra to traverse the knowledge graph instantly without network overhead.
+### Why this stack
+
+* **PocketBase over cloud databases** — runs offline, no account, no subscription, data stays on the user's disk. Single binary, single port (`localhost:8090`).
+* **Server-side embeddings, not browser-side** — the embedding model loads once in the Next.js process. The webview is lightweight, no ~120MB model in the browser bundle.
+* **LadybugDB for vector and graph** — already integrated. Brute-force cosine search is fast at personal scale (sub-50ms for 10K memories). No separate vector service to install.
+* **No always-on scheduler** — periodic work (weekly reflection, OCEAN synthesis, habit reminders) runs on app open, not on a server clock. The relationship is present when the user is present.
+* **Native OS notifications** — Tauri uses the system notification API and a system tray icon. No web push subscription required for the desktop app.
+
+### Memory architecture
+
+Dialogue unifies all memory writes through a single 384-dimension contract. Every memory is stored in both the primary database (for UI) and the vector store (for retrieval):
+
+1. The text is embedded by a local Xenova model (multilingual-e5-small, 384 dimensions, L2-normalized).
+2. The vector is inserted into the primary database alongside the text and a SHA-256 content hash.
+3. A mirror write to the vector store enables cosine-similarity retrieval and graph traversal.
+4. Hash-based deduplication runs first. If a near-duplicate is found via cosine similarity above 0.85, the write is skipped.
 
 ---
 
 ## Technical Stack
 
 | Layer | Technology |
-| --- | --- |
-| **Framework** | Next.js 15 (App Router, React 19) |
-| **AI Orchestration** | Mastra (Agent Workflows, Tool Calling, MCP Client Integration) |
-| **AI Providers & UI** | Vercel AI SDK Core (`@ai-sdk/openai`, etc.) & UI (`useChat`) |
-| **Backend & UI State** | Convex (Real-time reactive database, CRON jobs) |
-| **Agentic Graph Memory**| LadybugDB (Embedded C++ Graph & Vector database) |
-| **Styling** | Tailwind CSS v4 |
-| **Animations** | Framer Motion (Glassmorphic cards, slide sheets) |
-| **Supported Models** | Cloud LLMs (Gemini, OpenAI, Anthropic) & Local LLMs (Ollama) via Vercel AI SDK |
-| **Integrations** | Tavily / Serper (Web Research), Mammoth (Docx Extraction) |
-| **Auth** | Convex Auth (`@convex-dev/auth` for sovereign multi-device auth) |
+|---|---|
+| **Desktop shell** | Tauri (Rust) |
+| **Framework** | Next.js 16, React 19 |
+| **Primary database** | PocketBase (single Go binary, on-device) |
+| **AI orchestration** | Mastra (agent workflows, tool calling) |
+| **AI providers** | Vercel AI SDK — Gemini, OpenAI, Anthropic, Cohere, DeepSeek, Groq, Mistral, xAI, plus local models via Ollama / LM Studio |
+| **Vector + graph store** | LadybugDB (embedded C++ via `@ladybugdb/core`) |
+| **Embedding model** | Xenova multilingual-e5-small (384d, runs on-device) |
+| **Styling** | Tailwind CSS v4, Framer Motion |
+| **Auth** | PocketBase native (email/password) |
+| **Notifications** | Tauri OS notifications (system tray) |
 
 ---
 
@@ -248,8 +137,9 @@ Operating directly on the Next.js server disk, LadybugDB acts as the "Brain's" l
 
 ### Prerequisites
 
-* Node.js v18+
-* A Convex developer account
+* Node.js v20+
+* Rust toolchain (for Tauri builds)
+* macOS, Windows, or Linux
 
 ### 1. Project Initialization
 
@@ -261,36 +151,64 @@ npm install
 
 ### 2. Environment Configuration
 
-Create `.env.local` from the template (it's gitignored):
+Copy the env template and fill in your AI provider keys. **The encryption key must be set in both `.env.local` and the PocketBase admin panel** — encryption happens on the device, not in the browser.
 
 ```bash
 cp .env.example .env.local
 ```
 
-Fill in the values. VAPID keys and the encryption key must also be set in the **Convex dashboard → Settings → Environment Variables**, because the Convex Node runtime does not read Next.js's env. Generate a VAPID pair with:
+Generate the encryption key with:
 
 ```bash
-node -e "console.log(require('web-push').generateVAPIDKeys())"
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-See `.env.example` for the full list of supported variables.
+See `.env.example` for the full list of supported variables. The desktop wrapper (Tauri) sets the localhost endpoints automatically — no manual service URLs to configure.
 
 ### 3. Running Locally
 
-Launch the Convex backend compiler and the Next.js development server:
+```bash
+npm run tauri dev
+```
+
+This single command starts the PocketBase binary, the Next.js dev server with the embedding model loaded, and opens the Tauri webview. Open the app and it works.
+
+For browser-only development (no Tauri shell, useful for UI iteration):
 
 ```bash
-# Terminal 1: Starts Convex reactive dev compiler
-npx convex dev
+# Terminal 1: Start PocketBase
+./pocketbase serve
 
-# Terminal 2: Starts Next.js client
+# Terminal 2: Start Next.js
 npm run dev
 ```
 
-Open `http://localhost:3000` to access your sovereign workspace.
+Then open `http://localhost:3000` and point the app at your local PocketBase instance.
+
+### 4. Building the Desktop App
+
+```bash
+npm run tauri build
+```
+
+Produces a `.dmg` (macOS), `.exe` (Windows), or `.AppImage` (Linux). The user double-clicks the installer and the app is ready.
 
 ---
 
-## License & Sovereignty
+## Roadmap
 
-Dialogue is built as an open stack under a "bring-your-own-keys" philosophy. Your conversations, calendar entries, and tasks are completely contained within your private Convex deployment. No usage data, telemetry, or personal information is transmitted to third-party databases.
+Dialogue is a long-term project. The current build is the foundation — the relationship loop, the three memory systems, the on-device architecture. Things being built toward:
+
+* **Daily Conversation Model** — each day gets its own conversation that the agent initiates. It checks in, asks how you are, reflects at the end of the day. History organized by day, not by thread.
+* **Proactive Agent** — the agent notices unlogged habits, approaching deadlines, follow-ups from three days ago. Surfaces them as observations, not commands.
+* **Edge relationships in the graph** — when a memory is saved, automatically link it to the tasks, events, and habits it references. The graph becomes useful for retrieval, not just storage.
+
+See `docs/MIGRATION_POCKETBASE.md` for the technical roadmap (the move to a Tauri-packaged PocketBase backend is currently in progress).
+
+---
+
+## License
+
+Dialogue is open source. Your conversations, calendar entries, tasks, and memories are completely contained within your local installation. No usage data, telemetry, or personal information is transmitted to any third party.
+
+The agent learns deeply personal things about you. That information should belong to you.
