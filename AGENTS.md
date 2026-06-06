@@ -17,3 +17,5 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+All runtime env vars are listed in `.env.example`. `.env.local` is gitignored. VAPID keys and `ENCRYPTION_KEY` must also be set in the Convex dashboard — the Convex Node runtime does not read Next.js's env.

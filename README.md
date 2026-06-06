@@ -261,30 +261,19 @@ npm install
 
 ### 2. Environment Configuration
 
-Create a `.env.local` file in the root directory:
+Create `.env.local` from the template (it's gitignored):
 
-```env
-CONVEX_DEPLOYMENT=your_deployment_name
-NEXT_PUBLIC_CONVEX_URL=your_convex_url
-
-# Cloud Inference (Plug in your preferred API key)
-GEMINI_API_KEY=your_google_gemini_key
-OPENAI_API_KEY=your_openai_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
-
-# Local Inference (Optional - supporting LM Studio, Ollama, etc.)
-NEXT_PUBLIC_LM_API_TOKEN=lm-studio
-LOCAL_LLM_BASE_URL=http://localhost:1234/v1
-
-# Web Search Integration (Optional)
-TAVILY_API_KEY=your_tavily_api_key
-SERPER_API_KEY=your_serper_api_key
-
-# Closed-Tab Web Push Notifications (Optional - VAPID keys)
-VAPID_PUBLIC_KEY=your_vapid_public_key
-VAPID_PRIVATE_KEY=your_vapid_private_key
-VAPID_CONTACT_EMAIL=mailto:admin@yourdomain.com
+```bash
+cp .env.example .env.local
 ```
+
+Fill in the values. VAPID keys and the encryption key must also be set in the **Convex dashboard → Settings → Environment Variables**, because the Convex Node runtime does not read Next.js's env. Generate a VAPID pair with:
+
+```bash
+node -e "console.log(require('web-push').generateVAPIDKeys())"
+```
+
+See `.env.example` for the full list of supported variables.
 
 ### 3. Running Locally
 
