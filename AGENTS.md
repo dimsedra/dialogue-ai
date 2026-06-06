@@ -4,6 +4,12 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# End goal
+
+**`README.md` is the end-goal source of truth.** It defines the product (a relationship-first AI companion), the agentic capabilities, the on-device architecture, and the install story. Read it before making product, UX, or architecture decisions — every change should be measured against the relationship it serves, not the features it adds.
+
+The current technical work to reach that end goal lives in `docs/MIGRATION_POCKETBASE.md` (Convex → Tauri + PocketBase, phased plan, risks, cutover strategy).
+
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.

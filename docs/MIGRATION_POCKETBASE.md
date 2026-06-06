@@ -3,6 +3,10 @@
 > **Status**: Draft. Living document — update as decisions are made and phases complete.
 > **Last updated**: 2026-06-07
 > **Scope**: Replace the Convex backend with a self-hosted, Tauri-packaged stack. End-user install becomes a single desktop binary.
+>
+> **Source of truth**:
+> - **`README.md`** is the end-goal source of truth (product positioning, agentic capabilities, target architecture, install story). Read it first.
+> - This document is the technical roadmap to reach that end goal. It is downstream of the README — when the two disagree, the README wins.
 
 ---
 
