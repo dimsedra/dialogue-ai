@@ -24,6 +24,14 @@ The longer you use Dialogue, the better it knows you. Not because it was trained
 
 ---
 
+## On Automation
+
+The industry is racing to build AI that does things for you. We ask: **what's the point of being able to do things for the user if the user doesn't grow as a person?**
+
+The agent in Dialogue can research, draft, schedule, and organize. But the goal is not to offload your thinking. The goal is to give you back the time and attention to do the thinking that actually matters. The bookkeeping is the means. Your growth is the end.
+
+---
+
 ## A Partner That Works With You
 
 The agent doesn't just understand you. It works with you — across your whole life, not just your task list.
