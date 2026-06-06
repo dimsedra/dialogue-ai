@@ -10,6 +10,8 @@ Dialogue is not a smarter todo list. It is not a calendar with AI features. It i
 
 The difference is not in the features. It is in the relationship.
 
+> **Current operating mode: feature freeze** (until the PocketBase migration lands). Bug fixes, security patches, migration work, and migration-debt-reducing refactors only. See [ADR-011](docs/decisions/011-feature-freeze-during-pb-migration.md) for the full policy and the one carve-out (Mastra 1.0 Observational Memory in Phase 2).
+
 ---
 
 ## What Makes Dialogue Different

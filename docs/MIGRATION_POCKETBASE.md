@@ -197,6 +197,7 @@ Rough effort estimates. Each phase is independently shippable.
 - Configure system tray, OS notification API, on-open hooks.
 - Verify Xenova loads in the spawned Node process, `/api/embeddings` is reachable.
 - Set `APP_URL=http://localhost:3000` and `DESKTOP_MODE=true` automatically in the Tauri shell.
+- **License audit**: confirm no GPL3/AGPL transitive dependencies ship in the Tauri distribution (per the licensing policy in [ADR-011 §2.4](decisions/011-feature-freeze-during-pb-migration.md)). Produce `docs/migration/phase-0-license-audit.md` with one row per transitive dep and a license column. Any GPL3/AGPL finding is a Phase 0 blocker.
 - **Deliverable:** a `.dmg` that, when double-clicked, opens the existing Dialogue app in a Tauri window. No backend changes yet. Convex still works.
 
 ### Phase 1: Schema mapping + decision on graph layer (~1 week)
@@ -212,7 +213,8 @@ Rough effort estimates. Each phase is independently shippable.
 - `useAction` → a thin wrapper around PB JS hooks or Next.js API routes.
 - `usePaginatedQuery` → custom hook with cursor + `initialNumItems` parity (highest-risk item in this phase).
 - `Id<"X">` / `Doc<"X">` → generated types from PB schema.
-- **Deliverable:** client code can swap `from "convex/_generated/api"` for `from "pb-compat/api"` with no other changes. Convex still works in parallel.
+- **Mastra 1.0 Observational Memory adoption** (carve-out from [ADR-011 §2.3](decisions/011-feature-freeze-during-pb-migration.md)): install `@mastra/memory`, configure the agent with `observationalMemory: true`, configure dimensional alignment with the existing 384d contract (ADR-010), and delete the custom `saveMemory` / `saveMemoryBackendSync` / `extractAndSaveMemory` pipeline from `convex/ai.ts` and `convex/background_jobs.ts` (~500 LOC). The Mastra tool wrappers (`saveSemanticMemory`, `deleteSemanticMemory`, `retrieveGraphContext`) get re-pointed to `@mastra/memory`'s built-in stores; `convex/background_jobs.ts:saveSemanticMemoryAction` becomes a thin pass-through until Phase 4 retires it.
+- **Deliverable:** client code can swap `from "convex/_generated/api"` for `from "pb-compat/api"` with no other changes. The custom memory pipeline is gone; `@mastra/memory` is the single source of truth for memory writes. Convex still works in parallel.
 
 ### Phase 3: Migrate read paths behind a flag (~1 week)
 - Flip the adapter for read-only paths first: profile, workspaces, sessions, personas, tasks list, events list, habits list.
@@ -372,8 +374,9 @@ This doc is the high-level source of truth. Update it when:
 
 **File-level artifacts** (when we get to execution):
 - `docs/migration/phase-0-tauri-skeleton.md` — Tauri setup specifics
+- `docs/migration/phase-0-license-audit.md` — transitive dependency license audit (ADR-011 §2.4)
 - `docs/migration/phase-1-schema-mapping.md` — PB collection definitions
-- `docs/migration/phase-2-adapter.md` — `pb-compat/` API surface
+- `docs/migration/phase-2-adapter.md` — `pb-compat/` API surface, including Mastra 1.0 OM adoption steps
 - `docs/migration/phase-4-import-script.md` — Convex → PB data import
 - `docs/migration/cutover-runbook.md` — Step-by-step cutover + rollback
 
