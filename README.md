@@ -24,6 +24,18 @@ The longer you use Dialogue, the better it knows you. Not because it was trained
 
 ---
 
+## A Partner That Works With You
+
+The agent doesn't just understand you. It works with you.
+
+Tell it *"schedule a focus block tomorrow morning and add the syllabus readings to my task list"* — it drafts a plan, shows you the proposed events and tasks, and waits for your confirmation. Tell it *"I have a paper due Friday — set up a habit to write 500 words a day until then"* — it creates the habit with the right cadence, sets the streak, and starts tracking. Tell it *"find me three articles on retrieval-augmented generation and add the best one as a resource to my thesis project"* — it runs the searches, reads the results, attaches the right link to the right task.
+
+The agent has the full toolkit of a productivity workspace — task management, calendar scheduling, habit tracking, resource organization, web research, document reading. It uses these tools through **Mastra**, an open-source agent orchestration library, with a strict consent gate: **the agent proposes, you confirm, then it acts.** It never deletes or modifies anything without showing you the plan first.
+
+This is not automation. It is collaboration. The agent does the bookkeeping so you can stay focused on the actual work.
+
+---
+
 ## Core Features
 
 ### Living Chronological Journals
