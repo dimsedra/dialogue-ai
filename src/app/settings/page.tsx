@@ -31,6 +31,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { getProviderIcon } from "@/components/ProviderIcons";
 import { checkEmbeddingModel } from "@/app/actions/checkEmbeddingModel";
+import { getLocalEmbedding } from "@/lib/graph/embedding";
 
 import TavilyIcon from "@/img/icon/search/tavily.svg";
 import SerperIcon from "@/img/icon/search/serper.png";
@@ -221,10 +222,8 @@ export default function SettingsPage() {
 
   const handleAddMemory = async () => {
     if (!newMemoryText.trim()) return;
-    const dummyEmbedding = Array(384)
-      .fill(0)
-      .map(() => Math.random() * 2 - 1);
-    await addMemory({ text: newMemoryText, embedding: dummyEmbedding });
+    const embedding = await getLocalEmbedding(newMemoryText);
+    await addMemory({ text: newMemoryText, embedding });
     setNewMemoryText("");
   };
 

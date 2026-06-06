@@ -3,8 +3,6 @@ import { internalAction, action, ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
-import { embed } from "ai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import mammoth from "mammoth";
 import { runChatEngine, executeChatFollowUp, PROVIDER_CAPABILITIES, runSimpleTask, getTaskProviderAndModel } from "./ai_providers";
 import { getLocalDateString, getTodayBounds } from "./timezones";
@@ -13,16 +11,52 @@ function isMultimodalProvider(provider: string): boolean {
   return PROVIDER_CAPABILITIES[provider]?.multimodal ?? false;
 }
 
-async function getEmbedding(geminiApiKey: string, text: string): Promise<number[]> {
-  const google = createGoogleGenerativeAI({ apiKey: geminiApiKey });
-  const { embedding: rawVector } = await embed({
-    model: google.textEmbeddingModel("gemini-embedding-001"),
-    value: text,
+const EXPECTED_EMBEDDING_DIM = 384;
+
+function getAppBaseUrl(): string {
+  const url = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (!url) {
+    throw new Error(
+      "APP_URL is not configured. Set it in .env.local AND the Convex dashboard env vars.",
+    );
+  }
+  return url.replace(/\/$/, "");
+}
+
+async function fetchEmbeddingFromApp(text: string): Promise<number[]> {
+  const res = await fetch(`${getAppBaseUrl()}/api/embeddings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
   });
-  const sumSq = rawVector.reduce((sum, v) => sum + v * v, 0);
-  const magnitude = Math.sqrt(sumSq);
-  if (magnitude === 0) return rawVector;
-  return rawVector.map(v => v / magnitude);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `Embedding service returned ${res.status}: ${body || res.statusText}`,
+    );
+  }
+  const data = await res.json();
+  const embedding = data?.embedding;
+  if (!Array.isArray(embedding) || embedding.length !== EXPECTED_EMBEDDING_DIM) {
+    throw new Error(
+      `Embedding service returned ${Array.isArray(embedding) ? embedding.length : "non-array"} dimensions, expected ${EXPECTED_EMBEDDING_DIM}`,
+    );
+  }
+  return embedding as number[];
+}
+
+async function writeMemoryToGraph(id: string, text: string, embedding: number[]): Promise<void> {
+  const res = await fetch(`${getAppBaseUrl()}/api/graph/memory`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, text, embedding }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `Graph write returned ${res.status}: ${body || res.statusText}`,
+    );
+  }
 }
 
 // Helper function to hash text using Web Crypto SHA-256
@@ -35,21 +69,26 @@ async function computeHash(text: string): Promise<string> {
 
 async function saveSemanticMemoryInternal(
   ctx: ActionCtx,
-  geminiApiKey: string,
   text: string,
-  userId?: Id<"users">
+  embedding: number[],
+  options: { userId?: Id<"users">; precomputedHash?: string } = {}
 ): Promise<{ status: "inserted" | "updated" | "skipped_duplicate"; id?: string }> {
-  const profile = await ctx.runQuery(api.ai.getProfile, { userId, revealKeys: true });
-  const resolvedUserId = userId ?? profile?.userId;
+  if (embedding.length !== EXPECTED_EMBEDDING_DIM) {
+    throw new Error(
+      `embedding must be ${EXPECTED_EMBEDDING_DIM} dimensions (Xenova/multilingual-e5-small), got ${embedding.length}`,
+    );
+  }
+
+  const profile = await ctx.runQuery(api.ai.getProfile, { userId: options.userId, revealKeys: true });
+  const resolvedUserId = options.userId ?? profile?.userId;
   if (!resolvedUserId) throw new Error("Unauthorized");
 
-  const hash = await computeHash(text);
+  const hash = options.precomputedHash ?? (await computeHash(text));
 
   // 1. Check if duplicate hash exists
   const existingMemory = await ctx.runQuery(api.ai.getMemoryByHash, { hash, userId: resolvedUserId });
   if (existingMemory) {
     console.log(`Duplicate memory hash found: ${hash}. Updating timestamp.`);
-    const embedding = await getEmbedding(geminiApiKey, text);
     await ctx.runMutation(api.ai.saveMemory, {
       text,
       embedding,
@@ -57,10 +96,13 @@ async function saveSemanticMemoryInternal(
       hash,
       updatedAt: Date.now(),
     });
+    try {
+      await writeMemoryToGraph(existingMemory._id, text, embedding);
+    } catch (err) {
+      console.error("Graph write (update path) failed:", err);
+    }
     return { status: "updated", id: existingMemory._id };
   }
-
-  const embedding = await getEmbedding(geminiApiKey, text);
 
   // 2. Semantic write guard: check if any existing memory has cosine similarity > 0.85
   const searchResults = await ctx.vectorSearch("memories", "by_embedding", {
@@ -77,7 +119,7 @@ async function saveSemanticMemoryInternal(
     }
   }
 
-  // 3. Save new memory
+  // 3. Save new memory to Convex
   const id = await ctx.runMutation(api.ai.saveMemory, {
     text,
     embedding,
@@ -86,6 +128,13 @@ async function saveSemanticMemoryInternal(
     createdAt: Date.now(),
     updatedAt: Date.now(),
   });
+
+  // 4. Mirror to LadybugDB graph (best-effort)
+  try {
+    await writeMemoryToGraph(id, text, embedding);
+  } catch (err) {
+    console.error("Graph write (insert path) failed:", err);
+  }
 
   return { status: "inserted", id };
 }
@@ -451,13 +500,22 @@ Respond ONLY with the ISO-8601 string or "null" if invalid.`;
 });
 
 export const saveSemanticMemoryAction = action({
-  args: { text: v.string(), userId: v.optional(v.id("users")) },
+  args: {
+    text: v.string(),
+    embedding: v.array(v.number()),
+    hash: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
-    const profile = await ctx.runQuery(api.ai.getProfile, { userId: args.userId, revealKeys: true });
-    const customConfigs = (profile?.preferences as any)?.customConfigs || {};
-    const apiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
-    await saveSemanticMemoryInternal(ctx, apiKey, args.text, args.userId);
+    if (args.embedding.length !== EXPECTED_EMBEDDING_DIM) {
+      throw new Error(
+        `embedding must be ${EXPECTED_EMBEDDING_DIM} dimensions (Xenova/multilingual-e5-small), got ${args.embedding.length}`,
+      );
+    }
+    await saveSemanticMemoryInternal(ctx, args.text, args.embedding, {
+      userId: args.userId,
+      precomputedHash: args.hash,
+    });
   }
 });
 
@@ -812,14 +870,7 @@ export const extractAndSaveMemory = internalAction({
 
     // 1. Fetch user profile
     const profile = await ctx.runQuery(api.ai.getProfile, { userId, revealKeys: true });
-    
-    // Check if we have a Gemini key for vector embedding creation (which is mandatory for vector search)
     const customConfigs = (profile?.preferences as any)?.customConfigs || {};
-    const geminiApiKey = customConfigs.gemini?.apiKey || process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
-      console.warn("Skipping background memory extraction because GEMINI_API_KEY is not available (needed for vector embedding generation).");
-      return;
-    }
 
     // 2. Fetch session messages to build context
     const messages = await ctx.runQuery(api.messages.list, { sessionId, userId });
@@ -873,7 +924,8 @@ Guidelines:
     if (extractedFact && extractedFact.toLowerCase() !== "null") {
       console.log(`[Memory Extractor] Extracted new fact: "${extractedFact}"`);
       try {
-        const saveResult = await saveSemanticMemoryInternal(ctx, geminiApiKey, extractedFact, userId);
+        const embedding = await fetchEmbeddingFromApp(extractedFact);
+        const saveResult = await saveSemanticMemoryInternal(ctx, extractedFact, embedding, { userId });
         console.log(`[Memory Extractor] Save result:`, saveResult);
       } catch (err) {
         console.error("Failed to save background memory:", err);

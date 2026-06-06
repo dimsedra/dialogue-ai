@@ -706,6 +706,12 @@ export const saveMemory = mutation({
     updatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    if (args.embedding.length !== 384) {
+      throw new Error(
+        `embedding must be 384 dimensions (Xenova/multilingual-e5-small), got ${args.embedding.length}`,
+      );
+    }
+
     const userId = args.userId ?? (await auth.getUserId(ctx));
     if (!userId) throw new Error("Unauthorized");
 
@@ -987,11 +993,17 @@ export const saveMemoryBackendSync = mutation({
     hash: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    if (args.embedding.length !== 384) {
+      throw new Error(
+        `embedding must be 384 dimensions (Xenova/multilingual-e5-small), got ${args.embedding.length}`,
+      );
+    }
+
     // For backend sync, grab the first user since it's a personal app
     const users = await ctx.db.query("users").take(1);
     if (!users.length) throw new Error("No users found");
     const userId = users[0]._id;
-    
+
     if (args.hash) {
       const existing = await ctx.db
         .query("memories")
@@ -999,7 +1011,7 @@ export const saveMemoryBackendSync = mutation({
         .first();
       if (existing) return existing._id;
     }
-    
+
     return await ctx.db.insert("memories", {
       userId,
       text: args.text,
