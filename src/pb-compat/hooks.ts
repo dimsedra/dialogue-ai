@@ -57,23 +57,22 @@ export type {
 export { executePbMutation } from "./use-mutation";
 
 // =============================================================================
-// useAction — for server-side / non-CRUD actions (e.g. embeddings, parsing).
+// useAction — for server-side / non-CRUD actions (e.g. parseDate, embeddings).
 //
-// Phase 1: throws.
-// Phase 2: wraps a Next.js API route that internally calls PB (no more Convex
-//   actions). The args/result shapes mirror Convex's action signatures so
-//   consumer code doesn't need to change.
+// Phase 1: stub threw on call.
+// Phase 2 Stage B.4: the real implementation lives in `./use-action.ts`.
+// POSTs args to /api/pb-action/<name> and returns the parsed result.
+// The route dispatcher resolves the name to a registered handler and runs
+// it with the user context (from the Bearer token). The dispatcher + auth
+// helper + action registry live under `src/lib/pb-actions/`.
 // =============================================================================
 
-export function useAction<TArgs extends Record<string, unknown>, TResult = unknown>(
-  _action: unknown,
-): (args: TArgs) => Promise<TResult> {
-  throw new Error(
-    "pb-compat: useAction is a Phase 1 stub. " +
-      "It is not yet implemented against PocketBase. " +
-      "Set NEXT_PUBLIC_BACKEND=convex (default) or wait for Phase 2.",
-  );
-}
+export { useAction, executePbAction, defineAction } from "./use-action";
+export type {
+  PbActionDescriptor,
+  PbActionRequest,
+  PbActionResponse,
+} from "./use-action";
 
 // =============================================================================
 // usePaginatedQuery — highest-risk item in Phase 1 (per migration plan §5 Phase 1).

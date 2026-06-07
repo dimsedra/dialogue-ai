@@ -39,6 +39,11 @@ export {
   type PbUpdateDescriptor,
   type PbDeleteDescriptor,
   executePbMutation,
+  type PbActionDescriptor,
+  type PbActionRequest,
+  type PbActionResponse,
+  executePbAction,
+  defineAction,
 } from "./hooks";
 export { useAuth, PbAuthProvider } from "./auth";
 export { getPbClient, resolvePbUrl } from "./client";

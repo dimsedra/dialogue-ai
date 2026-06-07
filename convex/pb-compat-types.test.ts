@@ -150,8 +150,16 @@ describe("pb-compat: hooks throw in Phase 1", () => {
     expect(true).toBe(true); // type-level only
   });
 
-  it("useAction throws", () => {
-    expect(() => useAction({} as unknown)).toThrow(/Phase 1 stub/);
+  it("useAction is no longer a stub — type signature requires a PbActionDescriptor", () => {
+    // Phase 2 Stage B.4: useAction now requires a PbActionDescriptor
+    // ({ name: string }). Pure type-level check via the directive below.
+    // No runtime call (the hook would need a renderer).
+    const _takesDescriptor = (
+      _d: import("../src/pb-compat/use-action").PbActionDescriptor,
+    ): void => undefined;
+    // @ts-expect-error — plain {} is not a valid action descriptor.
+    _takesDescriptor({});
+    expect(true).toBe(true); // type-level only
   });
 
   it("usePaginatedQuery throws", () => {
