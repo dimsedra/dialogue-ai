@@ -155,6 +155,10 @@ export interface PbUserProfile extends PbRecord {
   weeklyNotesSummaries?: string[];
   monthlyNotesSummaries?: string[];
   behavioralProfile?: string;
+  // PB system field, ISO 8601 string. Optional in the type because
+  // records seeded outside the SDK (e.g. from fixtures) may not have
+  // it. The SDK always populates it on insert.
+  created?: string;
 }
 
 export interface PbMemories extends PbRecord {

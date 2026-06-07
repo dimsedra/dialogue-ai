@@ -50,6 +50,7 @@ export {
 } from "./hooks";
 export { useAuth, PbAuthProvider } from "./auth";
 export { getPbClient, resolvePbUrl } from "./client";
+export { usePbProfile } from "./hooks/use-pb-profile";
 
 export type {
   PbId,

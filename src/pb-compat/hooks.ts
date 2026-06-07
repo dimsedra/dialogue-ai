@@ -128,6 +128,20 @@ export interface PbAuthState {
 }
 
 // =============================================================================
+// usePbProfile — Convex-shaped wrapper around the PB userProfile.get
+// descriptor. B.7.3: the first read-path call behind the
+// NEXT_PUBLIC_BACKEND flag. Reads the current user from useAuth(),
+// fetches via the PB user_profile collection, and maps the PB shape
+// to Convex's Doc<"userProfile"> so the existing consumer code
+// (profile._id, profile.userId, profile.preferences.*) stays
+// unchanged across the flag.
+//
+// Real implementation lives in `./hooks/use-pb-profile.ts`.
+// =============================================================================
+
+export { usePbProfile } from "./hooks/use-pb-profile";
+
+// =============================================================================
 // Re-exports for convenience.
 // =============================================================================
 

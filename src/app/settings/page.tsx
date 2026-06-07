@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { isPbBackend, usePbProfile } from "@/pb-compat";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import {
   ArrowLeft,
@@ -50,7 +51,13 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export default function SettingsPage() {
-  const profile = useQuery(api.ai.getProfile, {});
+  // B.7.3: read profile from PB when the flag is on, from Convex
+  // otherwise. Both hooks run unconditionally (Rules of Hooks); the
+  // unused result is discarded at the ternary below. In production
+  // with the flag off, the entire PB branch is DCE'd at build time.
+  const pbProfile = usePbProfile();
+  const convexProfile = useQuery(api.ai.getProfile, {});
+  const profile = isPbBackend() ? pbProfile : convexProfile;
   const memories = useQuery(api.ai.getAllMemories, {});
   const updateProfile = useMutation(api.ai.updateProfile);
   const updateMemory = useMutation(api.ai.updateMemoryText);
