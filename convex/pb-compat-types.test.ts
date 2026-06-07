@@ -40,9 +40,12 @@ import {
 } from "../src/pb-compat";
 
 describe("pb-compat: phase status", () => {
-  it("is currently in Phase 1 stub mode", () => {
-    expect(PB_COMPAT_PHASE).toBe(1);
-    expect(PB_COMPAT_STATUS).toBe("stub");
+  it("is currently in Phase 2 (in-progress)", () => {
+    // Phase 2 is in progress as of B.5a. Phase 1 stub status was
+    // superseded by the real hooks (B.1-B.5a). B.7 is the first consumer
+    // call behind the flag.
+    expect(PB_COMPAT_PHASE).toBe(2);
+    expect(PB_COMPAT_STATUS).toBe("in-progress");
   });
 
   it("reports PB backend as not active when NEXT_PUBLIC_BACKEND is unset", () => {
@@ -162,10 +165,19 @@ describe("pb-compat: hooks throw in Phase 1", () => {
     expect(true).toBe(true); // type-level only
   });
 
-  it("usePaginatedQuery throws", () => {
-    expect(() => usePaginatedQuery({} as unknown, {}, { initialNumItems: 10 })).toThrow(
-      /Phase 1 stub/,
-    );
+  it("usePaginatedQuery is no longer a stub — type signature requires a PbPaginatedQuery", () => {
+    // Phase 2 Stage B.5a: usePaginatedQuery now requires a PbPaginatedQuery
+    // (function with _pb metadata). Pure type-level check via the directive
+    // below. No runtime call (the hook would need a renderer). The hook's
+    // real behavior is exercised by the 10K stress test in B.5b.
+    const _takesQuery = (
+      _q: import("../src/pb-compat/use-paginated-query").PbPaginatedQuery<
+        Record<string, unknown>
+      >,
+    ): void => undefined;
+    // @ts-expect-error — plain {} is not a PbPaginatedQuery.
+    _takesQuery({});
+    expect(true).toBe(true); // type-level only
   });
 
   it("useAuth throws when called outside a PbAuthProvider", () => {

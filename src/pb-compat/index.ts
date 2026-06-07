@@ -44,6 +44,9 @@ export {
   type PbActionResponse,
   executePbAction,
   defineAction,
+  type PbPaginatedQuery,
+  type PbPaginatedDescriptor,
+  definePaginatedQuery,
 } from "./hooks";
 export { useAuth, PbAuthProvider } from "./auth";
 export { getPbClient, resolvePbUrl } from "./client";
@@ -82,6 +85,27 @@ export {
 } from "./_generated/dataModel";
 
 // =============================================================================
+// Pagination helpers (used by usePaginatedQuery; exposed for tests + any
+// consumer that needs to mutate paginated state directly).
+// =============================================================================
+
+export {
+  type PbItem,
+  type PbSubscribeEvent,
+  type PbCursor,
+  encodeCursor,
+  decodeCursor,
+  appendOlderPage,
+  prependNewItem,
+  removeItemById,
+  findPageOfItem,
+  mergeRefetchedPage,
+  handleCreateEvent,
+  handleDeleteEvent,
+  buildPageFilter,
+} from "./pagination";
+
+// =============================================================================
 // Feature-flag check. Single source of truth for "is the PB backend active".
 //
 // Phase 1: always returns false. Phase 2 enables the flag for the feature-flag
@@ -98,7 +122,12 @@ export function isPbBackend(): boolean {
 
 // =============================================================================
 // Phase status. Used by tests and the migration doc to verify the surface.
+//
+// Phase 2 is in progress as of B.5a: hooks B.1 (useAuth), B.2 (useQuery),
+// B.3 (useMutation), B.4 (useAction), B.5a (usePaginatedQuery) are real.
+// The `isPbBackend` flag is wired but defaults to false. The first consumer
+// call behind the flag lands in B.7.
 // =============================================================================
 
-export const PB_COMPAT_PHASE = 1 as const;
-export const PB_COMPAT_STATUS = "stub" as const;
+export const PB_COMPAT_PHASE = 2 as const;
+export const PB_COMPAT_STATUS = "in-progress" as const;

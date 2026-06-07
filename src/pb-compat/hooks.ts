@@ -85,33 +85,29 @@ export type {
 //
 // PB equivalent:
 //   - First page: `pb.collection(name).getList(1, N, { filter, sort })`.
-//   - "Load more": `getList(page + 1, N, { filter, sort })`.
-//   - Cursor: derived from the last record's sort field. Phase 2 will define
-//     a stable cursor format (e.g. base64-encoded JSON of the sort key).
+//   - "Load more": `getList(1, N, { filter: baseFilter + "&& id < cursor",
+//     sort: "-id" })`.
+//   - Cursor: base64url({ lastId, pageSize }), encoded/decode in pagination.ts.
+//   - Real-time: `pb.collection(name).subscribe("*", cb)`. New items prepend
+//     if newer than our newest; updates refetch the page; deletes remove.
 //
-// Phase 1: throws. The shape is defined; the behaviour is not.
+// Phase 1: threw on call. Shape defined; behaviour missing.
+// Phase 2 Stage B.5: real implementation in `./use-paginated-query.ts`.
+//   Throws if called when isPbBackend() is false (feature flag).
+//   Returns { results: [], status: "Exhausted", loadMore: noop } for "skip".
+//   State machine matches Convex exactly: LoadingFirstPage | CanLoadMore |
+//   Exhausted. 10K-item integration test (B.5b) is the real validation —
+//   the helpers are unit-tested in pagination.test.ts.
 // =============================================================================
 
-export type PaginationStatus = "LoadingFirstPage" | "CanLoadMore" | "Exhausted";
-
-export interface UsePaginatedQueryResult<T> {
-  results: T[];
-  status: PaginationStatus;
-  loadMore: (numItems: number) => void;
-}
-
-export function usePaginatedQuery<T>(
-  _query: unknown,
-  _args: Record<string, unknown>,
-  _options: { initialNumItems: number },
-): UsePaginatedQueryResult<T> {
-  throw new Error(
-    "pb-compat: usePaginatedQuery is a Phase 1 stub. " +
-      "It is not yet implemented against PocketBase. " +
-      "This is the highest-risk item of the migration; see " +
-      "docs/MIGRATION_POCKETBASE.md §5 Phase 1 and §5 Phase 5.",
-  );
-}
+export {
+  usePaginatedQuery,
+  definePaginatedQuery,
+  type PbPaginatedQuery,
+  type PbPaginatedDescriptor,
+  type UsePaginatedQueryResult,
+  type PaginationStatus,
+} from "./use-paginated-query";
 
 // =============================================================================
 // useAuth — wraps PB's `authStore` (replaces `@convex-dev/auth`'s `useAuth`).
