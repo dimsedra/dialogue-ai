@@ -27,6 +27,12 @@ export {
   type PaginationStatus,
   type UsePaginatedQueryResult,
   type PbAuthState,
+  type PbQuery,
+  type PbQueryDescriptor,
+  type PbQueryKind,
+  defineQuery,
+  encodeArgsAsFilter,
+  argsKey,
 } from "./hooks";
 export { useAuth, PbAuthProvider } from "./auth";
 export { getPbClient, resolvePbUrl } from "./client";

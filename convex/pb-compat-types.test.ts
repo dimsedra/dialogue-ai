@@ -86,8 +86,20 @@ describe("pb-compat: api surface exists", () => {
 });
 
 describe("pb-compat: hooks throw in Phase 1", () => {
-  it("useQuery throws with a clear Phase 1 stub message", () => {
-    expect(() => useQuery({} as unknown, {})).toThrow(/Phase 1 stub/);
+  it("useQuery is no longer a stub — type signature requires a PbQuery", () => {
+    // Phase 2 Stage B.2: useQuery now requires a PbQuery (function with
+    // _pb metadata). The Phase 1 /Phase 1 stub/ check no longer applies.
+    // This is now a pure type-level test. We assert that a plain object
+    // is not assignable to the PbQuery shape. The @ts-expect-error
+    // directive will fail tsc if the constraint ever loosens. No runtime
+    // call to useQuery happens here — the hook needs a React renderer,
+    // and a type assertion is sufficient evidence.
+    // @ts-expect-error — plain {} is not a PbQuery. Phase 1 pattern invalid.
+    const _badQuery: import("../src/pb-compat/use-query").PbQuery<
+      Record<string, unknown>,
+      unknown
+    > = {};
+    expect(_badQuery).toEqual({}); // never reached; only proves the const was assigned
   });
 
   it("useMutation throws", () => {

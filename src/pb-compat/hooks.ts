@@ -24,28 +24,16 @@ import type { PbId, PbCollectionName, PbRecord, PbRecordMap } from "./_generated
 // =============================================================================
 // useQuery — generic reactive read against a PB collection.
 //
-// Phase 1: throws.
-// Phase 2: wraps `pb.collection(name).subscribe('*', callback)` to return a
-//   reactive value that re-renders on any change to the matching records.
-//   Convex semantics: `useQuery(api.X.list, args)` is reactive to any change
-//   in the query result. PB equivalent: subscribe to the collection, filter
-//   client-side by the args.
-//
-//   Risk: client-side filter is the wrong shape for large datasets. Phase 2
-//   may need a per-query helper that uses PB's filter+sort and a `subscribe`
-//   channel scoped to that query.
+// Phase 1: stub threw on call.
+// Phase 2 Stage B.2: the real implementation lives in `./use-query.ts`. It
+// reads the `_pb` metadata attached to the query function, encodes args
+// into a PB filter, fetches via the SDK, and subscribes to changes. This
+// file re-exports the symbol from there.
 // =============================================================================
 
-export function useQuery<T>(
-  _query: unknown,
-  _args?: Record<string, unknown>,
-): T | undefined {
-  throw new Error(
-    "pb-compat: useQuery is a Phase 1 stub. " +
-      "It is not yet implemented against PocketBase. " +
-      "Set NEXT_PUBLIC_BACKEND=convex (default) or wait for Phase 2.",
-  );
-}
+export { useQuery } from "./use-query";
+export type { PbQuery, PbQueryDescriptor, PbQueryKind } from "./use-query";
+export { defineQuery, encodeArgsAsFilter, argsKey } from "./use-query";
 
 // =============================================================================
 // useMutation — generic write against a PB collection.
