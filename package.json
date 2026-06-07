@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:stress": "node scripts/stress-pagination.mjs",
+    "test:stress:messages": "node scripts/stress-pb-messages.mjs",
     "test:smoke": "node scripts/smoke-pb-userprofile.mjs",
     "test:smoke:reads": "node scripts/smoke-pb-readpaths.mjs",
     "tauri": "tauri",
