@@ -436,8 +436,12 @@ migrate(
         { name: "description", type: "text", required: false, max: 65535 },
         { name: "frequency", type: "select", required: true, maxSelect: 1, values: ["daily", "custom"] },
         { name: "frequencyConfig", type: "json", required: false },
-        { name: "currentStreak", type: "number", required: true },
-        { name: "longestStreak", type: "number", required: true },
+        // PB's `validation_required` treats number 0 as "Cannot be blank" —
+        // same root cause as the boolean/JSON refinement above. Marking
+        // these `required: false` lets a fresh habit have a real 0 streak.
+        // The application layer (usePbHabitCreate) defaults to 0 if absent.
+        { name: "currentStreak", type: "number", required: false },
+        { name: "longestStreak", type: "number", required: false },
         { name: "lastLoggedAt", type: "number", required: false },
         { name: "lastLoggedDate", type: "text", required: false, max: 16 },
         { name: "archived", type: "bool", required: false },
