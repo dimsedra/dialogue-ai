@@ -210,7 +210,7 @@ Rough effort estimates. Each phase is independently shippable.
 | 3 — Read paths | ✅ Done | workspaces, personas, sessions, tasks, events, habits, and dashboard proactive card states ported behind `isPbBackend()` flag. See `phase-3-read-paths.md`. |
 | 4 — Flip write paths | ✅ Done | 13 mutation hook files + 10 consumer components + parameter adapter wrappers. See `phase-4-write-paths.md`. |
 | 5 — Realtime + dashboard cards | ✅ Done | 6 `useQuery` + 1 `usePaginatedQuery` in Chat + 9 dual-queries in Dashboard. Real-collection stress (5.2, 22/22) + Dashboard mount smoke (5.3, 30/30) + 5.1 guard + 5.4 set-state-in-effect fix + habits migration fix. See `phase-5-realtime.md`. |
-| 6 — Background jobs | Pending | Second-highest risk |
+| 6 — Background jobs | 🟡 In progress (6.1.1 done) | Architecture: Next.js API routes, not PB JS hooks (locked 2026-06-07). 5 jobs, not 6 (extractAndSaveMemory is dead code). See § below for sub-steps. |
 | 7 — On-open scheduler | Pending | |
 | 8 — File storage + public share | Pending | |
 | 9 — Tests + e2e + cutover | Pending | |
@@ -278,12 +278,30 @@ Rough effort estimates. Each phase is independently shippable.
 - **5.7** Status sync (this commit).
 - **Habits fix** (commit `6be9ea4`): `currentStreak`/`longestStreak` `required:false` so a fresh habit can have a real 0 streak.
 
-### Phase 6: Migrate background jobs (LLM orchestration) (~1-2 weeks)
-- Port `convex/background_jobs.ts` to either PB JS hooks or Next.js API routes.
-- The 36+ cross-function call chain becomes HTTP calls between Next.js and PB.
-- Update Mastra tools: 22+ `getConvexClient().query|mutation(api.X, args)` calls → `pb.collection(...).getList/getOne/create/update/delete`.
-- Update `/api/chat/route.ts` per-request auth plumbing.
-- **Deliverable:** all 8 internal actions work on PB. Mastra agent makes correct calls.
+### Phase 6: Migrate background jobs (LLM orchestration) (~1-2 weeks) — 🟡 IN PROGRESS
+
+**Architecture decision (locked 2026-06-07):** Next.js API routes (`/api/jobs/<jobName>`), **not** PB JS hooks. The PB JSVM can't easily host the Vercel AI SDK (18+ provider factories in `convex/ai_providers.ts`). Next.js already has the LLM SDK wired; the B.4 dispatcher pattern is the natural model.
+
+**Scope corrections:**
+- **5 jobs, not 6.** `extractAndSaveMemory` is **dead legacy code** — `messages.ts:247-249` explicitly comments that memory extraction is handled by the Next.js `/api/chat` Mastra agent, not by a background job.
+- **Callers to update:** `messages.ts:187` (Convex only, stays as-is), `reflections.ts:735/787/835` (3 paths), `ocean.ts:53/89` (2 paths), `dailySummary.ts:119`.
+
+**Phase 6 decisions (all locked 2026-06-07):**
+- **Q1=c (secret store):** Pass keys per-call. Next.js chat route fetches `userProfile.preferences.customConfigs`, decrypts using `ENCRYPTION_KEY`, passes decrypted keys in HTTP body. Keys never leave the user's machine in cleartext.
+- **Q2=b (Mastra tool scope):** Sub-phase. 6.1 port the 5 jobs first; 6.2 port the 22+ Mastra tool calls in a separate commit.
+- **Q3=a (atomic chain strictness):** Best-effort with try/catch + log. Reconciler job deferred to Phase 9.
+
+**Phase 6 sub-steps:**
+- **6.1.1** `generateSessionTitle` port (0.5d POC): ✅ **Done** (commit `e9315cc`) — New `src/lib/jobs/generateSessionTitle.ts` (pure function with PB client arg) + `src/app/api/jobs/generateSessionTitle/route.ts` (HTTP wrapper with Bearer auth) + `pbTriggerAutoTitle` real impl in `Chat.tsx` (was `async () => {}` stub). 10 unit tests (vitest) + 9-check data-layer smoke test.
+- **6.1.2** `generateCronReflection` port (1d): *Pending*.
+- **6.1.3** `generateWeeklyOCEAN` port (1d): *Pending*.
+- **6.1.4** `generateMonthlyOCEAN` port (1.5d): *Pending*.
+- **6.1.5** `generateDailySummary` port (1d): *Pending*.
+- **6.1.6** Update 4 callers (`reflections.ts`, `ocean.ts`, `dailySummary.ts` — `messages.ts` stays untouched for Convex mode) (1d): *Pending*.
+- **6.1.7** Write `scripts/smoke-pb-jobs.mjs` (the 6.1.1 POC laid the groundwork; 6.1.7 extends it): *Pending*.
+- **6.1.8** Write `docs/migration/phase-6-background-jobs.md`: *Pending*.
+
+**Delivery:** all 5 background jobs run as Next.js API routes behind `isPbBackend()`. Mastra agent still makes correct calls.
 
 ### Phase 7: Build the on-open scheduler + reminders (~3-5 days)
 - Add `scheduled_notifications` table to PB schema.
@@ -430,6 +448,7 @@ This doc is the high-level source of truth. Update it when:
 - `docs/migration/phase-1-5-pb-verification.md` — ✅ 117/117 schema checks pass (done)
 - `docs/migration/phase-2-adapter.md` — ✅ `pb-compat/` API surface; refinement roadmap from ADR-012 §3 (Streams A + B done, C.4 pending)
 - `docs/migration/phase-4-cutover.md` — *pending* — flip write paths to PB; no migration scripts, no re-encrypt
+- `docs/migration/phase-6-background-jobs.md` — *pending* — port of all 5 background jobs to Next.js API routes; lessons learned (6.1.8)
 - `docs/migration/cutover-runbook.md` — *pending* — step-by-step cutover + rollback
 - `docs/architecture/memory-system.md` — *pending* — single end-to-end doc of the custom memory system (ADR-012 §3 item 6)
 
