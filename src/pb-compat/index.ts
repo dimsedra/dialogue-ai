@@ -33,6 +33,12 @@ export {
   defineQuery,
   encodeArgsAsFilter,
   argsKey,
+  type PbMutationKind,
+  type PbMutationDescriptor,
+  type PbCreateDescriptor,
+  type PbUpdateDescriptor,
+  type PbDeleteDescriptor,
+  executePbMutation,
 } from "./hooks";
 export { useAuth, PbAuthProvider } from "./auth";
 export { getPbClient, resolvePbUrl } from "./client";

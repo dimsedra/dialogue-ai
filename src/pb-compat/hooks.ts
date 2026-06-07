@@ -38,20 +38,23 @@ export { defineQuery, encodeArgsAsFilter, argsKey } from "./use-query";
 // =============================================================================
 // useMutation — generic write against a PB collection.
 //
-// Phase 1: throws.
-// Phase 2: wraps `pb.collection(name).create/update/delete()` and returns a
-//   callable that triggers the write + invalidates the matching `useQuery`.
+// Phase 1: stub threw on call.
+// Phase 2 Stage B.3: the real implementation lives in `./use-mutation.ts`.
+// Three overloads (create/update/delete) narrow the args and return types
+// per discriminator. No optimistic updates (deferred to post-freeze per
+// ADR-011). No reactive subscription — writes are fire-and-forget; PB's
+// realtime channel pushes the result to the matching useQuery.
 // =============================================================================
 
-export function useMutation<TArgs extends Record<string, unknown>, TResult = unknown>(
-  _mutation: unknown,
-): (args: TArgs) => Promise<TResult> {
-  throw new Error(
-    "pb-compat: useMutation is a Phase 1 stub. " +
-      "It is not yet implemented against PocketBase. " +
-      "Set NEXT_PUBLIC_BACKEND=convex (default) or wait for Phase 2.",
-  );
-}
+export { useMutation } from "./use-mutation";
+export type {
+  PbMutationKind,
+  PbMutationDescriptor,
+  PbCreateDescriptor,
+  PbUpdateDescriptor,
+  PbDeleteDescriptor,
+} from "./use-mutation";
+export { executePbMutation } from "./use-mutation";
 
 // =============================================================================
 // useAction — for server-side / non-CRUD actions (e.g. embeddings, parsing).

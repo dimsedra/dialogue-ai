@@ -136,8 +136,18 @@ describe("pb-compat: hooks throw in Phase 1", () => {
     expect(_badQuery).toEqual({}); // never reached; only proves the const was assigned
   });
 
-  it("useMutation throws", () => {
-    expect(() => useMutation({} as unknown)).toThrow(/Phase 1 stub/);
+  it("useMutation is no longer a stub — type signature requires a PbMutationDescriptor", () => {
+    // Phase 2 Stage B.3: useMutation now requires a PbMutationDescriptor
+    // (discriminated union on `kind`). Pure type-level check via the
+    // directive below. No runtime call (the hook would need a renderer).
+    // We declare a function that takes the descriptor and call it with
+    // `{}` so tsc performs the type check at the call site.
+    const _takesDescriptor = (
+      _d: import("../src/pb-compat/use-mutation").PbMutationDescriptor,
+    ): void => undefined;
+    // @ts-expect-error — plain {} is not a valid mutation descriptor.
+    _takesDescriptor({});
+    expect(true).toBe(true); // type-level only
   });
 
   it("useAction throws", () => {
