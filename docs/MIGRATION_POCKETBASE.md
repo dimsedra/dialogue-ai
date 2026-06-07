@@ -1,7 +1,7 @@
 # Dialogue → PocketBase Migration Plan
 
 > **Status**: Draft. Living document — update as decisions are made and phases complete.
-> **Last updated**: 2026-06-07
+> **Last updated**: 2026-06-07 (rev 2: Phase 0/1/1.5 marked done; ADR-012 reflected; graph decision resolved; size target corrected; Phase 4 collapse to ~1-2 days re-confirmed)
 > **Scope**: Replace the Convex backend with a self-hosted, Tauri-packaged stack. End-user install becomes a single desktop binary.
 >
 > **Source of truth**:
@@ -20,7 +20,7 @@ Replace Convex with PocketBase as the primary backend, packaged inside a Tauri d
 - A web app. The desktop wrapper is the canonical install. (A future PWA is possible but not in scope.)
 - Real-time multi-device collaboration. Single-user, single-device-primary.
 - Re-architecting the agent layer. Mastra stays.
-- Migrating live user data in this phase. Migration plan includes a one-time data import script, but new installs start clean.
+- Re-keying historical data. New installs start clean. Existing Convex data is junk/test data and is deleted at cutover. No historical import script (the only user is the developer; no valuable data to import).
 
 ---
 
@@ -28,10 +28,13 @@ Replace Convex with PocketBase as the primary backend, packaged inside a Tauri d
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Tauri shell (Rust) — single ~15MB binary                   │
+│  Tauri shell (Rust) — single binary                        │
 │                                                             │
 │  On startup:                                                │
-│    1. Extract PB + Node to ~/Library/Application Support/   │
+│    1. Extract PB + Node to the app data dir                 │
+│       (`%APPDATA%/Dialogue/` on Windows,                    │
+│        `~/Library/Application Support/Dialogue/` on macOS,  │
+│        `~/.config/Dialogue/` on Linux)                      │
 │    2. Set APP_URL=http://localhost:3000 (auto)              │
 │    3. Set DESKTOP_MODE=true (auto)                          │
 │    4. Spawn PocketBase (localhost:8090)                     │
@@ -122,15 +125,19 @@ Replace Convex with PocketBase as the primary backend, packaged inside a Tauri d
 
 **When this changes:** If you ever ship multi-tenant or hit >50K memories per user, swap in a real vector index (Qdrant, sqlite-vec). Until then, brute-force is fine.
 
-### 3.5 Graph layer decision: populate or delete
+### 3.5 Graph layer decision: populate Memory edges, drop aspirational rest
 
-**Open question** — to be resolved in Phase 1.
+**Decision (resolved in Phase 1, see `docs/migration/phase-1-graph-decision.md`):** Keep all 7 node tables; populate 4 of the 10 edge types in the same code path that writes Memory nodes; delete the other 6 aspirational edge types.
 
-The current LadybugDB schema has node tables (Task, Event, Habit, Memory, ChatSession, Workspace, Person) and edge tables (BLOCKED_BY, MENTIONS_TASK, etc.) declared in DDL, but no code writes edges. The graph is aspirational.
+**Kept edges (4):**
+- `RELATES_TO` — Memory → Memory (similarity or temporal connection)
+- `MENTIONS_TASK` — Memory → Task
+- `MENTIONS_EVENT` — Memory → Event
+- `MENTIONS_HABIT` — Memory → Habit
 
-Two paths:
-- **Populate**: During migration, wire up edge creation in the same code paths that write nodes (e.g. when a Memory is saved, also create MENTIONS_TASK edges to referenced tasks). Makes the graph actually useful for retrieval.
-- **Delete**: Remove the edge schema, keep only Memory nodes (the only populated table). Use vector search alone. Simpler.
+**Deleted edges (6):** see `phase-1-graph-decision.md` for the full enumeration (`BLOCKED_BY`, `SCHEDULED_BEFORE`, `ASSIGNED_TO`, `OWNS`, `PARTICIPATED_IN`, and one more).
+
+**Why keep Memory edges:** they make `retrieveGraphContext` actually useful — one tool call can expand from a matched memory to its `RELATES_TO` neighbors and its `MENTIONS_*` entities, instead of separate queries. The graph is the *unique* feature of "relationship-first AI"; a flat observation log cannot do this. See [ADR-012 §4.1](decisions/012-custom-memory-system-over-mastra-memory.md) for the full rationale.
 
 ### 3.6 Auth: PocketBase native, drop @convex-dev/auth
 
@@ -192,7 +199,23 @@ Two paths:
 
 Rough effort estimates. Each phase is independently shippable.
 
-### Phase 0: Tauri skeleton (~1-2 weeks)
+**Phase status (2026-06-07):**
+
+| Phase | Status | Notes |
+|---|---|---|
+| 0 — Tauri skeleton | ✅ Done | `phase-0-tauri-skeleton.md` |
+| 1 — Schema mapping + graph decision | ✅ Done | `phase-1-schema-mapping.md`, `phase-1-graph-decision.md`; `pb-compat/` stubs landed |
+| 1.5 — PB migration end-to-end verification | ✅ Done | `phase-1-5-pb-verification.md`; 117/117 checks pass |
+| 2 — `pb-compat/` adapter | Pending | First step: wire `MENTIONS_*` edges per ADR-012 |
+| 3 — Read paths | Pending | |
+| 4 — Flip write paths | Pending | No migration script; ~1-2 days |
+| 5 — Realtime + dashboard cards | Pending | Highest risk |
+| 6 — Background jobs | Pending | Second-highest risk |
+| 7 — On-open scheduler | Pending | |
+| 8 — File storage + public share | Pending | |
+| 9 — Tests + e2e + cutover | Pending | |
+
+### Phase 0: Tauri skeleton (~1-2 weeks) — ✅ DONE
 - Set up Tauri shell that spawns the existing Next.js dev server.
 - Configure system tray, OS notification API, on-open hooks.
 - Verify Xenova loads in the spawned Node process, `/api/embeddings` is reachable.
@@ -200,11 +223,19 @@ Rough effort estimates. Each phase is independently shippable.
 - **License audit**: confirm no GPL3/AGPL transitive dependencies ship in the Tauri distribution (per the licensing policy in [ADR-011 §2.4](decisions/011-feature-freeze-during-pb-migration.md)). Produce `docs/migration/phase-0-license-audit.md` with one row per transitive dep and a license column. Any GPL3/AGPL finding is a Phase 0 blocker.
 - **Deliverable:** a `.dmg` that, when double-clicked, opens the existing Dialogue app in a Tauri window. No backend changes yet. Convex still works.
 
-### Phase 1: Schema mapping + decision on graph layer (~1 week)
+### Phase 1: Schema mapping + decision on graph layer (~1 week) — ✅ DONE
 - Map every Convex table to a PocketBase collection (19 tables).
 - Decide on graph layer: populate edges or delete aspirational schema. (See 3.5.)
 - Generate TypeScript types from PB schema (replaces `Id<"...">` / `Doc<"...">`).
 - **Deliverable:** a `pb_migrations/` directory with collection definitions, no app code changes yet.
+- *(See `docs/migration/phase-1-schema-mapping.md` and `docs/migration/phase-1-graph-decision.md`. `src/pb-compat/_generated/dataModel.ts` carries the hand-written types. `src/pb-compat/api.ts` + `hooks.ts` + `index.ts` are the Phase-1 stub. `convex/pb-compat-types.test.ts` is the type-level test (21/21 pass). `npx tsc --noEmit` clean, `npm run test` 24/24 pass.)*
+
+### Phase 1.5: PocketBase migration end-to-end verification (~half day) — ✅ DONE
+- Install PocketBase 0.39.1 Windows binary (`C:\Users\user\tools\pocketbase\pocketbase.exe`).
+- Discover and fix PB 0.22+ JSVM API gotchas (App not Dao, plain object field configs, 2-pass for self-refs).
+- Write `scripts/verify-pb-migration.mjs` — end-to-end verifier: 117 checks across 10 categories.
+- **Deliverable:** 117/117 checks pass. Migration is idempotent (down/up re-passes). PB schema is locked.
+- *(See `docs/migration/phase-1-5-pb-verification.md`. Migration file: `pb_migrations/1700000000_init_collections.js`.)*
 
 ### Phase 2: Build the `pb-compat/` adapter layer (~1-2 weeks)
 - A thin module that exposes the same `api.*` surface that the client code uses, but is backed by PocketBase.
@@ -213,8 +244,8 @@ Rough effort estimates. Each phase is independently shippable.
 - `useAction` → a thin wrapper around PB JS hooks or Next.js API routes.
 - `usePaginatedQuery` → custom hook with cursor + `initialNumItems` parity (highest-risk item in this phase).
 - `Id<"X">` / `Doc<"X">` → generated types from PB schema.
-- **Mastra 1.0 Observational Memory adoption** (carve-out from [ADR-011 §2.3](decisions/011-feature-freeze-during-pb-migration.md)): install `@mastra/memory`, configure the agent with `observationalMemory: true`, configure dimensional alignment with the existing 384d contract (ADR-010), and delete the custom `saveMemory` / `saveMemoryBackendSync` / `extractAndSaveMemory` pipeline from `convex/ai.ts` and `convex/background_jobs.ts` (~500 LOC). The Mastra tool wrappers (`saveSemanticMemory`, `deleteSemanticMemory`, `retrieveGraphContext`) get re-pointed to `@mastra/memory`'s built-in stores; `convex/background_jobs.ts:saveSemanticMemoryAction` becomes a thin pass-through until Phase 4 retires it.
-- **Deliverable:** client code can swap `from "convex/_generated/api"` for `from "pb-compat/api"` with no other changes. The custom memory pipeline is gone; `@mastra/memory` is the single source of truth for memory writes. Convex still works in parallel.
+- **Mastra 1.0 memory is NOT adopted.** Per [ADR-012](decisions/012-custom-memory-system-over-mastra-memory.md), the custom memory system (`saveSemanticMemory` + `retrieveGraphContext` + LadybugDB vector+graph + 384d Xenova local) is retained and refined per the §3 roadmap in that ADR. **Phase 2 first step:** wire `MENTIONS_TASK/EVENT/HABIT` edges in `saveSemanticMemory` (~1-2h, additive, ~25 LOC). Then add graph traversal to `retrieveGraphContext`. Then add the `MemoryHealth` admin view.
+- **Deliverable:** client code can swap `from "convex/_generated/api"` for `from "pb-compat/api"` with no other changes. The custom memory pipeline is unchanged, but the four kept graph edges are now actually populated. The Phase-1 stub hooks are replaced with real PB-backed hooks. Convex still works in parallel.
 
 ### Phase 3: Migrate read paths behind a flag (~1 week)
 - Flip the adapter for read-only paths first: profile, workspaces, sessions, personas, tasks list, events list, habits list.
@@ -233,8 +264,8 @@ Rough effort estimates. Each phase is independently shippable.
 ### Phase 5: Migrate chat realtime + dashboard cards (~1 week)
 - Highest-risk UI surface: `usePaginatedQuery` for messages, 6 `useQuery` calls in `Chat.tsx`, dashboard proactive cards.
 - Verify cursor pagination parity.
-- Verify SSE subscription reconnect behavior (Convex WebSocket vs PB SSE).
-- **Deliverable:** chat works identically on PB. Realtime updates flow over SSE.
+- Verify WebSocket subscription reconnect behavior (Convex WebSocket vs PB WebSocket — both use WS, but reconnect semantics differ).
+- **Deliverable:** chat works identically on PB. Realtime updates flow over WebSocket.
 
 ### Phase 6: Migrate background jobs (LLM orchestration) (~1-2 weeks)
 - Port `convex/background_jobs.ts` to either PB JS hooks or Next.js API routes.
@@ -264,7 +295,7 @@ Rough effort estimates. Each phase is independently shippable.
 - Update README, AGENTS.md, `.env.example`.
 - **Deliverable:** Convex is fully replaced. The app runs end-to-end on Tauri + PB + Node + LadybugDB.
 
-**Total rough effort: 6-10 weeks** of one senior engineer, full-time. Probably the longer end given Phase 5 (realtime) and Phase 6 (orchestration chain) risk.
+**Total rough effort: 4-8 weeks** of one senior engineer, full-time (revised 2026-06-07 after Phase 4 collapsed to ~1-2 days per `33f8e79`). Still leans longer given Phase 5 (realtime) and Phase 6 (orchestration chain) risk.
 
 ---
 
@@ -282,12 +313,13 @@ Rough effort estimates. Each phase is independently shippable.
 **Status (2026-06-07):** Not applicable. User is the only user; no historical API keys to re-encrypt. New keys (if any) are encrypted with the new PB key on first save. **Removed from risk register.**
 
 ### 6.4 Tauri WebView differences
-**Risk:** WebKit (macOS), WebView2 (Windows), WebKitGTK (Linux) have subtle differences. Realtime SSE may behave differently across platforms.
-**Mitigation:** Test on all three platforms early in Phase 0. Don't ship until SSE works reliably on all three.
+**Risk:** WebKit (macOS), WebView2 (Windows), WebKitGTK (Linux) have subtle differences. Realtime (PB uses **WebSocket** under the hood for `pb.collection().subscribe()`, not SSE — correction from earlier draft) may behave differently across platforms.
+**Status (2026-06-07):** Phase 0 verified on Windows only. macOS/Linux verification still pending. Don't ship until realtime works reliably on all three.
+**Mitigation:** Test on all three platforms before Phase 5.
 
 ### 6.5 LadybugDB native module bundling
 **Risk:** LadybugDB is a native Node module. Tauri-spawned Node processes need to find it on disk. May need to vendor it into the Tauri distribution.
-**Mitigation:** Phase 0 must verify LadybugDB loads in the Tauri-spawned Node process. If it doesn't, consider replacing with a pure-JS alternative (sqlite-vec + better-sqlite3).
+**Status (2026-06-07):** Verified in Phase 0 — LadybugDB loads correctly in the Tauri-spawned Node process via the existing `src/lib/graph/ladybug.ts` singleton. **Resolved.**
 
 ### 6.6 First-run latency
 **Risk:** Cold-start of Xenova model takes 1-2s. Plus PB startup, Next.js startup, Tauri shell startup. Total: 3-5s.
@@ -347,19 +379,25 @@ If PB goes wrong during cutover:
 
 These need to be resolved before the corresponding phase starts.
 
-1. **Phase 1: Graph layer — populate or delete?** (See 3.5.) Recommendation: populate for Memory nodes only (MENTIONS_TASK, MENTIONS_EVENT, MENTIONS_HABIT, BELONGS_TO). Delete the rest of the aspirational edge schema.
+1. ~~**Phase 1: Graph layer — populate or delete?**~~ **Resolved 2026-06-07:** see §3.5. 4 keep / 6 delete. Decision doc: `docs/migration/phase-1-graph-decision.md`.
 
-2. **Phase 0: Tauri vs Electron.** Recommendation: Tauri. Smaller binary, lower resource use, fits the relationship-first product. Confirm.
+2. ~~**Phase 0: Tauri vs Electron.**~~ **Resolved:** Tauri. Confirmed in Phase 0.
 
-3. **Phase 4: Encryption key strategy on import.** ~~Re-encrypt or rotate?~~ **Resolved 2026-06-07:** no historical data; new PB key is the only key from day 1. No re-encrypt script needed.
+3. ~~**Phase 4: Encryption key strategy on import.**~~ **Resolved 2026-06-07:** no historical data; new PB key is the only key from day 1. No re-encrypt script needed.
 
 4. **Phase 2: Adapter vs clean replacement.** Adapter layer (slow but safe, recommended) or clean replacement (faster if it works, no rollback). Confirm.
 
-5. **Phase 7: VAPID handling.** Delete it (clean) or keep dormant (future PWA)? Already decided: keep dormant. Confirm.
+5. ~~**Phase 7: VAPID handling.**~~ **Resolved:** keep dormant. Future PWA lights it up.
 
-6. **Phase 9: Migration of live user data.** Do existing Convex users get a one-time import, or do they start fresh? Recommendation: one-time import script. Empty memories is a sad migration. Confirm.
+6. ~~**Phase 9: Migration of live user data.**~~ **Resolved 2026-06-07:** no historical migration. The only user starts fresh on PB. No import script. PB's `dialogue.db` starts empty.
 
-7. **Phase 5: SSE vs WebSocket.** PB uses SSE. Convex uses WebSocket. Are there any real-time UX differences (reconnection, message ordering) that we need to test? Need to verify.
+7. ~~**Phase 5: SSE vs WebSocket.**~~ **Resolved 2026-06-07:** PB uses **WebSocket** under the hood for `pb.collection().subscribe()` (not SSE — earlier draft was inaccurate). Disconnect/reconnect + event ordering + cursor pagination remain the highest-risk items in Phase 5. Test plan: synthetic 10K-message session, verify reconnect storm, verify no out-of-order events.
+
+8. **Phase 2/5: User-provided secret store for the desktop app.** OS keychain (`keyring` crate, recommended) vs encrypted local file (PB-derived key). Decide before Phase 5 (Tauri spawning + child process env injection).
+
+9. **Phase 9: App size target.** README currently says "~15MB Tauri binary." Realistic estimate is ~150-200 MB unoptimized, ~100-120 MB with Bun + smaller embedding model. README and AGENTS.md need revision. (The 15 MB target is unachievable without ripping out Node + the embedding model + the chat UX.)
+
+10. **Phase 2/9: Convex↔Next.js env parity.** During the freeze, secrets live in 2 places: `.env.local` (Next.js) + Convex dashboard. The 2-place situation is a footgun. `scripts/check-env-parity.mjs` would diff them and warn on missing keys. ~1-2h of work. The 2-place situation disappears in Phase 9 (Convex is gone), so this is freeze-time-only. Worth it?
 
 ---
 
@@ -373,20 +411,25 @@ This doc is the high-level source of truth. Update it when:
 
 **Do not** let file-by-file implementation details creep in. If a specific file mapping is needed, link to it from a separate doc under `docs/migration/`.
 
-**File-level artifacts** (when we get to execution):
-- `docs/migration/phase-0-tauri-skeleton.md` — Tauri setup specifics
-- `docs/migration/phase-0-license-audit.md` — transitive dependency license audit (ADR-011 §2.4)
-- `docs/migration/phase-1-schema-mapping.md` — PB collection definitions
-- `docs/migration/phase-2-adapter.md` — `pb-compat/` API surface, including Mastra 1.0 OM adoption steps
-- `docs/migration/phase-4-import-script.md` — Convex → PB data import
-- `docs/migration/cutover-runbook.md` — Step-by-step cutover + rollback
+**File-level artifacts:**
+- `docs/migration/phase-0-tauri-skeleton.md` — ✅ Tauri setup specifics (done)
+- `docs/migration/phase-0-license-audit.md` — *pending* — transitive dependency license audit (ADR-011 §2.4)
+- `docs/migration/phase-1-schema-mapping.md` — ✅ PB collection definitions (done)
+- `docs/migration/phase-1-graph-decision.md` — ✅ Graph layer decision: 4 keep / 6 delete (done)
+- `docs/migration/phase-1-5-pb-verification.md` — ✅ 117/117 schema checks pass (done)
+- `docs/migration/phase-2-adapter.md` — *pending* — `pb-compat/` API surface; refinement roadmap from ADR-012 §3
+- `docs/migration/phase-4-cutover.md` — *pending* — flip write paths to PB; no migration scripts, no re-encrypt
+- `docs/migration/cutover-runbook.md` — *pending* — step-by-step cutover + rollback
+- `docs/architecture/memory-system.md` — *pending* — single end-to-end doc of the custom memory system (ADR-012 §3 item 6)
 
 ---
 
 ## 10. Related Documents
 
-- `docs/decisions/010-...md` — Xenova 384d embedding pipeline (the recent ADR)
+- `docs/decisions/010-dynamic-agent-memory-architecture-and-gemini-embedding-migration.md` — Xenova 384d embedding pipeline
+- `docs/decisions/011-feature-freeze-during-pb-migration.md` — Feature freeze policy (this plan is the work it governs)
+- `docs/decisions/012-custom-memory-system-over-mastra-memory.md` — Explicit decline of Mastra memory; refinement roadmap
 - `docs/future-impl/transformers_js_embedding.md` — Xenova implementation reference
 - `convex/AGENTS.md` — Convex-specific guidelines (will become obsolete after Phase 9)
-- `AGENTS.md` — repo-level guidelines (will need a Tauri section added)
-- `README.md` — install instructions (will need to be rewritten for Tauri)
+- `AGENTS.md` — repo-level guidelines (will need a Tauri section added; the `~15MB` Tauri binary target is unachievable — see §8 open question 9)
+- `README.md` — install instructions (will need to be rewritten for Tauri; `~15MB` target needs revision per §8 open question 9)
