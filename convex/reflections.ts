@@ -695,6 +695,7 @@ export const compileWeeklyData = internalQuery({
 export const cronTriggerWeeklyReflection = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (process.env.USE_PB === "true") return;
     const users = await ctx.db.query("users").collect();
 
     for (const user of users) {
@@ -754,6 +755,7 @@ export const cronTriggerWeeklyReflection = internalMutation({
 export const cronTriggerYearlyReflection = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (process.env.USE_PB === "true") return;
     const users = await ctx.db.query("users").collect();
 
     for (const user of users) {
@@ -801,6 +803,7 @@ export const cronTriggerYearlyReflection = internalMutation({
 export const cronTriggerMonthlyReflection = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (process.env.USE_PB === "true") return;
     const users = await ctx.db.query("users").collect();
 
     for (const user of users) {

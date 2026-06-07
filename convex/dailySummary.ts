@@ -68,6 +68,7 @@ export const insertSessionSummary = internalMutation({
 export const cronTriggerDaily = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (process.env.USE_PB === "true") return;
     const users = await ctx.db.query("users").collect();
     for (const user of users) {
       const lastSession = await ctx.db

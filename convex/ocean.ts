@@ -15,6 +15,7 @@ import {
 export const cronTriggerWeekly = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (process.env.USE_PB === "true") return;
     const users = await ctx.db.query("users").collect();
 
     for (const user of users) {
@@ -76,6 +77,7 @@ export const cronTriggerWeekly = internalMutation({
 export const cronTriggerMonthly = internalMutation({
   args: {},
   handler: async (ctx) => {
+    if (process.env.USE_PB === "true") return;
     const users = await ctx.db.query("users").collect();
 
     for (const user of users) {
