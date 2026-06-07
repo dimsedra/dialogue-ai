@@ -27,6 +27,7 @@ import {
   useAction,
   usePaginatedQuery,
   useAuth,
+  PbAuthProvider,
   type PbId,
   type PbRecord,
   type PbRecordMap,
@@ -190,6 +191,29 @@ describe("pb-compat: hooks throw in Phase 1", () => {
     // The other hooks (useQuery, useMutation, useAction, usePaginatedQuery)
     // are still stubs and still throw the old message.
     expect(() => useAuth()).toThrow();
+  });
+});
+
+describe("pb-compat: PbAuthProvider surface (B.7.1)", () => {
+  it("is exported as a function from the public surface", () => {
+    // B.7.1: PbAuthProvider is now wired into app/layout.tsx, so it MUST
+    // be a runtime export. The type-level check (accepts { children })
+    // lives in the next test.
+    expect(typeof PbAuthProvider).toBe("function");
+  });
+
+  it("accepts a children prop and nothing else (type-level)", () => {
+    // Type-level: a function whose only prop is `children: ReactNode`.
+    // The valid call below compiles; the invalid one below (missing
+    // children) triggers @ts-expect-error. Pattern matches the other
+    // type-level tests in this file (B.2-B.5a).
+    const _takesProps = (
+      _p: Parameters<typeof PbAuthProvider>[0],
+    ): void => undefined;
+    _takesProps({ children: null });
+    // @ts-expect-error — missing `children` is not a valid props shape.
+    _takesProps({});
+    expect(true).toBe(true); // type-level only
   });
 });
 
