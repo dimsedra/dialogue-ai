@@ -27,6 +27,7 @@
 //   }
 
 import type { PbCollectionName, PbId, PbRecord } from "./_generated/dataModel";
+import { userProfileGetQuery } from "./descriptors/userProfile";
 
 // =============================================================================
 // Stub function type. Every API call returns a promise that rejects.
@@ -61,7 +62,9 @@ export const api = {
   agentPersonas: {} as StubNamespace,
   messages: {} as StubNamespace,
   tasks: {} as StubNamespace,
-  userProfile: {} as StubNamespace,
+  // B.7.2: userProfile.get is the first real (non-stub) PB descriptor.
+  // The rest of userProfile.* is still a stub — only `get` is wired.
+  userProfile: { get: userProfileGetQuery },
   memories: {} as StubNamespace,
   events: {} as StubNamespace,
   reflections: {} as StubNamespace,

@@ -74,6 +74,21 @@ export interface PbQueryDescriptor<T> {
    */
   limit?: number;
   /**
+   * Optional custom filter builder for `kind: "first"` and `kind: "list"`.
+   * When set, used INSTEAD of `encodeArgsAsFilter(args)`. Lets a query
+   * encode filters that need access to runtime state the args object
+   * doesn't carry (e.g. the current user id from `pb.authStore.record`,
+   * or a field name that doesn't match the args key).
+   *
+   * For "first" queries that should return undefined when no record
+   * matches, return a tautologically-false filter like `"1 = 2"` —
+   * `getList(1, 1, { filter: "1 = 2" })` returns `{ items: [] }`.
+   *
+   * B.7.2: introduced for `api.userProfile.get`, which needs to filter
+   * by the current user (read from auth state) rather than an arg.
+   */
+  buildFilter?: (args: Record<string, unknown> | undefined) => string;
+  /**
    * Type-only marker so the generic param compiles when callers write
    * `PbQueryDescriptor<MyType>` without otherwise using the type. The
    * runtime never constructs one of these without `collection` and `kind`.
@@ -215,7 +230,9 @@ export function useQuery<T>(
 
     const fetchAndSet = async () => {
       try {
-        const filter = encodeArgsAsFilter(args);
+        const filter = descriptor.buildFilter
+          ? descriptor.buildFilter(args)
+          : encodeArgsAsFilter(args);
         const collection = client.collection(descriptor.collection);
         let result: T | undefined;
 
