@@ -16,7 +16,14 @@ export const getGraphConnection = async (): Promise<Connection> => {
     
     const conn = globalThis._ladybugConn;
     
-    // Initialize default graph schema for Dialogue
+    // Initialize default graph schema for Dialogue.
+    // Phase 1 graph decision (docs/migration/phase-1-graph-decision.md):
+    //   - Keep all 7 NODE tables (Task, Event, Habit, Memory, ChatSession, Workspace, Person).
+    //   - Keep 4 EDGE tables (MENTIONS_TASK, MENTIONS_EVENT, MENTIONS_HABIT, BELONGS_TO).
+    //   - Drop 6 aspirational edge tables (BLOCKED_BY, PREREQUISITE_FOR,
+    //     COLLABORATES_WITH, RELATED_TO, REFERENCES, CREATED_IN_SESSION).
+    // The DDL is idempotent ("already exists" is swallowed), so existing on-disk
+    // databases with the old schema keep the unused edges (harmless; no code reads them).
     const ddlStatements = [
       `CREATE NODE TABLE Task(id STRING, title STRING, category STRING, PRIMARY KEY (id));`,
       `CREATE NODE TABLE Event(id STRING, title STRING, PRIMARY KEY (id));`,
@@ -25,15 +32,9 @@ export const getGraphConnection = async (): Promise<Connection> => {
       `CREATE NODE TABLE ChatSession(id STRING, title STRING, PRIMARY KEY (id));`,
       `CREATE NODE TABLE Workspace(id STRING, name STRING, PRIMARY KEY (id));`,
       `CREATE NODE TABLE Person(id STRING, name STRING, PRIMARY KEY (id));`,
-      `CREATE REL TABLE BLOCKED_BY(FROM Task TO Task);`,
-      `CREATE REL TABLE PREREQUISITE_FOR(FROM Task TO Task);`,
-      `CREATE REL TABLE COLLABORATES_WITH(FROM Task TO Person, FROM Event TO Person);`,
-      `CREATE REL TABLE RELATED_TO(FROM Event TO Task);`,
-      `CREATE REL TABLE REFERENCES(FROM Memory TO Memory, FROM Task TO Memory, FROM Event TO Memory, FROM Habit TO Memory);`,
       `CREATE REL TABLE MENTIONS_TASK(FROM Memory TO Task);`,
       `CREATE REL TABLE MENTIONS_EVENT(FROM Memory TO Event);`,
       `CREATE REL TABLE MENTIONS_HABIT(FROM Memory TO Habit);`,
-      `CREATE REL TABLE CREATED_IN_SESSION(FROM Memory TO ChatSession, FROM Task TO ChatSession, FROM Event TO ChatSession, FROM Habit TO ChatSession);`,
       `CREATE REL TABLE BELONGS_TO(FROM Memory TO Workspace, FROM Task TO Workspace, FROM Event TO Workspace, FROM ChatSession TO Workspace, FROM Habit TO Workspace);`
     ];
 
