@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
+import { isPbBackend, usePbDismissCard, usePbSnoozeCard, usePbMuteCardType } from "@/pb-compat";
 import { motion, AnimatePresence } from "framer-motion";
 import { MoreHorizontal, Clock, Moon, Sunrise, BellOff, X, ChevronLeft } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
@@ -83,9 +84,17 @@ export function CardMenu({
   const [view, setView] = useState<"closed" | "actions">("closed");
   const [confirming, setConfirming] = useState<ConfirmationState>(null);
   const [busy, setBusy] = useState(false);
-  const dismissCard = useMutation(api.dashboard.dismissCard);
-  const snoozeCard = useMutation(api.dashboard.snoozeCard);
-  const muteCardType = useMutation(api.dashboard.muteCardType);
+  const convexDismissCard = useMutation(api.dashboard.dismissCard);
+  const pbDismissCard = usePbDismissCard();
+  const dismissCard = isPbBackend() ? pbDismissCard : (args: any) => convexDismissCard(args);
+
+  const convexSnoozeCard = useMutation(api.dashboard.snoozeCard);
+  const pbSnoozeCard = usePbSnoozeCard();
+  const snoozeCard = isPbBackend() ? pbSnoozeCard : (args: any) => convexSnoozeCard(args);
+
+  const convexMuteCardType = useMutation(api.dashboard.muteCardType);
+  const pbMuteCardType = usePbMuteCardType();
+  const muteCardType = isPbBackend() ? pbMuteCardType : (args: any) => convexMuteCardType(args);
 
   useEffect(() => {
     if (!confirming) return;

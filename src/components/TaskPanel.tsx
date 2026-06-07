@@ -8,7 +8,17 @@ import {
   usePbEventsList,
   usePbHabitsList,
   usePbWorkspacesList,
+  usePbTaskToggleCompleted,
+  usePbTaskDelete,
+  usePbTaskUpdate,
+  usePbEventDelete,
+  usePbEventUpdate,
+  usePbEventUpdateOccurrence,
+  usePbEventCancelOccurrence,
+  usePbTaskCreate,
+  usePbEventCreate,
 } from "@/pb-compat";
+import { api as pbApi } from "@/pb-compat/api";
 import { useState, useMemo, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Id, Doc } from "../../convex/_generated/dataModel";
@@ -66,15 +76,75 @@ export function TaskPanel({
   });
   const rawHabits = isPbBackend() ? pbRawHabits : convexRawHabits;
 
-  const toggleTask = useMutation(api.tasks.toggleCompleted);
-  const deleteTask = useMutation(api.tasks.deleteTask);
-  const updateTask = useMutation(api.tasks.updateTask);
-  const removeEvent = useMutation(api.events.remove);
-  const updateEvent = useMutation(api.events.update);
-  const updateOccurrence = useMutation(api.events.updateOccurrence);
-  const cancelEventOccurrence = useMutation(api.events.cancelOccurrence);
-  const createTask = useMutation(api.tasks.add);
-  const createEvent = useMutation(api.events.add);
+  const convexToggleTask = useMutation(api.tasks.toggleCompleted);
+  const pbToggleTask = usePbTaskToggleCompleted();
+  const toggleTask: (args: any) => Promise<any> = isPbBackend()
+    ? async (args: { id: string }) => {
+        const task = await pbApi.tasks.get({ id: args.id });
+        const completed = task ? !task.completed : true;
+        return pbToggleTask({ id: args.id, completed });
+      }
+    : (args: any) => convexToggleTask(args);
+
+  const convexDeleteTask = useMutation(api.tasks.deleteTask);
+  const pbDeleteTask = usePbTaskDelete();
+  const deleteTask: (args: any) => Promise<any> = isPbBackend() ? pbDeleteTask : (args: any) => convexDeleteTask(args);
+
+  const convexUpdateTask = useMutation(api.tasks.updateTask);
+  const pbUpdateTask = usePbTaskUpdate();
+  const updateTask: (args: any) => Promise<any> = isPbBackend()
+    ? (args: any) => {
+        const { id, ...rest } = args;
+        return pbUpdateTask({ taskId: id, ...rest });
+      }
+    : (args: any) => convexUpdateTask(args);
+
+  const convexRemoveEvent = useMutation(api.events.remove);
+  const pbRemoveEvent = usePbEventDelete();
+  const removeEvent: (args: any) => Promise<any> = isPbBackend() ? pbRemoveEvent : (args: any) => convexRemoveEvent(args);
+
+  const convexUpdateEvent = useMutation(api.events.update);
+  const pbUpdateEvent = usePbEventUpdate();
+  const updateEvent: (args: any) => Promise<any> = isPbBackend()
+    ? (args: any) => {
+        const { id, ...rest } = args;
+        return pbUpdateEvent({ eventId: id, ...rest });
+      }
+    : (args: any) => convexUpdateEvent(args);
+
+  const convexUpdateOccurrence = useMutation(api.events.updateOccurrence);
+  const pbUpdateOccurrence = usePbEventUpdateOccurrence();
+  const updateOccurrence: (args: any) => Promise<any> = isPbBackend() ? pbUpdateOccurrence : (args: any) => convexUpdateOccurrence(args);
+
+  const convexCancelEventOccurrence = useMutation(api.events.cancelOccurrence);
+  const pbCancelEventOccurrence = usePbEventCancelOccurrence();
+  const cancelEventOccurrence: (args: any) => Promise<any> = isPbBackend() ? pbCancelEventOccurrence : (args: any) => convexCancelEventOccurrence(args);
+
+  const convexCreateTask = useMutation(api.tasks.add);
+  const pbCreateTask = usePbTaskCreate();
+  const createTask: (args: any) => Promise<any> = isPbBackend()
+    ? (args: any) => {
+        const { workspaceId, reminderOffset, ...rest } = args;
+        return pbCreateTask({
+          ...rest,
+          workspaceId: workspaceId || undefined,
+          reminderOffset: reminderOffset || undefined,
+        });
+      }
+    : (args: any) => convexCreateTask(args);
+
+  const convexCreateEvent = useMutation(api.events.add);
+  const pbCreateEvent = usePbEventCreate();
+  const createEvent: (args: any) => Promise<any> = isPbBackend()
+    ? (args: any) => {
+        const { workspaceId, reminderOffset, ...rest } = args;
+        return pbCreateEvent({
+          ...rest,
+          workspaceId: workspaceId || undefined,
+          reminderOffset: reminderOffset || undefined,
+        });
+      }
+    : (args: any) => convexCreateEvent(args);
 
   const [expandedTaskId, setExpandedTaskId] = useState<Id<"tasks"> | null>(null);
   const [view, setView] = useState<"tasks" | "events" | "calendar" | "habits">("tasks");

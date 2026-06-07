@@ -1,0 +1,247 @@
+## Goal
+- Migrate Dialogue from Convex + Vercel to a Tauri + PocketBase + Node + LadybugDB desktop app with a single-binary install, keeping the relationship-first product positioning intact. Unify embedding pipeline on 384d (Xenova) and dual-write to Convex + LadybugDB until cutover.
+
+## Constraints & Preferences
+- App must remain highly accessible for non-technical users (double-click install). Realistic size: **~150-200 MB** unoptimized, ~100-120 MB with Bun + smaller embedding model. The 15 MB target in README/AGENTS.md is **a fiction** — unachievable without ripping out Node + the embedding model + the chat UX. ~150 MB is the realistic v1.0 target.
+- Embedding source: server-side Xenova in the Tauri-spawned Node process.
+- All LadybugDB writes idempotent (use `MERGE`).
+- Cosine-similarity dedup threshold 0.85; hash-based dedup as first-pass filter.
+- Convex `vectorIndex("by_embedding", { dimensions: 384 })` stays correct.
+- Preserve existing dual-write behavior of Path A (Mastra tool) until Phase 9 cutover.
+- Migration strategy: adapter layer (`src/pb-compat/`), feature-by-feature, behind `NEXT_PUBLIC_BACKEND` flag.
+- Vector + graph store: **keep LadybugDB through migration** (defer libSQL/Lance swap to post-cutover ADR).
+- Backend: **keep PocketBase** (no Mastra-native integration; adapter pattern is normal and not a blocker).
+- No always-on infrastructure; all 7 Convex crons become on-open checks in Tauri process.
+- Tauri shell auto-sets `APP_URL=http://localhost:3000` and `DESKTOP_MODE=true`.
+- Dialogue is relationship-first, not a power-user agent.
+- README is end-goal source of truth; migration plan is downstream; AGENTS.md points at both.
+- README is a living document.
+- **Licensing policy (per ADR-011 §2.4)**: default to Apache 2.0 / MIT / BSD only until commercial decision is made. GPL3/AGPL off-limits.
+- **Feature freeze in effect** (per ADR-011): bug-fixes-only for **4-8 weeks** migration window (revised 2026-06-07).
+- "Assume everything is new" — use Tauri 2.x patterns, not outdated Tauri 1.x.
+- Tests: 384d, wrong-dim, dedup.
+- **Phase 1 work prioritises stability, solidness, reliability** — no live behaviour changes; new code is purely additive.
+- **PB migration is greenfield on user's data** — no export step needed at cutover. **Phase 4 collapsed to ~1-2 days**: no historical data migration, no ENCRYPTION_KEY re-encrypt ceremony.
+- **No Mastra memory components** (per ADR-012): message history, working memory, semantic recall, observational memory all declined. Custom memory system retained and refined.
+- **Phase 2 lock decisions**: one file per heavy hook, shared `hooks.ts` for light ones; `useAction` → Next.js API route (not PB JS hook); per-call PB subscription (no shared dedup); hybrid type-level + small integration tests; **NO** optimistic updates in Phase 2; `useQuery` returns `T | undefined` to match Convex shape (NOT plan's `{ data, isLoading, error }`); `PbAuthProvider` NOT yet wired into app layout (deferred to B.7); `useQuery` reads `authStore.token` at **call time** (B.4 lesson — same pattern applies to useAction).
+- **B.4 scope revision**: only 1 new action stub (parseDate); the plan's "8 actions" was an overestimate — 5 already have Next.js routes, 2 are server-side only. parseDate's real impl needs B.7-grade integration (per-user profile lookup + AI SDK call). Stubbed for now.
+- **B.4 dispatcher pattern**: single dynamic route `/api/pb-action/[name]/route.ts` with a name→handler registry. New actions = add file + register. No new route file per action.
+
+## Progress
+### Done
+- (Phase 0/1/1.5/4-doc-update as previously summarized)
+- **Mastra memory docs audit** (7 docs read end-to-end).
+- **Mastra OM evaluation**: declined all four memory components (ADR-012).
+- **Wrote `docs/decisions/012-custom-memory-system-over-mastra-memory.md`**: 5 reasons custom wins; 6-item refinement roadmap.
+- **Updated ADR-011** (commit `db66ae9`): rescinded §2.3 OM carve-out.
+- **Updated `docs/MIGRATION_POCKETBASE.md`** to rev 2 (commit `9cfddfa`).
+- **App size analysis**: PB binary measured at **32,298,496 bytes (~32 MB)**, not the 13-15 MB estimate.
+- **Phase 2 mapped out** in `docs/migration/phase-2-adapter.md` (commit `4fdb9c9`): 3 streams × 10 stages.
+- **Phase 2 Stage 1.1 done** (commit `4fdb9c9`): `wireMentionsEdges` helper, `saveSemanticMemory` schema extended, 10 tests.
+- **Phase 2 Stage 1.2 done** (commit `4ed7f3d`): extracted `retrieveGraphContext` helper; **cartesian-product bug fixed** (chained OPTIONAL MATCHes with WITH scoping); added MENTIONS_HABIT; threshold configurable (default 0.6); `CAST($emb AS FLOAT[384])` for cosine param; `null`→`[]` normalisation. 10 tests in `traversal.test.ts`.
+- **Phase 2 Stage 1.3 done** (commit `e534f01`): `getMemoryHealth` helper, `GET /api/admin/memory-health` route, server-rendered UI with 3 cards + sample list at `/admin/memory-health`. 6 tests. **Scope trimmed from plan**: no oldest-memory stat, no dedup ratio, "orphan edges" → "lonely memories".
+- **Doc sync done** (commit `f1a65e2`): updated `phase-2-adapter.md` (rev 2), ADR-012 (§3 items 1/2/3 marked DONE), and `MIGRATION_POCKETBASE.md` (Phase 2 status flipped to 🟡 In progress).
+- **Phase 2 Stage B.1 done** (commit `7d8482a`): pocketbase@0.27.0 SDK, `getPbClient()` singleton, `PbAuthProvider` + `useAuth` real implementation, 7 client tests.
+- **Phase 2 Stage B.2 done** (commit `5eacb68`): `useQuery` hook + descriptor pattern. 19 tests.
+- **Phase 2 Stage B.6 done** (commit `3981d09`): `isPbBackend()` flipped to read `NEXT_PUBLIC_BACKEND` env var. 3 new tests (unset/true/typo).
+- **Phase 2 Stage B.3 done** (commit `ae7f01f`): `useMutation` hook + descriptor types (`PbCreateDescriptor`/`PbUpdateDescriptor`/`PbDeleteDescriptor`). Pure `executePbMutation` helper for testing without React. 4 tests. **Lesson applied**: dropped descriptor generic (TRecord is unused in the shape), used `PocketBase` SDK type instead of inline `{ collection: (n) => any }` (avoids `any` lint).
+- **Phase 2 Stage B.4 done** (commit `2997ce1`): `useAction` hook + dynamic dispatcher + auth + parseDate stub. 6 tests. 9 files, 432 LOC.
+- **Phase 2 Stage B.5a done** (commit `70534e3`): `usePaginatedQuery` + pagination helpers. 6 files, 750 LOC, +27 unit tests. Three components: (1) `pagination.ts` (145 LOC) — pure helpers (cursor base64url, page math, subscribe-event handlers, filter builder), (2) `pagination.test.ts` (220 LOC, 27 tests) — cursor round-trip + base64url charset + invalid-input rejection + page append/prepend/remove + findPageOfItem + mergeRefetchedPage + handleCreateEvent/handleDeleteEvent + buildPageFilter; (3) `use-paginated-query.ts` (305 LOC) — the hook (state machine, initial fetch, subscribe, loadMore). `hooks.ts` stub removed, re-exports the real hook. `index.ts` exports the new pagination helpers + descriptor types; `PB_COMPAT_PHASE` flipped 1→2, `PB_COMPAT_STATUS` flipped "stub"→"in-progress". `pb-compat-types.test.ts` "throws" test → type-level; phase status test updated. **Verification**: tsc 0, eslint 0/0 on changed files, **115/115** tests pass.
+
+### In Progress
+- (none — awaiting user direction; next is B.5b)
+
+### Blocked
+- (none)
+
+## Key Decisions
+- (Previous decisions through Phase 1.5)
+- **Mastra memory system: DECLINED in its entirety** (ADR-012).
+- **Trigger conditions for Mastra memory reversal**: (1) context rot becomes measurable, (2) maintenance burden >20% of engineer time, (3) Mastra adds a graph layer to OM.
+- **Custom memory system refinement roadmap** (ADR-012 §3): (1) wire MENTIONS_* edges ✅ `4fdb9c9`, (2) graph traversal in retrieveGraphContext ✅ `4ed7f3d`, (3) MemoryHealth admin view ✅ `e534f01`, (4) delete dual-write [Phase 4], (5) stress-test dedup at scale, (6) write `docs/architecture/memory-system.md`.
+- **App size target reality**: README's "single ~15 MB Tauri binary" is **a fiction**. Realistic v1.0: ~150 MB unoptimized, ~100-120 MB with Bun + smaller embedding model.
+- **Total migration effort: 4-8 weeks** (Phase 4 collapse accounts for revision).
+- **Phase 5 corrected: PB uses WebSocket under the hood** (not SSE).
+- **Cartesian product bug** in `retrieveGraphContext`: confirmed exists in the original query. Fix is `WITH ... collect(...)` scoping.
+- **Three Cypher gotchas documented in `phase-2-adapter.md` §9**: CAST for cosine, null→[], beforeEach isolation.
+- **ESLint picture**: pre-existing 144 errors / 80 warnings (deferred to post-freeze). Stream A introduced 4 no-explicit-any errors (3 in edges/traversal/health that predate the fix, 1 in `health.test.ts` latent). B.1/B.2/B.3/B.4 added 0 errors.
+- **Two scope trims in A.3**: "oldest memory" deferred, "dedup ratio" deferred, "orphan edges" → "lonely memories".
+- **`useQuery` returns `T | undefined`** (matches Convex), NOT the plan's `{ data, isLoading, error }`.
+- **`PbAuthProvider` not wired into `app/layout.tsx` yet** — B.7 is when.
+- **`pocketbase@0.27.0` SDK vs server `0.39.1` version skew is accepted** — HTTP API is backward-compatible.
+- **Per-call subscription (Q3)** reaffirmed.
+- **B.1 over-build acknowledged**: `PbAuthProvider` ships rehydration on mount + `onChange` subscription + signIn/signUp/signOut. None exercised until B.7 wires it. ~70% of B.1 LOC is dead code today.
+- **B.2 over-build acknowledged**: 280 LOC for a hook returning `T | undefined`. Descriptor pattern (function with `_pb` metadata, `__resultType` marker) more sophisticated than needed. ~40% of B.2 LOC and tests are over-engineering.
+- **B.3 minimal design**: dropped descriptor generic (TRecord is unused in the shape), no useCallback, used `PocketBase` SDK type instead of inline `{ collection: (n) => any }`. Three overloads narrow the args/return types per kind.
+- **B.3 uses `args as { [key: string]: unknown }` for create** because PB's SDK types expect an index-signature body or FormData, not a generic `TRecord`.
+- **B.4 actual scope is 1 action stub (parseDate)**, not 8. The plan's "8 actions" was an overestimate: 5 already have Next.js routes, 2 are server-side only, only parseDate needed a new wrapper.
+- **B.4 dispatcher pattern**: single dynamic route `/api/pb-action/[name]/route.ts` with name→handler registry. New action = add file + register. Cleaner than 8 route files.
+- **B.4 auth flow**: server-side PocketBase singleton calls `authRefresh()` to validate the Bearer token. NEVER trust `pb.authStore.save()` alone (anyone can craft a token). Clear authStore after to avoid leaking verified token.
+- **B.4 useAction reads token at CALL TIME** (not hook time) so sign-in/out during a session is picked up. Same lesson for B.2's useQuery.
+- **B.5 lock decisions** (per user confirmation): **Pattern A — always prepend + browser CSS `overflow-anchor: auto` handles visual** (matches Gmail/Twitter/Slack, no badge, no consumer scroll tracking). **Refetch whole page on edit/delete**. **10K-item synthetic test** (per original plan, not 1K). **Real-time via `pb.collection(name).subscribe('*', cb)`**. **B.5 split into 2 commits**: B.5a (helpers + hook + unit tests, 1.5 days) + B.5b (10K stress test, 0.5 day). State machine matches Convex exactly: `LoadingFirstPage` → `CanLoadMore` → `Exhausted` (3 states, no `LoadingMore`). Cursor = base64url of `{ lastId, pageSize }`.
+- **B.5 hook implementation notes** (use-paginated-query.ts): Rules of Hooks satisfied — `isPbBackend()` throw is at the top of the function (env var is build-time, consistent), the `"skip"` branch is a short-circuit INSIDE the effect + loadMore (not an early return). Subscribe uses `setResults(prev => ...)` updater pattern → no re-subscribe on state change. Cursor stored in `lastIdRef` (not state) — doesn't trigger re-renders. `loadMore` uses `setStatus(prev => ...)` to read latest status without stale closure. PB SDK types subscribe callback's `action` as `string`, `record` as `RecordModel` → narrowed at use site to literal union + cast to `TResult`.
+- **B.5 commit shape**: 6 files, 750 insertions, 33 deletions. The 27 helper tests in `pagination.test.ts` are the unit-test backbone; the hook itself has no React-rendered test (no jsdom installed) — its real validation is the B.5b 10K stress test.
+
+## Next Steps
+- **B.5b** (~0.5 day): 10K-item stress test. `scripts/stress-pagination.mjs` (~100 LOC) + `npm run test:stress` script. Spawn temp PB instance, create 10K synthetic items, run hook end-to-end, assert pagination + prepend + edit + delete + reconnect behavior. **Opt-in** (doesn't slow normal `npm test`). Will also probe PB subscribe event ordering across reconnects.
+- **B.7** (~1 day, blocked on B.5b): first read-path call (`api.userProfile.get`) behind the `NEXT_PUBLIC_BACKEND` flag. Wires `PbAuthProvider` into `app/layout.tsx`. Also: real `parseDate` impl (per-user profile lookup + AI SDK call).
+- **Stream C**: expand `pb-compat-types.test.ts`, hook unit tests with jsdom (would benefit all 5 hooks), integration test (C.3), `docs/architecture/memory-system.md` (C.4). Deferred until B.7.
+- **Open questions (migration plan §8) to resolve when needed**:
+  - (8) Decide secret store before Phase 5: OS keychain (recommended) vs encrypted local file.
+  - (9) Revise README + AGENTS.md to ~150 MB target (post-cutover, low priority during freeze).
+  - (10) Optional: `scripts/check-env-parity.mjs` (~1-2h, freeze-time-only).
+- **Phase 3**: read-path parallel run, nightly diff.
+- **Phase 4**: flip write paths to PB (~1-2 days).
+- **Phase 5** (highest risk): WebSocket subscription reconnect storms, cursor pagination, event ordering.
+- **Phase 6**: port `convex/background_jobs.ts` (second-highest risk).
+- **Phase 7**: on-open scheduler + reminders.
+- **Phase 8**: observability.
+- **Phase 9**: cutover.
+- **Set `APP_URL`** in Convex dashboard env vars (manual step).
+- **Defer (post-freeze)**: structured output, non-safety processors, guardrails, full RAG, workflows, editor, MCP, workspace, browser, Bun evaluation, structured-output graph layer for OM, post-freeze ESLint cleanup (the 4 unpatched `as any` casts in `edges.ts`/`traversal.ts`).
+
+## Critical Context
+- **Project**: Dialogue AI (Next.js 16.2.6 + Convex + LadybugDB + Mastra). Future target: Tauri 2.x + PocketBase + Node + LadybugDB.
+- **PocketBase binary size**: 32,298,496 bytes (~32 MB) at `C:\Users\user\tools\pocketbase\pocketbase.exe` v0.39.1. **PocketBase JS SDK**: 0.27.0 (MIT, installed in `package.json`; version-skew with server is expected and accepted).
+- **Mastra memory system details** (from the 7 docs):
+  - **Storage restriction**: OM requires libSQL, PG, or MongoDB. **No PocketBase support.**
+  - **Default model**: `google/gemini-2.5-flash` for Observer + Reflector.
+  - **Thresholds**: `messageTokens` 30,000 (Observer), `observationTokens` 40,000 (Reflector).
+  - **Compression**: 5-40× over message history.
+  - **Async buffering is default**.
+  - **Replaces both working memory and message history**.
+  - **No access control built-in**.
+  - **Storage path gotcha**: use `file:/absolute/path/...` to share db with Studio.
+  - **No manual migration for existing threads**.
+  - **Resource scope is experimental**; thread scope is well-tested.
+  - **Memory processor execution order**: input processors AFTER memory loads; output processors BEFORE memory saves. If an output guardrail aborts, *nothing* is persisted.
+- **PB realtime is WebSocket-based** (not SSE). Tauri WebView differences still apply.
+- **PB `memories.embedding` is `json` field**, not vector. Vector search lives in LadybugDB.
+- **App data dir conventions**:
+  - Windows: `%APPDATA%/Dialogue/`
+  - macOS: `~/Library/Application Support/Dialogue/`
+  - Linux: `~/.config/Dialogue/`
+  - Contents: `secrets.json`, `dialogue.db` (PB), `ladybug/` (LadybugDB), `mastra.db`, `models/` (Xenova, bundled), `pb_jwt_secret` (auto-gen).
+- **Tauri Rust as env policy enforcer**: spawns Node + PB with explicit env vars.
+- **LadybugDB schema**: `Memory(id, text, embedding FLOAT[384])` — hard-coded 384. DDL = 7 NODE TABLEs + 4 REL TABLEs (MENTIONS_TASK, MENTIONS_EVENT, MENTIONS_HABIT, BELONGS_TO).
+- **PB 0.22+ JSVM gotchas** (Phase 1.5 hard-won):
+  - `migrate((app) => {...})` not `(db)` — use `app.findCollectionByNameOrId` / `app.save` / `app.delete`.
+  - `new Collection({ fields: [{name, type, ...}, ...] })` — plain object configs only.
+  - Self-references (e.g. `events.series`) need 2-pass.
+  - `users.fields.add(new TextField({name: "name"}))` for an already-existing field is silently merged.
+- **Phase 5 (highest risk) explained simply**:
+  1. **Reactive subscriptions differ** — PB uses `pb.collection().subscribe()` (WebSocket).
+  2. **Cursor pagination is a leaky abstraction** — PB needs careful cursor design.
+  3. **Event ordering matters** — chat messages must appear in order.
+- **`pbId<T>(s)` helper** in `dataModel.ts` for creating branded IDs at trust boundaries.
+- **Cypher cartesian-product bug pattern**: chaining `OPTIONAL MATCH` patterns without `WITH` between them produces row fan-out and `collect(...)` over those rows duplicates items. Fix: `WITH m, similarity, collect(t) AS tasks` between each OPTIONAL MATCH.
+- **LadybugDB `array_cosine_similarity` is strict about param types**: passing a plain JS array as the query parameter throws "Binder exception: ARRAY_COSINE_SIMILARITY requires argument type to be FLOAT[] or DOUBLE[]". Wrap with `CAST($x AS FLOAT[384])` at the query site. Storage side (`FLOAT[384]` in DDL) accepts JS arrays fine.
+- **TypeScript @ts-expect-error trap**: tsc treats `@ts-expect-error` as a directive ONLY when the comment line starts with `// @ts-expect-error` (after `//`). Mid-sentence mentions in comments are safe, but a comment line that STARTS with `// @ts-expect-error.` (with a period or text immediately after) IS picked up as a directive and must precede an actual error on the next non-comment line. The test pattern `_takesDescriptor({})` works because the function call site errors.
+- **PB SDK body type for create**: `pb.collection().create(body?: { [key: string]: any } | FormData, ...)`. A generic `TRecord` from the discriminated union must be cast to `{ [key: string]: unknown }` before passing. This is the unavoidable contract between the union and PB's index-signature body types.
+- **`AGENTS.md` warns** Next.js 16.2.6 has breaking changes.
+- **VAPID env** in BOTH `.env.local` AND Convex dashboard.
+- **Enforcement**: `EXPECTED_EMBEDDING_DIM = 384` in `background_jobs.ts`.
+- **PocketBase has no native vector search**, not on roadmap.
+- **Migration cutover**: `src/pb-compat/` exposes same `api.*` surface backed by PB. Single env var `NEXT_PUBLIC_BACKEND`.
+- **Relationship framing**: "a relationship that has productivity tools, not a productivity tool that has chat." Agent proposes, user confirms, then it acts.
+- **Mastra 1.0 supported auth providers** (8): Simple Auth, JWT, Auth0, Better Auth, Clerk, Firebase, Okta, Supabase, WorkOS, Composite, Custom.
+- **Mastra 1.0 features NOT carved out** (stay post-migration): structured output, full processor suite, guardrails, workflows, editor, MCP, workspace, browser, full RAG.
+- **`@libsql/client` in `next.config.ts:4` `serverExternalPackages`**: legacy from OM carve-out; harmless.
+- **Mastra × PocketBase integration gap**: None. Tools wrap any backend via `execute` function.
+- **Mastra's 5 storage domains**: `memory`, `workflows`, `scores`, `observability`, `datasets` + `experiments`.
+- **Phase 1 stability guards**:
+  - `pb-compat/index.ts` exports `isPbBackend()` reading `process.env.NEXT_PUBLIC_BACKEND === "pocketbase"` (B.6).
+  - All Phase 1 code is purely additive.
+  - Type errors caught by `convex/pb-compat-types.test.ts` (23 type-level tests as of B.5a, all pass).
+  - Migration errors caught by `scripts/verify-pb-migration.mjs` (117 schema checks, all pass).
+- **ESLint state**: 144 pre-existing errors and 80 pre-existing warnings (deferred to post-freeze cleanup). **B.1 + B.2 + B.3 + B.4 + B.5a introduced 0 errors**. Stream A introduced 4 (3 in edges/traversal pre-branch + 1 latent in health.test.ts; tracked for post-freeze).
+- **PocketBase install location**: `C:\Users\user\tools\pocketbase\pocketbase.exe` v0.39.1. Re-runnable verifier uses this path. **B.5b stress test will spawn this as a temp instance**.
+- **Test count progression**: 24 (pre-Phase-2) → 34 (after 1.1) → 44 (after 1.2) → 50 (after 1.3) → 57 (after B.1) → 76 (after B.2) → 78 (after B.6) → 82 (after B.3) → 88 (after B.4) → **115 (after B.5a, +27 pagination)**. 0 failures. B.5b will add 10K stress test (opt-in).
+
+## Relevant Files
+- `D:\Project Hub\dialogue-ai\convex\background_jobs.ts`: refactored Paths B + C; 7 `as any` casts (deferred).
+- `D:\Project Hub\dialogue-ai\convex\ai.ts`: `saveMemory` + `saveMemoryBackendSync` + `getSystemProfileContext` + `getSearchConfig`. All have 384d assertions.
+- `D:\Project Hub\dialogue-ai\convex\ai_providers.ts`: 7 `as any` casts (deferred).
+- `D:\Project Hub\dialogue-ai\convex\encryption.ts`: tax-fixed, `Uint8Array<ArrayBuffer>`.
+- `D:\Project Hub\dialogue-ai\convex\migrations.ts`: 2 `as any` casts (deferred).
+- `D:\Project Hub\dialogue-ai\convex\ocean_queries.ts`: public `query`/`mutation` exports (security gap documented).
+- `D:\Project Hub\dialogue-ai\convex\ocean.ts`: duplicate imports hoisted (tax-fixed).
+- `D:\Project Hub\dialogue-ai\convex\schema.ts`: 19 app tables + 5 authTables.
+- `D:\Project Hub\dialogue-ai\convex\schema.ts:212-222`: `habitLogs` `by_habit_dateString` not unique (deferred).
+- `D:\Project Hub\dialogue-ai\convex\memory.test.ts`: 384d + wrong-dim tests. 3/3 pass.
+- `D:\Project Hub\dialogue-ai\convex\pb-compat-types.test.ts`: **23 type-level tests as of B.5a**. Updates: useAuth test accepts React "Invalid hook call" OR "PbAuthProvider" message; useQuery/useMutation/useAction/usePaginatedQuery are now type-level via `// @ts-expect-error` on plain-object descriptor patterns; phase status test flipped to expect `PB_COMPAT_PHASE = 2`, `PB_COMPAT_STATUS = "in-progress"`.
+- `D:\Project Hub\dialogue-ai\src\app\api\embeddings\route.ts`: POST, 384d via `getLocalEmbedding`, max 4000 chars.
+- `D:\Project Hub\dialogue-ai\src\app\api\graph\memory\route.ts`: POST, writes LadybugDB Memory node via `MERGE`.
+- `D:\Project Hub\dialogue-ai\src\app\api\chat\route.ts`: `handleChatStream` from `@mastra/ai-sdk`; ad-hoc `new Mastra({...})` at line 87; 2 `as any` casts deferred.
+- `D:\Project Hub\dialogue-ai\src\app\api\cron\ocean\route.ts`: ad-hoc `new Mastra({...})` at line 38.
+- `D:\Project Hub\dialogue-ai\src\app\api\admin\memory-health\route.ts` **(commit `e534f01`)**: `GET /api/admin/memory-health`.
+- `D:\Project Hub\dialogue-ai\src\app\admin\memory-health\page.tsx` **(commit `e534f01`)**: server-rendered dashboard.
+- `D:\Project Hub\dialogue-ai\src\app\api\pb-action\[name]\route.ts` **(NEW, B.4)**: dispatcher. Resolves name to handler, verifies Bearer token, parses { args } body, calls handler with user ctx.
+- `D:\Project Hub\dialogue-ai\src\lib\graph\embedding.ts`: 384d local Xenova pipeline.
+- `D:\Project Hub\dialogue-ai\src\lib\graph\ladybug.ts`: LadybugDB singleton + DDL.
+- `D:\Project Hub\dialogue-ai\src\lib\graph\edges.ts` **(commit `4fdb9c9`)**: `wireMentionsEdges`. **Has 1 unpatched `as any` (post-freeze).**
+- `D:\Project Hub\dialogue-ai\src\lib\graph\edges.test.ts` **(commit `4fdb9c9`)**: 10 tests pass.
+- `D:\Project Hub\dialogue-ai\src\lib\graph\traversal.ts` **(commit `4ed7f3d`)**: `retrieveGraphContext`. **Has 2 unpatched `as any` (post-freeze).**
+- `D:\Project Hub\dialogue-ai\src\lib\graph\traversal.test.ts` **(commit `4ed7f3d`)**: 10 tests pass.
+- `D:\Project Hub\dialogue-ai\src\lib\graph\health.ts` **(commit `e534f01`)**: `getMemoryHealth`.
+- `D:\Project Hub\dialogue-ai\src\lib\graph\health.test.ts` **(commit `e534f01`)**: 6 tests pass. **Has 1 latent `as any` (post-freeze).**
+- `D:\Project Hub\dialogue-ai\src\lib\pb-actions\registry.ts` **(NEW, B.4)**: handler map. Currently only parseDate registered.
+- `D:\Project Hub\dialogue-ai\src\lib\pb-actions\auth.ts` **(NEW, B.4)**: `verifyPbToken` via server-side PocketBase singleton + authRefresh.
+- `D:\Project Hub\dialogue-ai\src\lib\pb-actions\parseDate.ts` **(NEW, B.4)**: stub. Returns null. TODO for B.7 real impl.
+- `D:\Project Hub\dialogue-ai\src\mastra\index.ts:4`: ad-hoc `new Mastra({...})` (consolidation target).
+- `D:\Project Hub\dialogue-ai\src\mastra\tools\saveSemanticMemory.ts`: Path A — 384d, dual-store. Extended with optional taskIds/eventIds/habitIds; calls `wireMentionsEdges`.
+- `D:\Project Hub\dialogue-ai\src\mastra\tools\retrieveGraphContext.ts`: now a thin wrapper around `retrieveGraphContext` helper.
+- `D:\Project Hub\dialogue-ai\src\mastra\tools\otherTools.ts`: tax-fixed; `Id<"...">` casts; `api.ai.getSearchConfig` consumer.
+- `D:\Project Hub\dialogue-ai\src\mastra\tools\completeTask.ts`, `deleteEvent.ts`, `deleteTask.ts`, `updateEvent.ts`, `updateEventOccurrence.ts`, `updateTask.ts`: tax-fixed.
+- `D:\Project Hub\dialogue-ai\src\components\Chat.tsx`: tax-fixed — dead `useAction` removed.
+- `D:\Project Hub\dialogue-ai\src\hooks\usePageSettings.ts`: 1 `as any` cast (deferred).
+- `D:\Project Hub\dialogue-ai\src\app\settings\page.tsx`: uses `getLocalEmbedding`.
+- `D:\Project Hub\dialogue-ai\.env.example`: tracked; has `APP_URL=http://localhost:3000`.
+- `D:\Project Hub\dialogue-ai\.env.local`: gitignored; `APP_URL` + VAPID keys.
+- `D:\Project Hub\dialogue-ai\next.config.ts:4`: `serverExternalPackages` has `@libsql/client` (legacy from OM carve-out).
+- `D:\Project Hub\dialogue-ai\docs\MIGRATION_POCKETBASE.md`: rev 2 (commit `9cfddfa`); updated in `f1a65e2`.
+- `D:\Project Hub\dialogue-ai\docs\migration\phase-2-adapter.md` **(rev 2 in `f1a65e2`)**: Stream A complete. §9 Lessons learned with 5 subsections.
+- `D:\Project Hub\dialogue-ai\docs\decisions\001-event-engine-evolution.md` through `009-multilingual-continuity-and-historical-event-partitioning.md`: 9 prior-session ADRs.
+- `D:\Project Hub\dialogue-ai\docs\decisions\010-dynamic-agent-memory-architecture-and-gemini-embedding-migration.md`: ADR-010 Xenova 384d.
+- `D:\Project Hub\dialogue-ai\docs\decisions\011-feature-freeze-during-pb-migration.md`: revised (commit `db66ae9`).
+- `D:\Project Hub\dialogue-ai\docs\decisions\012-custom-memory-system-over-mastra-memory.md` **(commit `db66ae9`; updated in `f1a65e2`)**: §3 items 1/2/3 marked DONE.
+- `D:\Project Hub\dialogue-ai\docs\local\`: holding pen for prior-session scratch notes.
+- `D:\Project Hub\dialogue-ai\docs\migration\phase-0-tauri-skeleton.md`: Phase 0 results doc.
+- `D:\Project Hub\dialogue-ai\docs\migration\phase-1-schema-mapping.md`: Phase 1 schema mapping doc.
+- `D:\Project Hub\dialogue-ai\docs\migration\phase-1-graph-decision.md`: 4 keep / 6 delete edges, 7 node tables stay.
+- `D:\Project Hub\dialogue-ai\docs\migration\phase-1-5-pb-verification.md`: Phase 1.5 results — 117/117 checks pass.
+- `D:\Project Hub\dialogue-ai\pb_migrations\1700000000_init_collections.js`: PB migration, rewritten for PB 0.22+ JSVM.
+- `D:\Project Hub\dialogue-ai\scripts\verify-pb-migration.mjs`: end-to-end schema verifier.
+- `D:\Project Hub\dialogue-ai\src-tauri\Cargo.toml`: tauri = "2", tauri-plugin-opener = "2", release profile `lto = true, opt-level = "s", strip = true`.
+- `D:\Project Hub\dialogue-ai\src-tauri\tauri.conf.json`: v2 schema.
+- `D:\Project Hub\dialogue-ai\src-tauri\src\lib.rs`: Tauri 2.x `pub fn run()` pattern.
+- `D:\Project Hub\dialogue-ai\src-tauri\src\main.rs`: calls `dialogue_lib::run()`.
+- `D:\Project Hub\dialogue-ai\src-tauri\build.rs`: `tauri_build::build()`.
+- `D:\Project Hub\dialogue-ai\src-tauri\capabilities\default.json`: v2 ACL.
+- `D:\Project Hub\dialogue-ai\src-tauri\icons\`: full platform set.
+- `D:\Project Hub\dialogue-ai\src-tauri\Cargo.lock`: ~600 deps locked.
+- `D:\Project Hub\dialogue-ai\src-tauri\.gitignore`: ignores `target/`, `gen/`, `WixTools/`.
+- `D:\Project Hub\dialogue-ai\scripts\dev-tauri.ps1`: sources vcvars64.bat, runs `npx tauri $args`.
+- `D:\Project Hub\dialogue-ai\scripts\start-tauri-dev.ps1`: backgrounds `cargo tauri dev`.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\_generated\dataModel.ts`: hand-written types — `PbId<T>`, `PbRecord`, `PbUsers`, `PbAgentPersonas`, `PbWorkspaces`, `PbChatSessions`, `PbMessages`, `PbTasks`, `PbUserProfile`, `PbMemories` (typed `embedding: number[]`), `PbEvents` (self-ref `series`), `PbReflections`, `PbUserImages`, `PbHabits`, `PbHabitLogs`, `PbPageSettings`, `PbSessionSummaries`, `PbWeeklyDigests`, `PbArchivedSummaries`, `PbNotifications`, `PbPushSubscriptions`, `PbCardState`, `PbScheduledNotifications`, `PbResource`, `PbRecordMap`, `pbId<T>(s)` helper.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\api.ts`: typed `api` namespace (28+ top-level keys), Proxy-based stub throws "Phase 1 stub". `PbApiType`, `PbIdArg`, `PbRecordArg` exports.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\hooks.ts` **(modified in B.2/B.3/B.4/B.5a)**: re-exports `useQuery` (B.2), `useMutation` (B.3), `useAction` (B.4), `usePaginatedQuery` (B.5a, real), `definePaginatedQuery` (B.5a), `PbAuthState` type, all descriptor types, helpers. `usePaginatedQuery` stub removed in B.5a.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\index.ts` **(modified in B.1/B.2/B.3/B.4/B.5a/B.6)**: re-exports all hooks + types + helpers + pagination helpers. `isPbBackend()` reads `process.env.NEXT_PUBLIC_BACKEND === "pocketbase"`. `PB_COMPAT_PHASE = 2`, `PB_COMPAT_STATUS = "in-progress"`.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\client.ts` **(commit `7d8482a`)**: `getPbClient()` singleton, `resolvePbUrl()`, `__resetPbClientForTests()`. ~80 LOC.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\client.test.ts` **(commit `7d8482a`)**: 7 tests pass.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\auth.tsx` **(commit `7d8482a`)**: `PbAuthProvider` + `useAuth` real implementation. ~170 LOC. **Not yet wired into `app/layout.tsx`** (deferred to B.7).
+- `D:\Project Hub\dialogue-ai\src\pb-compat\use-query.ts` **(commit `5eacb68`)**: `PbQuery`, `PbQueryDescriptor`, `defineQuery`, `encodeArgsAsFilter`, `argsKey`, `useQuery`. ~280 LOC.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\use-query.test.ts` **(commit `5eacb68`)**: 19 tests pass.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\use-mutation.ts` **(commit `ae7f01f`)**: `PbMutationKind`, `PbCreateDescriptor`/`PbUpdateDescriptor`/`PbDeleteDescriptor`, `PbMutationDescriptor`, `executePbMutation` (pure), `useMutation` (3 overloads). ~100 LOC.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\use-mutation.test.ts` **(commit `ae7f01f`)**: 4 tests pass.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\use-action.ts` **(commit `2997ce1`)**: `PbActionDescriptor`, `PbActionRequest`, `PbActionResponse`, `defineAction`, `executePbAction` (pure, takes fetch impl), `useAction`. ~100 LOC.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\use-action.test.ts` **(commit `2997ce1`)**: 6 tests pass.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\pagination.ts` **(NEW, B.5a commit `70534e3`)**: pure helpers — `PbItem`, `PbSubscribeEvent`, `PbCursor`, `encodeCursor`/`decodeCursor` (base64url with shape validation), `appendOlderPage`/`prependNewItem`/`removeItemById`, `findPageOfItem`/`mergeRefetchedPage`, `handleCreateEvent`/`handleDeleteEvent` (pure subscribe-event handlers), `buildPageFilter`. ~145 LOC.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\pagination.test.ts` **(NEW, B.5a commit `70534e3`)**: 27 tests pass. ~220 LOC.
+- `D:\Project Hub\dialogue-ai\src\pb-compat\use-paginated-query.ts` **(NEW, B.5a commit `70534e3`)**: `PbPaginatedQuery`, `PbPaginatedDescriptor`, `definePaginatedQuery`, `usePaginatedQuery` (the hook), `UsePaginatedQueryResult`. ~305 LOC. **No dedicated test file** (no jsdom installed) — the real validation is the B.5b 10K stress test.
+- `D:\Project Hub\dialogue-ai\package.json`: devDeps include `@tauri-apps/cli ^2.0.0`, `@convex-dev/auth ^0.0.92`; scripts include `tauri`, `tauri:dev`, `tauri:build`. **Has `pocketbase@0.27.0` dep**. **B.5b will add `test:stress` script**.
+- `D:\Project Hub\dialogue-ai\vitest.config.ts`: exists; default config. **No jsdom/happy-dom env, no `@testing-library/react`** — blocks React-rendered hook tests. B.5a tests pure helpers only. Stream C would add jsdom for hook unit tests.
+- `D:\Project Hub\dialogue-ai\.gitignore`: added `/.tauri-dev.*` line; `!.env.example` exception.
+- `D:\Project Hub\dialogue-ai\AGENTS.md`: has "End goal" section + env contract note. **Needs revision** to ~150 MB target.
+- `D:\Project Hub\dialogue-ai\README.md`: relationship-first vision. **Needs revision** to ~150 MB target.
+- `C:\Users\user\tools\pocketbase\pocketbase.exe`: PB 0.39.1 install, **32,298,496 bytes (~32 MB)**. Outside project tree.

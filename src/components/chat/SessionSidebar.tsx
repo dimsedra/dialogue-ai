@@ -5,7 +5,7 @@ import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical
 import { motion } from "framer-motion";
 import { useMutation, useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { isPbBackend, usePbPersonasList } from "@/pb-compat";
+import { isPbBackend, usePbPersonasList, usePbSessionRename, usePbSessionTogglePin } from "@/pb-compat";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Doc } from "../../../convex/_generated/dataModel";
 
@@ -55,8 +55,13 @@ export function SessionSidebar({
   const activeSessionPersona = personas?.find(p => p._id === activeSession?.agentPersonaId) || personas?.find(p => p.isDefault);
   const activePersona = personas?.find(p => p._id === selectedPersonaId) || personas?.find(p => p.isDefault);
 
-  const renameSession = useMutation(api.messages.renameSession);
-  const togglePinSession = useMutation(api.messages.togglePinSession);
+  const convexRenameSession = useMutation(api.messages.renameSession);
+  const pbRenameSession = usePbSessionRename();
+  const renameSession = isPbBackend() ? pbRenameSession : (args: any) => convexRenameSession(args);
+
+  const convexTogglePinSession = useMutation(api.messages.togglePinSession);
+  const pbTogglePinSession = usePbSessionTogglePin();
+  const togglePinSession = isPbBackend() ? pbTogglePinSession : (args: any) => convexTogglePinSession(args);
 
   const startEditing = (id: Id<"chatSessions">, title: string, e: React.MouseEvent) => {
     e.stopPropagation();

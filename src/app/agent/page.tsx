@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery as useConvexQuery, useMutation } from "convex/react";
+import { useQuery as useConvexQuery, useMutation as useConvexMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { isPbBackend, usePbPersonasList } from "@/pb-compat";
+import { isPbBackend, usePbPersonasList, usePbPersonaCreate, usePbPersonaUpdate, usePbPersonaDelete } from "@/pb-compat";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { 
   ArrowLeft, 
@@ -24,9 +24,18 @@ export default function AgentPage() {
   const pbPersonas = usePbPersonasList();
   const convexPersonas = useConvexQuery(api.personas.list);
   const personas = isPbBackend() ? pbPersonas : convexPersonas;
-  const createPersona = useMutation(api.personas.create);
-  const updatePersona = useMutation(api.personas.update);
-  const removePersona = useMutation(api.personas.remove);
+
+  const pbCreatePersona = usePbPersonaCreate();
+  const pbUpdatePersona = usePbPersonaUpdate();
+  const pbDeletePersona = usePbPersonaDelete();
+
+  const convexCreatePersona = useConvexMutation(api.personas.create);
+  const convexUpdatePersona = useConvexMutation(api.personas.update);
+  const convexDeletePersona = useConvexMutation(api.personas.remove);
+
+  const createPersona = isPbBackend() ? pbCreatePersona : convexCreatePersona;
+  const updatePersona = isPbBackend() ? pbUpdatePersona : convexUpdatePersona;
+  const removePersona = isPbBackend() ? pbDeletePersona : convexDeletePersona;
 
   useEffect(() => {
     document.documentElement.classList.add("allow-scroll");

@@ -1,7 +1,7 @@
 # Dialogue → PocketBase Migration Plan
 
 > **Status**: Draft. Living document — update as decisions are made and phases complete.
-> **Last updated**: 2026-06-07 (rev 4: Phase 3 read paths done — workspaces, personas, sessions, tasks, events, habits, and dashboard proactive card state queries ported behind isPbBackend() flag. 170/170 unit + 17/17 stress + 13/13 profile smoke + 11/11 read-path smoke tests pass. See `docs/migration/phase-3-read-paths.md` for details.)
+> **Last updated**: 2026-06-07 (rev 5: Phase 4 write paths done — all mutation hooks wired with dual-mutation pattern across all consumer components, local LLM tool calls conditionalized (14 call sites), parameter adapter wrappers for id→taskId/eventId mapping, dynamic toggleCompleted, null→undefined conversion. 0 TS errors, 170/170 tests pass. See `docs/migration/phase-4-write-paths.md`.)
 > **Scope**: Replace the Convex backend with a self-hosted, Tauri-packaged stack. End-user install becomes a single desktop binary.
 >
 > **Source of truth**:
@@ -253,13 +253,14 @@ Rough effort estimates. Each phase is independently shippable.
 - Resolved key PocketBase validation rules for boolean/JSON fields in migrations to support development and test seeding.
 - **Deliverable:** UI components render identically when reading from PocketBase or Convex. All 11 read path scenarios validated via smoke test. See `docs/migration/phase-3-read-paths.md`.
 
-### Phase 4: Flip write paths to PB (no historical migration) (~1-2 days)
+### Phase 4: Flip write paths to PB (no historical migration) (~1-2 days) — ✅ DONE
 - Flip mutations to PB. Convex becomes `dryRun: true` (writes logged but not committed).
 - **No historical data migration.** User is the only user; existing Convex data is test/debug junk and is deleted at cutover. The new PB DB starts empty.
 - **No re-encrypt script.** Custom provider API keys (if any exist post-cutover) are encrypted with the new PB key on first save. No legacy data to re-key.
-- Drop `convexServerClient` and `requestContext` from Mastra tools.
-- Optional safety net (only if you want a rollback path during the cutover week): dual-write new records to both Convex and PB for the first 7 days, then drop the Convex side.
-- **Deliverable:** all new writes go to PB. Convex becomes a frozen snapshot of junk that gets deleted in Phase 9.
+- All consumer components (`Chat.tsx`, `TaskPanel.tsx`, `Dashboard.tsx`, `CardMenu.tsx`, `PageCustomizer.tsx`, `ReflectionWrappedModal.tsx`, `SessionSidebar.tsx`, workspace settings, app settings) wired with dual-mutation pattern using adapter wrappers for parameter discrepancies (`id→taskId/eventId`, dynamic `toggleCompleted`, `null→undefined` conversion).
+- All local LLM tool call imperative queries/mutations in `Chat.tsx` conditionalized (14 call sites).
+- `usePbUpdatePreferences` rewritten to match Convex's flat parameter signature with merge logic.
+- **Deliverable:** all new writes go to PB. Convex becomes a frozen snapshot of junk that gets deleted in Phase 9. See `docs/migration/phase-4-write-paths.md`.
 
 ### Phase 5: Migrate chat realtime + dashboard cards (~1 week)
 - Highest-risk UI surface: `usePaginatedQuery` for messages, 6 `useQuery` calls in `Chat.tsx`, dashboard proactive cards.

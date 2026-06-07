@@ -2,7 +2,7 @@
 
 import { useQuery as useConvexQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { isPbBackend, usePbWorkspace, usePbPersonasList } from "@/pb-compat";
+import { isPbBackend, usePbWorkspace, usePbPersonasList, usePbWorkspaceUpdate } from "@/pb-compat";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -24,7 +24,9 @@ export default function WorkspaceSettingsPage() {
   const pbPersonas = usePbPersonasList();
   const convexPersonas = useConvexQuery(api.personas.list);
   const personas = isPbBackend() ? pbPersonas : convexPersonas;
-  const updateSettings = useMutation(api.workspaces.updateSettings);
+  const convexUpdateSettings = useMutation(api.workspaces.updateSettings);
+  const pbUpdateSettings = usePbWorkspaceUpdate();
+  const updateSettings = isPbBackend() ? pbUpdateSettings : (args: any) => convexUpdateSettings(args);
 
   const [defaultAgentPersonaId, setDefaultAgentPersonaId] = useState<Id<"agentPersonas"> | "default_dialogue">("default_dialogue");
   const [workspaceColor, setWorkspaceColor] = useState("#d4a373");

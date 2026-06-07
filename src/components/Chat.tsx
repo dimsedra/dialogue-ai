@@ -8,7 +8,25 @@ import {
   usePbWorkspacesList,
   usePbSessionsList,
   usePbPersonasList,
+  usePbWorkspaceCreate,
+  usePbMessageSend,
+  usePbSessionCreate,
+  usePbSessionDelete,
+  usePbTaskCreate,
+  usePbEventCreate,
+  usePbEventUpdate,
+  usePbEventUpdateOccurrence,
+  usePbEventDelete,
+  usePbTaskToggleCompleted,
+  usePbTaskDelete,
+  usePbTaskUpdate,
+  usePbUpdateProfile,
+  usePbMemoryDelete,
+  usePbUpdatePreferences,
+  usePbHabitCreate,
+  usePbHabitLog,
 } from "@/pb-compat";
+import { api as pbApi } from "@/pb-compat/api";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -202,27 +220,102 @@ export function Chat({
     personas?.find((p) => p._id === activeSession?.agentPersonaId) ||
     personas?.find((p) => p.isDefault);
 
-  const createWorkspace = useMutation(api.workspaces.create);
-  const sendMessage = useMutation(api.messages.send);
-  const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
-  const createSession = useMutation(api.messages.createSession);
-  const deleteSession = useMutation(api.messages.deleteSession);
-  const triggerAutoTitle = useMutation(api.messages.triggerAutoTitle);
+  const convexCreateWorkspace = useMutation(api.workspaces.create);
+  const pbCreateWorkspace = usePbWorkspaceCreate();
+  const createWorkspace = isPbBackend() ? pbCreateWorkspace : (args: any) => convexCreateWorkspace(args);
+
+  const convexSendMessage = useMutation(api.messages.send);
+  const pbSendMessage = usePbMessageSend();
+  const sendMessage = isPbBackend() ? (args: any) => pbSendMessage(args) : (args: any) => convexSendMessage(args);
+
+  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
+  const pbGenerateUploadUrl = async () => "";
+  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
+
+  const convexCreateSession = useMutation(api.messages.createSession);
+  const pbCreateSession = usePbSessionCreate();
+  const createSession = isPbBackend()
+    ? (args: any) => pbCreateSession(args).then(id => id as any)
+    : (args: any) => convexCreateSession(args);
+
+  const convexDeleteSession = useMutation(api.messages.deleteSession);
+  const pbDeleteSession = usePbSessionDelete();
+  const deleteSession = isPbBackend() ? pbDeleteSession : (args: any) => convexDeleteSession(args);
+
+  const convexTriggerAutoTitle = useMutation(api.messages.triggerAutoTitle);
+  const pbTriggerAutoTitle = async () => {};
+  const triggerAutoTitle = isPbBackend() ? pbTriggerAutoTitle : (args: any) => convexTriggerAutoTitle(args);
 
   const { signOut } = useAuthActions();
 
   // Tool Mutations for local LLM
-  const addTask = useMutation(api.ai.addTask);
-  const addEvent = useMutation(api.events.add);
-  const updateEvent = useMutation(api.events.update);
-  const updateOccurrence = useMutation(api.events.updateOccurrence);
-  const deleteEvent = useMutation(api.events.remove);
-  const completeTask = useMutation(api.tasks.toggleCompleted);
-  const deleteTask = useMutation(api.tasks.deleteTask);
-  const updateTask = useMutation(api.tasks.updateTask);
-  const updateUserBio = useMutation(api.ai.updateProfile);
-  const deleteSemanticMemory = useMutation(api.ai.deleteMemory);
-  const updatePreferences = useMutation(api.ai.updatePreferences);
+  const convexAddTask = useMutation(api.ai.addTask);
+  const pbAddTask = usePbTaskCreate();
+  const addTask = isPbBackend() ? pbAddTask : (args: any) => convexAddTask(args);
+
+  const convexAddEvent = useMutation(api.events.add);
+  const pbAddEvent = usePbEventCreate();
+  const addEvent = isPbBackend() ? pbAddEvent : (args: any) => convexAddEvent(args);
+
+  const convexUpdateEvent = useMutation(api.events.update);
+  const pbUpdateEvent = usePbEventUpdate();
+  const updateEvent = isPbBackend()
+    ? (args: any) => {
+        const { id, ...rest } = args;
+        return pbUpdateEvent({ eventId: id, ...rest });
+      }
+    : (args: any) => convexUpdateEvent(args);
+
+  const convexUpdateOccurrence = useMutation(api.events.updateOccurrence);
+  const pbUpdateOccurrence = usePbEventUpdateOccurrence();
+  const updateOccurrence = isPbBackend() ? pbUpdateOccurrence : (args: any) => convexUpdateOccurrence(args);
+
+  const convexDeleteEvent = useMutation(api.events.remove);
+  const pbDeleteEvent = usePbEventDelete();
+  const deleteEvent = isPbBackend() ? pbDeleteEvent : (args: any) => convexDeleteEvent(args);
+
+  const convexCompleteTask = useMutation(api.tasks.toggleCompleted);
+  const pbCompleteTask = usePbTaskToggleCompleted();
+  const completeTask = isPbBackend()
+    ? async (args: { id: string }) => {
+        const task = await pbApi.tasks.get({ id: args.id });
+        const completed = task ? !task.completed : true;
+        return pbCompleteTask({ id: args.id, completed });
+      }
+    : (args: any) => convexCompleteTask(args);
+
+  const convexDeleteTask = useMutation(api.tasks.deleteTask);
+  const pbDeleteTask = usePbTaskDelete();
+  const deleteTask = isPbBackend() ? pbDeleteTask : (args: any) => convexDeleteTask(args);
+
+  const convexUpdateTask = useMutation(api.tasks.updateTask);
+  const pbUpdateTask = usePbTaskUpdate();
+  const updateTask = isPbBackend()
+    ? (args: any) => {
+        const { id, ...rest } = args;
+        return pbUpdateTask({ taskId: id, ...rest });
+      }
+    : (args: any) => convexUpdateTask(args);
+
+  const convexUpdateUserBio = useMutation(api.ai.updateProfile);
+  const pbUpdateUserBio = usePbUpdateProfile();
+  const updateUserBio = isPbBackend() ? pbUpdateUserBio : (args: any) => convexUpdateUserBio(args);
+
+  const convexDeleteSemanticMemory = useMutation(api.ai.deleteMemory);
+  const pbDeleteSemanticMemory = usePbMemoryDelete();
+  const deleteSemanticMemory = isPbBackend() ? pbDeleteSemanticMemory : (args: any) => convexDeleteSemanticMemory(args);
+
+  const convexUpdatePreferences = useMutation(api.ai.updatePreferences);
+  const pbUpdatePreferences = usePbUpdatePreferences();
+  const updatePreferences = isPbBackend() ? pbUpdatePreferences : (args: any) => convexUpdatePreferences(args);
+
+  const convexCreateHabit = useMutation(api.habits.createHabit);
+  const pbCreateHabit = usePbHabitCreate();
+  const createHabit = isPbBackend() ? pbCreateHabit : (args: any) => convexCreateHabit(args);
+
+  const convexLogHabit = useMutation(api.habits.logHabit);
+  const pbLogHabit = usePbHabitLog();
+  const logHabit = isPbBackend() ? pbLogHabit : (args: any) => convexLogHabit(args);
 
   const convex = useConvex();
   const idMapRef = useRef<Map<string, string>>(new Map());
@@ -611,9 +704,11 @@ export function Chat({
                   workspaceId: promptCtx.workspaceId ?? undefined,
                 });
               } else {
-                const oldTask = await convex.query(api.tasks.get, {
-                  id: args.taskId as Id<"tasks">,
-                });
+                const oldTask = isPbBackend()
+                  ? await pbApi.tasks.get({ id: args.taskId as string })
+                  : await convex.query(api.tasks.get, {
+                      id: args.taskId as Id<"tasks">,
+                    });
                 const taskUpdates: Record<
                   string,
                   string | number | boolean | undefined
@@ -692,9 +787,11 @@ export function Chat({
                   workspaceId: promptCtx.workspaceId ?? undefined,
                 });
               } else {
-                const oldEvent = await convex.query(api.events.get, {
-                  id: args.eventId as Id<"events">,
-                });
+                const oldEvent = isPbBackend()
+                  ? await pbApi.events.get({ id: args.eventId as string })
+                  : await convex.query(api.events.get, {
+                      id: args.eventId as Id<"events">,
+                    });
                 const updates: EventUpdateFields = {};
                 if (args.title) updates.title = args.title as string;
                 if (args.location) updates.location = args.location as string;
@@ -739,15 +836,19 @@ export function Chat({
                   : undefined;
               }
             } else if (name === "deleteEvent") {
-              const event = await convex.query(api.events.get, {
-                id: args.eventId as Id<"events">,
-              });
+              const event = isPbBackend()
+                ? await pbApi.events.get({ id: args.eventId as string })
+                : await convex.query(api.events.get, {
+                    id: args.eventId as Id<"events">,
+                  });
               await deleteEvent({ id: args.eventId as Id<"events"> });
               enrichedArgs.titleHint = event?.title;
             } else if (name === "updateEventOccurrence") {
-              const oldEvent = await convex.query(api.events.get, {
-                id: args.seriesId as Id<"events">,
-              });
+              const oldEvent = isPbBackend()
+                ? await pbApi.events.get({ id: args.seriesId as string })
+                : await convex.query(api.events.get, {
+                    id: args.seriesId as Id<"events">,
+                  });
               await updateOccurrence({
                 seriesId: args.seriesId as Id<"events">,
                 originalStartTime: parseLocal(args.originalStartTime as string),
@@ -770,15 +871,19 @@ export function Chat({
               enrichedArgs.titleHint =
                 (args.title as string | undefined) ?? oldEvent?.title;
             } else if (name === "completeTask") {
-              const task = await convex.query(api.tasks.get, {
-                id: args.taskId as Id<"tasks">,
-              });
+              const task = isPbBackend()
+                ? await pbApi.tasks.get({ id: args.taskId as string })
+                : await convex.query(api.tasks.get, {
+                    id: args.taskId as Id<"tasks">,
+                  });
               await completeTask({ id: args.taskId as Id<"tasks"> });
               enrichedArgs.titleHint = task?.text;
             } else if (name === "deleteTask") {
-              const task = await convex.query(api.tasks.get, {
-                id: args.taskId as Id<"tasks">,
-              });
+              const task = isPbBackend()
+                ? await pbApi.tasks.get({ id: args.taskId as string })
+                : await convex.query(api.tasks.get, {
+                    id: args.taskId as Id<"tasks">,
+                  });
               await deleteTask({ id: args.taskId as Id<"tasks"> });
               enrichedArgs.titleHint = task?.text;
             } else if (name === "updateUserBio") {
@@ -801,16 +906,23 @@ export function Chat({
               const limit = histArgs.limit ?? 20;
 
               if (histArgs.type === "tasks" || histArgs.type === "all") {
-                const tasks = await convex.query(api.tasks.searchHistory, {
-                  query: histArgs.query,
-                  startTime: histArgs.startTime,
-                  endTime: histArgs.endTime,
-                  limit,
-                });
+                const tasks = isPbBackend()
+                  ? await pbApi.tasks.searchHistory({
+                      query: histArgs.query,
+                      startTime: histArgs.startTime,
+                      endTime: histArgs.endTime,
+                      limit,
+                    })
+                  : await convex.query(api.tasks.searchHistory, {
+                      query: histArgs.query,
+                      startTime: histArgs.startTime,
+                      endTime: histArgs.endTime,
+                      limit,
+                    });
                 results = results.concat(
-                  tasks.map((t) => ({
+                  tasks.map((t: any) => ({
                     type: "task" as const,
-                    id: t._id,
+                    id: t._id ?? t.id,
                     text: t.text,
                     completedAt: t.completedAt,
                     category: t.category,
@@ -820,16 +932,23 @@ export function Chat({
               }
 
               if (histArgs.type === "events" || histArgs.type === "all") {
-                const events = await convex.query(api.events.searchHistory, {
-                  query: histArgs.query,
-                  startTime: histArgs.startTime,
-                  endTime: histArgs.endTime,
-                  limit,
-                });
+                const events = isPbBackend()
+                  ? await pbApi.events.searchHistory({
+                      query: histArgs.query,
+                      startTime: histArgs.startTime,
+                      endTime: histArgs.endTime,
+                      limit,
+                    })
+                  : await convex.query(api.events.searchHistory, {
+                      query: histArgs.query,
+                      startTime: histArgs.startTime,
+                      endTime: histArgs.endTime,
+                      limit,
+                    });
                 results = results.concat(
-                  events.map((e) => ({
+                  events.map((e: any) => ({
                     type: "event",
-                    id: e._id,
+                    id: e._id ?? e.id,
                     title: e.title,
                     startTime: e.startTime,
                     location: e.location,
@@ -859,56 +978,95 @@ export function Chat({
                 notes: t.notes,
               }));
 
-              const ids = await convex.mutation(api.tasks.batchAdd, {
-                tasks: parsedTasks,
-                workspaceId: promptCtx.workspaceId ?? undefined,
-              });
+              const ids = isPbBackend()
+                ? await Promise.all(
+                    parsedTasks.map((t) =>
+                      addTask({
+                        ...t,
+                        workspaceId: promptCtx.workspaceId ?? undefined,
+                      } as any)
+                    )
+                  )
+                : await convex.mutation(api.tasks.batchAdd, {
+                    tasks: parsedTasks,
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                  });
               enrichedArgs.ids = ids;
               enrichedArgs.count = ids.length;
             } else if (name === "getTaskNotes") {
-              const task = await convex.query(api.tasks.get, {
-                id: args.taskId as Id<"tasks">,
-              });
+              const task = isPbBackend()
+                ? await pbApi.tasks.get({ id: args.taskId as string })
+                : await convex.query(api.tasks.get, {
+                    id: args.taskId as Id<"tasks">,
+                  });
               enrichedArgs.notes = task?.notes || null;
               enrichedArgs.hasNotes = !!task?.notes;
               enrichedArgs.titleHint = task?.text;
             } else if (name === "listWorkspaces") {
-              const workspaces = await convex.query(api.workspaces.list, {});
+              const workspaces = isPbBackend()
+                ? await pbApi.workspaces.list({})
+                : await convex.query(api.workspaces.list, {});
               enrichedArgs.workspaces = workspaces;
             } else if (name === "create_habit") {
-              const habitId = await convex.mutation(api.habits.createHabit, {
-                workspaceId: promptCtx.workspaceId ?? undefined,
-                name: args.name as string,
-                description: args.description as string | undefined,
-                frequency: args.frequency as "daily" | "custom",
-                frequencyConfig: {
-                  daysOfWeek: args.daysOfWeek as number[] | undefined,
-                },
-              });
+              const habitId = isPbBackend()
+                ? await createHabit({
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                    name: args.name as string,
+                    description: args.description as string | undefined,
+                    frequency: args.frequency as "daily" | "custom",
+                    frequencyConfig: {
+                      daysOfWeek: args.daysOfWeek as number[] | undefined,
+                    },
+                  })
+                : await convex.mutation(api.habits.createHabit, {
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                    name: args.name as string,
+                    description: args.description as string | undefined,
+                    frequency: args.frequency as "daily" | "custom",
+                    frequencyConfig: {
+                      daysOfWeek: args.daysOfWeek as number[] | undefined,
+                    },
+                  });
               enrichedArgs.habitId = habitId;
             } else if (name === "log_habit") {
-              const logId = await convex.mutation(api.habits.logHabit, {
-                habitId: args.habitId as Id<"habits">,
-                dateString: args.dateString as string,
-                status: args.status as "completed" | "skipped",
-                notes: args.notes as string | undefined,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              });
-              const habit = await convex.query(api.habits.get, {
-                id: args.habitId as Id<"habits">,
-              });
+              const logId = isPbBackend()
+                ? await logHabit({
+                    habitId: args.habitId as string,
+                    dateString: args.dateString as string,
+                    status: args.status as "completed" | "skipped",
+                    notes: args.notes as string | undefined,
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  })
+                : await convex.mutation(api.habits.logHabit, {
+                    habitId: args.habitId as Id<"habits">,
+                    dateString: args.dateString as string,
+                    status: args.status as "completed" | "skipped",
+                    notes: args.notes as string | undefined,
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  });
+              const habit = isPbBackend()
+                ? await pbApi.habits.get({ id: args.habitId as string })
+                : await convex.query(api.habits.get, {
+                    id: args.habitId as Id<"habits">,
+                  });
               enrichedArgs.logId = logId;
               enrichedArgs.newStreak = habit?.currentStreak || 0;
               enrichedArgs.titleHint = habit?.name;
             } else if (name === "get_habit_consistency") {
-              const report = await convex.query(
-                api.habits.getHabitConsistency,
-                {
-                  workspaceId: promptCtx.workspaceId ?? undefined,
-                  periodStartDate: args.periodStartDate as string,
-                  periodEndDate: args.periodEndDate as string,
-                },
-              );
+              const report = isPbBackend()
+                ? await pbApi.habits.getHabitConsistency({
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                    periodStartDate: args.periodStartDate as string,
+                    periodEndDate: args.periodEndDate as string,
+                  })
+                : await convex.query(
+                    api.habits.getHabitConsistency,
+                    {
+                      workspaceId: promptCtx.workspaceId ?? undefined,
+                      periodStartDate: args.periodStartDate as string,
+                      periodEndDate: args.periodEndDate as string,
+                    },
+                  );
               enrichedArgs.report = report;
             }
 
@@ -1347,7 +1505,23 @@ export function Chat({
         reflectionId={openReflectionId}
         onClose={() => setOpenReflectionId(null)}
         onExportImage={async (id) => {
-          const data = await convex.query(api.reflections.getReflection, { id });
+          let data: any;
+          if (isPbBackend()) {
+            try {
+              const pb = (await import("@/pb-compat/client")).getPbClient();
+              const rec = await pb.collection("reflections").getOne(id);
+              data = {
+                ...rec,
+                _id: rec.id,
+                userId: rec.user,
+                workspaceId: rec.workspace,
+              };
+            } catch (e) {
+              console.error("Failed to fetch reflection from PB for export:", e);
+            }
+          } else {
+            data = await convex.query(api.reflections.getReflection, { id });
+          }
           if (data) await exportReflectionAsImage(data);
         }}
       />

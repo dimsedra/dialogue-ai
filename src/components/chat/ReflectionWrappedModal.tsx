@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { isPbBackend, usePbReflection, usePbReflectionSaveComment, usePbReflectionToggleShare } from "@/pb-compat";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -45,13 +46,20 @@ export function ReflectionWrappedModal({
   const [saved, setSaved] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  const reflection = useQuery(
+  const pbReflection = usePbReflection(reflectionId);
+  const convexReflection = useQuery(
     api.reflections.getReflection,
     reflectionId ? { id: reflectionId } : "skip",
   );
+  const reflection = isPbBackend() ? pbReflection : convexReflection;
 
-  const saveComment = useMutation(api.reflections.saveUserComment);
-  const toggleShare = useMutation(api.reflections.toggleShareReflection);
+  const convexSaveComment = useMutation(api.reflections.saveUserComment);
+  const pbSaveComment = usePbReflectionSaveComment();
+  const saveComment = isPbBackend() ? pbSaveComment : (args: any) => convexSaveComment(args);
+
+  const convexToggleShare = useMutation(api.reflections.toggleShareReflection);
+  const pbToggleShare = usePbReflectionToggleShare();
+  const toggleShare = isPbBackend() ? pbToggleShare : (args: any) => convexToggleShare(args);
 
   const [trackedId, setTrackedId] = useState<Id<"reflections"> | null>(reflectionId);
   if (trackedId !== reflectionId) {

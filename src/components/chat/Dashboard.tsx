@@ -5,6 +5,10 @@ import {
   usePbPersonasList,
   useQuery as usePbQuery,
   api as pbApi,
+  usePbHabitLog,
+  usePbMarkCardShown,
+  usePbEventScheduleFocusBlock,
+  usePbTasksRollOver,
 } from "@/pb-compat";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
@@ -192,10 +196,21 @@ export function Dashboard({
   const pbPersonas = usePbPersonasList();
   const convexPersonas = useConvexQuery(api.personas.list);
   const personas = isPbBackend() ? pbPersonas : convexPersonas;
-  const logHabit = useMutation(api.habits.logHabit);
-  const markCardShown = useMutation(api.dashboard.markCardShown);
-  const scheduleFocusBlock = useMutation(api.events.scheduleFocusBlock);
-  const rollOverTasks = useMutation(api.tasks.rollOverTasks);
+  const convexLogHabit = useMutation(api.habits.logHabit);
+  const pbLogHabit = usePbHabitLog();
+  const logHabit = isPbBackend() ? pbLogHabit : (args: any) => convexLogHabit(args);
+
+  const convexMarkCardShown = useMutation(api.dashboard.markCardShown);
+  const pbMarkCardShown = usePbMarkCardShown();
+  const markCardShown = isPbBackend() ? pbMarkCardShown : (args: any) => convexMarkCardShown(args);
+
+  const convexScheduleFocusBlock = useMutation(api.events.scheduleFocusBlock);
+  const pbScheduleFocusBlock = usePbEventScheduleFocusBlock();
+  const scheduleFocusBlock = isPbBackend() ? pbScheduleFocusBlock : (args: any) => convexScheduleFocusBlock(args);
+
+  const convexRollOverTasks = useMutation(api.tasks.rollOverTasks);
+  const pbRollOverTasks = usePbTasksRollOver();
+  const rollOverTasks = isPbBackend() ? pbRollOverTasks : (args: any) => convexRollOverTasks(args);
   const activePersona =
     personas?.find((p) => p._id === selectedPersonaId) ||
     personas?.find((p) => p.isDefault);

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { isPbBackend, usePbProfile } from "@/pb-compat";
+import { isPbBackend, usePbProfile, usePbMemoriesList, usePbUpdateProfile, usePbUpdatePreferences, usePbAddSubscription, usePbRemoveSubscription, usePbMemoryCreate, usePbMemoryUpdate, usePbMemoryDelete } from "@/pb-compat";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import {
   ArrowLeft,
@@ -58,14 +58,38 @@ export default function SettingsPage() {
   const pbProfile = usePbProfile();
   const convexProfile = useQuery(api.ai.getProfile, {});
   const profile = isPbBackend() ? pbProfile : convexProfile;
-  const memories = useQuery(api.ai.getAllMemories, {});
-  const updateProfile = useMutation(api.ai.updateProfile);
-  const updateMemory = useMutation(api.ai.updateMemoryText);
-  const deleteMemory = useMutation(api.ai.deleteMemory);
-  const addMemory = useMutation(api.ai.saveMemory);
-  const updatePreferences = useMutation(api.ai.updatePreferences);
-  const addSubscription = useMutation(api.push.addSubscription);
-  const removeSubscription = useMutation(api.push.removeSubscription);
+
+  const pbMemories = usePbMemoriesList();
+  const convexMemories = useQuery(api.ai.getAllMemories, {});
+  const memories = isPbBackend() ? pbMemories : convexMemories;
+
+  const pbUpdateProfile = usePbUpdateProfile();
+  const convexUpdateProfile = useMutation(api.ai.updateProfile);
+  const updateProfile = isPbBackend() ? pbUpdateProfile : convexUpdateProfile;
+
+  const pbUpdateMemory = usePbMemoryUpdate();
+  const convexUpdateMemory = useMutation(api.ai.updateMemoryText);
+  const updateMemory = isPbBackend() ? pbUpdateMemory : convexUpdateMemory;
+
+  const pbDeleteMemory = usePbMemoryDelete();
+  const convexDeleteMemory = useMutation(api.ai.deleteMemory);
+  const deleteMemory = isPbBackend() ? pbDeleteMemory : convexDeleteMemory;
+
+  const pbAddMemory = usePbMemoryCreate();
+  const convexAddMemory = useMutation(api.ai.saveMemory);
+  const addMemory = isPbBackend() ? pbAddMemory : convexAddMemory;
+
+  const pbUpdatePreferences = usePbUpdatePreferences();
+  const convexUpdatePreferences = useMutation(api.ai.updatePreferences);
+  const updatePreferences = isPbBackend() ? pbUpdatePreferences : convexUpdatePreferences;
+
+  const pbAddSubscription = usePbAddSubscription();
+  const convexAddSubscription = useMutation(api.push.addSubscription);
+  const addSubscription = isPbBackend() ? pbAddSubscription : convexAddSubscription;
+
+  const pbRemoveSubscription = usePbRemoveSubscription();
+  const convexRemoveSubscription = useMutation(api.push.removeSubscription);
+  const removeSubscription = isPbBackend() ? pbRemoveSubscription : convexRemoveSubscription;
   const publicKey = useQuery(api.push.getPublicKey, {});
   const { signOut } = useAuthActions();
 
