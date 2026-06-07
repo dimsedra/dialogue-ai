@@ -1,16 +1,19 @@
 // stress-pagination.mjs
 //
-// Phase 2 Stage B.5b: 10K-item stress test for usePaginatedQuery.
+// Phase 2 Stage B.5b: pagination stress test for usePaginatedQuery.
+// Phase 5.5: bumped from 10K to 50K records (1000 pages of 50) to
+// validate the edge case of long-running pagination.
 //
 // Why opt-in (via `npm run test:stress`):
 //   - Spawns a real PocketBase server process.
-//   - Inserts 10K synthetic items.
-//   - Takes ~10-30s depending on hardware.
+//   - Inserts 50K synthetic items (Phase 5.5; was 10K pre-5.5).
+//   - Takes ~30-90s depending on hardware.
 //   - Not part of the normal `npm test` loop (vitest, 1s).
 //
 // What it validates:
-//   - SDK getList + sort + filter behavior at 10K scale.
-//   - Pagination math: initial load, loadMore until Exhausted, no dupes, descending id order.
+//   - SDK getList + sort + filter behavior at 50K scale.
+//   - Pagination math: initial load, loadMore until Exhausted across
+//     1000+ pages, no dupes, descending id order.
 //   - Subscribe create: new item event arrives with the right id, prependable.
 //   - Subscribe update: update event arrives, page refetch logic produces correct new set.
 //   - Subscribe delete: delete event arrives, item is removable from local state.
@@ -52,7 +55,8 @@ const { default: PocketBase } = await import("pocketbase");
 
 const PB_BIN =
   process.env.POCKETBASE_BIN || "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe";
-const TOTAL_ITEMS = 10_000;
+// 50K (Phase 5.5): validates long-running pagination. Was 10K pre-5.5.
+const TOTAL_ITEMS = 50_000;
 const PAGE_SIZE = 50;
 const EXPECTED_PAGES = Math.ceil(TOTAL_ITEMS / PAGE_SIZE);
 
@@ -383,7 +387,7 @@ for (let i = 1; i < sim.results.length; i++) {
     break;
   }
 }
-assert(orderOk, "all 10K items in id-desc order (PB ids are random, but sort is stable)");
+assert(orderOk, `all ${TOTAL_ITEMS} items in id-desc order (PB ids are random, but sort is stable)`);
 
 // =============================================================================
 // T3: Subscribe + create event (prependable)
