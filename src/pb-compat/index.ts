@@ -78,9 +78,11 @@ export {
 // =============================================================================
 
 export function isPbBackend(): boolean {
-  // In Phase 1, this is intentionally always false. The Phase 2 work item
-  // explicitly decides when to flip the default.
-  return false;
+  // Reads NEXT_PUBLIC_BACKEND. Defaults to false (Convex).
+  // Set NEXT_PUBLIC_BACKEND=pocketbase to opt into the PB adapter.
+  // This is the single switch the Phase 3 rollout (per migration plan §5)
+  // uses to flip consumers one at a time.
+  return process.env.NEXT_PUBLIC_BACKEND === "pocketbase";
 }
 
 // =============================================================================

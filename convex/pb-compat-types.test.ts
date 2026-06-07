@@ -45,8 +45,42 @@ describe("pb-compat: phase status", () => {
     expect(PB_COMPAT_STATUS).toBe("stub");
   });
 
-  it("reports PB backend as not active in Phase 1", () => {
-    expect(isPbBackend()).toBe(false);
+  it("reports PB backend as not active when NEXT_PUBLIC_BACKEND is unset", () => {
+    // Sanity: with no env var set (the default in CI and dev), the flag
+    // stays false. This is the safe default.
+    const original = process.env.NEXT_PUBLIC_BACKEND;
+    delete process.env.NEXT_PUBLIC_BACKEND;
+    try {
+      expect(isPbBackend()).toBe(false);
+    } finally {
+      if (original !== undefined) process.env.NEXT_PUBLIC_BACKEND = original;
+    }
+  });
+
+  it("flips to true when NEXT_PUBLIC_BACKEND=pocketbase", () => {
+    // B.6 wires the flag. Consumers (B.7) gate on this; the env var is
+    // set per-environment (dev, CI, prod) not at runtime.
+    const original = process.env.NEXT_PUBLIC_BACKEND;
+    process.env.NEXT_PUBLIC_BACKEND = "pocketbase";
+    try {
+      expect(isPbBackend()).toBe(true);
+    } finally {
+      if (original === undefined) delete process.env.NEXT_PUBLIC_BACKEND;
+      else process.env.NEXT_PUBLIC_BACKEND = original;
+    }
+  });
+
+  it("treats unknown values as Convex (off)", () => {
+    // Defensive: only the literal "pocketbase" enables the flag. Any
+    // typo or future value stays on the safe Convex path.
+    const original = process.env.NEXT_PUBLIC_BACKEND;
+    process.env.NEXT_PUBLIC_BACKEND = "convex"; // explicit Convex
+    try {
+      expect(isPbBackend()).toBe(false);
+    } finally {
+      if (original === undefined) delete process.env.NEXT_PUBLIC_BACKEND;
+      else process.env.NEXT_PUBLIC_BACKEND = original;
+    }
   });
 });
 
