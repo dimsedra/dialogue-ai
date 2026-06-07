@@ -28,6 +28,20 @@ import {
   usePaginatedQuery,
   useAuth,
   PbAuthProvider,
+  usePbWorkspacesList,
+  usePbWorkspace,
+  usePbSessionsList,
+  usePbSession,
+  usePbPersonasList,
+  usePbTasksList,
+  usePbTask,
+  usePbTasksSearchHistory,
+  usePbEventsList,
+  usePbEvent,
+  usePbEventsSearchHistory,
+  usePbHabitsList,
+  usePbHabit,
+  usePbHabitConsistency,
   type PbId,
   type PbRecord,
   type PbRecordMap,
@@ -340,5 +354,50 @@ describe("pb-compat: Convex Id/Doc pattern equivalence", () => {
       collectionName: "users",
     };
     expect(baseRecord.id).toBe("x");
+  });
+});
+
+describe("pb-compat: Phase 3 query descriptors and hooks", () => {
+  it("defines the expected query descriptors on the api object", () => {
+    expect(api.workspaces.list._pb.collection).toBe("workspaces");
+    expect(api.workspaces.get._pb.collection).toBe("workspaces");
+    expect(api.agentPersonas.list._pb.collection).toBe("agent_personas");
+    expect(api.messages.listSessions._pb.collection).toBe("chat_sessions");
+    expect(api.messages.getSession._pb.collection).toBe("chat_sessions");
+    expect(api.tasks.list._pb.collection).toBe("tasks");
+    expect(api.tasks.get._pb.collection).toBe("tasks");
+    expect(api.tasks.searchHistory._pb.collection).toBe("tasks");
+    expect(api.events.list._pb.collection).toBe("events");
+    expect(api.events.get._pb.collection).toBe("events");
+    expect(api.events.searchHistory._pb.collection).toBe("events");
+    expect(api.habits.getHabits._pb.collection).toBe("habits");
+    expect(api.habits.get._pb.collection).toBe("habits");
+    expect(api.habits.getHabitConsistency._pb.collection).toBe("habit_logs");
+
+    expect(api.dashboard.getAttentionNeeded._pb.collection).toBe("tasks");
+    expect(api.dashboard.getReflectionReady._pb.collection).toBe("reflections");
+    expect(api.dashboard.getTaskTriage._pb.collection).toBe("tasks");
+    expect(api.dashboard.getMorningBrief._pb.collection).toBe("tasks");
+    expect(api.dashboard.getEventPrep._pb.collection).toBe("events");
+    expect(api.dashboard.getHabitCheck._pb.collection).toBe("habits");
+    expect(api.dashboard.getEveningLog._pb.collection).toBe("habits");
+    expect(api.dashboard.getMutedCardStates._pb.collection).toBe("card_state");
+  });
+
+  it("exports the expected hook wrappers", () => {
+    expect(typeof usePbWorkspacesList).toBe("function");
+    expect(typeof usePbWorkspace).toBe("function");
+    expect(typeof usePbSessionsList).toBe("function");
+    expect(typeof usePbSession).toBe("function");
+    expect(typeof usePbPersonasList).toBe("function");
+    expect(typeof usePbTasksList).toBe("function");
+    expect(typeof usePbTask).toBe("function");
+    expect(typeof usePbTasksSearchHistory).toBe("function");
+    expect(typeof usePbEventsList).toBe("function");
+    expect(typeof usePbEvent).toBe("function");
+    expect(typeof usePbEventsSearchHistory).toBe("function");
+    expect(typeof usePbHabitsList).toBe("function");
+    expect(typeof usePbHabit).toBe("function");
+    expect(typeof usePbHabitConsistency).toBe("function");
   });
 });

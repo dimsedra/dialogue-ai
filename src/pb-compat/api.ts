@@ -28,6 +28,22 @@
 
 import type { PbCollectionName, PbId, PbRecord } from "./_generated/dataModel";
 import { userProfileGetQuery } from "./descriptors/userProfile";
+import { workspacesListQuery, workspacesGetQuery } from "./descriptors/workspaces";
+import { personasListQuery } from "./descriptors/personas";
+import { listSessionsQuery, getSessionQuery } from "./descriptors/chatSessions";
+import { tasksListQuery, tasksGetQuery, tasksSearchHistoryQuery } from "./descriptors/tasks";
+import { eventsListQuery, eventsGetQuery, eventsSearchHistoryQuery } from "./descriptors/events";
+import { habitsListRawQuery, habitsGetQuery, habitsGetHabitConsistencyQuery } from "./descriptors/habits";
+import {
+  getAttentionNeededQuery,
+  getReflectionReadyQuery,
+  getTaskTriageQuery,
+  getMorningBriefQuery,
+  getEventPrepQuery,
+  getHabitCheckQuery,
+  getEveningLogQuery,
+  getMutedCardStatesQuery,
+} from "./descriptors/dashboard";
 
 // =============================================================================
 // Stub function type. Every API call returns a promise that rejects.
@@ -57,19 +73,39 @@ type StubNamespace<TArgs extends StubArgs = StubArgs, TResult = unknown> = Recor
 export const api = {
   // Core data namespaces
   users: {} as StubNamespace,
-  workspaces: {} as StubNamespace,
+  workspaces: {
+    list: workspacesListQuery,
+    get: workspacesGetQuery,
+  },
   chatSessions: {} as StubNamespace,
-  agentPersonas: {} as StubNamespace,
-  messages: {} as StubNamespace,
-  tasks: {} as StubNamespace,
+  agentPersonas: {
+    list: personasListQuery,
+  },
+  messages: {
+    listSessions: listSessionsQuery,
+    getSession: getSessionQuery,
+  },
+  tasks: {
+    list: tasksListQuery,
+    get: tasksGetQuery,
+    searchHistory: tasksSearchHistoryQuery,
+  },
   // B.7.2: userProfile.get is the first real (non-stub) PB descriptor.
   // The rest of userProfile.* is still a stub — only `get` is wired.
   userProfile: { get: userProfileGetQuery },
   memories: {} as StubNamespace,
-  events: {} as StubNamespace,
+  events: {
+    list: eventsListQuery,
+    get: eventsGetQuery,
+    searchHistory: eventsSearchHistoryQuery,
+  },
   reflections: {} as StubNamespace,
   userImages: {} as StubNamespace,
-  habits: {} as StubNamespace,
+  habits: {
+    getHabits: habitsListRawQuery,
+    get: habitsGetQuery,
+    getHabitConsistency: habitsGetHabitConsistencyQuery,
+  },
   habitLogs: {} as StubNamespace,
   pageSettings: {} as StubNamespace,
   sessionSummaries: {} as StubNamespace,
@@ -78,6 +114,16 @@ export const api = {
   notifications: {} as StubNamespace,
   pushSubscriptions: {} as StubNamespace,
   cardState: {} as StubNamespace,
+  dashboard: {
+    getAttentionNeeded: getAttentionNeededQuery,
+    getReflectionReady: getReflectionReadyQuery,
+    getTaskTriage: getTaskTriageQuery,
+    getMorningBrief: getMorningBriefQuery,
+    getEventPrep: getEventPrepQuery,
+    getHabitCheck: getHabitCheckQuery,
+    getEveningLog: getEveningLogQuery,
+    getMutedCardStates: getMutedCardStatesQuery,
+  },
 
   // Auth
   auth: {} as StubNamespace,

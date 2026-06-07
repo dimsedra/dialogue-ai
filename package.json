@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:stress": "node scripts/stress-pagination.mjs",
     "test:smoke": "node scripts/smoke-pb-userprofile.mjs",
+    "test:smoke:reads": "node scripts/smoke-pb-readpaths.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useQuery as useConvexQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { isPbBackend, usePbPersonasList } from "@/pb-compat";
 import { Id, Doc } from "../../../convex/_generated/dataModel";
 import { 
   ArrowLeft, 
@@ -20,7 +21,9 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function AgentPage() {
-  const personas = useQuery(api.personas.list);
+  const pbPersonas = usePbPersonasList();
+  const convexPersonas = useConvexQuery(api.personas.list);
+  const personas = isPbBackend() ? pbPersonas : convexPersonas;
   const createPersona = useMutation(api.personas.create);
   const updatePersona = useMutation(api.personas.update);
   const removePersona = useMutation(api.personas.remove);

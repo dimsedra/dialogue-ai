@@ -2,7 +2,13 @@
 
 import { useQuery, useMutation, useConvex, usePaginatedQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { isPbBackend, usePbProfile } from "@/pb-compat";
+import {
+  isPbBackend,
+  usePbProfile,
+  usePbWorkspacesList,
+  usePbSessionsList,
+  usePbPersonasList,
+} from "@/pb-compat";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -131,14 +137,23 @@ export function Chat({
   onChatInputResizeAction,
   onShowTasksAction,
 }: ChatProps) {
-  const workspaces = useQuery(api.workspaces.list, {});
-  const sessions = useQuery(api.messages.listSessions, {
+  const pbWorkspaces = usePbWorkspacesList();
+  const convexWorkspaces = useQuery(api.workspaces.list, {});
+  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+
+  const pbSessions = usePbSessionsList({ workspaceId: activeWorkspaceId });
+  const convexSessions = useQuery(api.messages.listSessions, {
     workspaceId: activeWorkspaceId,
   });
+  const sessions = isPbBackend() ? pbSessions : convexSessions;
+
   // All sessions across every workspace — used only by the Dashboard landing view
-  const allSessions = useQuery(api.messages.listSessions, {
+  const pbAllSessions = usePbSessionsList({ allWorkspaces: true });
+  const convexAllSessions = useQuery(api.messages.listSessions, {
     allWorkspaces: true,
   });
+  const allSessions = isPbBackend() ? pbAllSessions : convexAllSessions;
+
   const messagesPaginated = usePaginatedQuery(
     api.messages.listPaginated,
     activeSessionId ? { sessionId: activeSessionId } : "skip",
@@ -171,7 +186,10 @@ export function Chat({
   const pbProfile = usePbProfile();
   const convexProfile = useQuery(api.ai.getProfile, {});
   const profile = isPbBackend() ? pbProfile : convexProfile;
-  const personas = useQuery(api.personas.list);
+
+  const pbPersonas = usePbPersonasList();
+  const convexPersonas = useQuery(api.personas.list);
+  const personas = isPbBackend() ? pbPersonas : convexPersonas;
 
   const [localScopes, setLocalScopes] = useState<Record<string, Scope>>({});
 

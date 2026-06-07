@@ -140,6 +140,12 @@ export interface PbAuthState {
 // =============================================================================
 
 export { usePbProfile } from "./hooks/use-pb-profile";
+export { usePbWorkspacesList, usePbWorkspace } from "./hooks/use-pb-workspaces";
+export { usePbSessionsList, usePbSession } from "./hooks/use-pb-sessions";
+export { usePbPersonasList } from "./hooks/use-pb-personas";
+export { usePbTasksList, usePbTask, usePbTasksSearchHistory } from "./hooks/use-pb-tasks";
+export { usePbEventsList, usePbEvent, usePbEventsSearchHistory } from "./hooks/use-pb-events";
+export { usePbHabitsList, usePbHabit, usePbHabitConsistency } from "./hooks/use-pb-habits";
 
 // =============================================================================
 // Re-exports for convenience.

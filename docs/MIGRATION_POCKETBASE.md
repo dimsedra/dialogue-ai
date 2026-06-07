@@ -1,7 +1,7 @@
 # Dialogue → PocketBase Migration Plan
 
 > **Status**: Draft. Living document — update as decisions are made and phases complete.
-> **Last updated**: 2026-06-07 (rev 3: Phase 2 Stream B done — all 5 PB-compat hooks shipped, `PbAuthProvider` wired into `app/layout.tsx`, `api.userProfile.get` is the first non-stub on the public surface, 3 consumers flipped via `usePbProfile()` wrapper. 130/130 unit + 17/17 stress + 13/13 smoke tests pass. Stream C.4 `memory-system.md` still pending. See `docs/migration/phase-2-adapter.md` for the full Stream B write-up + 13 lessons learned.)
+> **Last updated**: 2026-06-07 (rev 4: Phase 3 read paths done — workspaces, personas, sessions, tasks, events, habits, and dashboard proactive card state queries ported behind isPbBackend() flag. 170/170 unit + 17/17 stress + 13/13 profile smoke + 11/11 read-path smoke tests pass. See `docs/migration/phase-3-read-paths.md` for details.)
 > **Scope**: Replace the Convex backend with a self-hosted, Tauri-packaged stack. End-user install becomes a single desktop binary.
 >
 > **Source of truth**:
@@ -207,7 +207,7 @@ Rough effort estimates. Each phase is independently shippable.
 | 1 — Schema mapping + graph decision | ✅ Done | `phase-1-schema-mapping.md`, `phase-1-graph-decision.md`; `pb-compat/` stubs landed |
 | 1.5 — PB migration end-to-end verification | ✅ Done | `phase-1-5-pb-verification.md`; 117/117 checks pass |
 | 2 — `pb-compat/` adapter | ✅ Done | Stream A (memory refinement, ADR-012 §3 items 1-3) + Stream B (all 5 hooks + descriptor pattern + dispatcher + 3 consumer flips) shipped. See `phase-2-adapter.md`. Stream C.4 (`memory-system.md`) still pending. |
-| 3 — Read paths | Pending | |
+| 3 — Read paths | ✅ Done | workspaces, personas, sessions, tasks, events, habits, and dashboard proactive card states ported behind `isPbBackend()` flag. See `phase-3-read-paths.md`. |
 | 4 — Flip write paths | Pending | No migration script; ~1-2 days |
 | 5 — Realtime + dashboard cards | Pending | Highest risk |
 | 6 — Background jobs | Pending | Second-highest risk |
@@ -237,7 +237,7 @@ Rough effort estimates. Each phase is independently shippable.
 - **Deliverable:** 117/117 checks pass. Migration is idempotent (down/up re-passes). PB schema is locked.
 - *(See `docs/migration/phase-1-5-pb-verification.md`. Migration file: `pb_migrations/1700000000_init_collections.js`.)*
 
-### Phase 2: Build the `pb-compat/` adapter layer (~1-2 weeks)
+### Phase 2: Build the `pb-compat/` adapter layer (~1-2 weeks) — ✅ DONE
 - A thin module that exposes the same `api.*` surface that the client code uses, but is backed by PocketBase.
 - `useQuery` → a custom hook wrapping `pb.collection(...).subscribe('*', ...)` with reactive updates.
 - `useMutation` → a thin wrapper around `pb.collection(...).create/update/delete`.
@@ -247,11 +247,11 @@ Rough effort estimates. Each phase is independently shippable.
 - **Mastra 1.0 memory is NOT adopted.** Per [ADR-012](decisions/012-custom-memory-system-over-mastra-memory.md), the custom memory system (`saveSemanticMemory` + `retrieveGraphContext` + LadybugDB vector+graph + 384d Xenova local) is retained and refined per the §3 roadmap in that ADR. **Stream A of Phase 2 is complete** (commits `4fdb9c9`, `4ed7f3d`, `e534f01`; see `docs/migration/phase-2-adapter.md`): items 1, 2, 3 of the ADR-012 roadmap are shipped — `MENTIONS_TASK/EVENT/HABIT` edges wired, graph traversal fixed (cartesian-product bug found and fixed as part of the work), `MemoryHealth` admin view at `/admin/memory-health`. **Stream B is also complete** (commits `7d8482a` through `5c35fe5`; see `docs/migration/phase-2-adapter.md` §3): all five PB-compat hooks (`useAuth`, `useQuery`, `useMutation`, `useAction`, `usePaginatedQuery`) are real, the descriptor pattern is in, the action dispatcher + name→handler registry are in, `PbAuthProvider` is wired into `app/layout.tsx` (gated on `isPbBackend()`), `api.userProfile.get` is the first non-stub on the public surface, three consumers (`Chat.tsx`, `settings/page.tsx`, `usePushSync.ts`) are flipped to the `usePbProfile()` wrapper. **130/130 unit + 17/17 stress + 13/13 smoke tests pass.** Stream C.4 (`docs/architecture/memory-system.md`) remains.
 - **Deliverable:** client code can swap `from "convex/_generated/api"` for `from "pb-compat/api"` with no other changes. The custom memory pipeline is unchanged, but the four kept graph edges are now actually populated. The Phase-1 stub hooks are replaced with real PB-backed hooks. Convex still works in parallel.
 
-### Phase 3: Migrate read paths behind a flag (~1 week)
-- Flip the adapter for read-only paths first: profile, workspaces, sessions, personas, tasks list, events list, habits list.
-- Run both backends in parallel. PB is `dryRun: true` (writes logged but not committed). Convex is source of truth.
-- Diff results nightly. Catch any semantic mismatches.
-- **Deliverable:** dashboard renders identically when reading from PB. Convex still serves the data.
+### Phase 3: Migrate read paths behind a flag (~1 week) — ✅ DONE
+- Flip the adapter for read-only paths first: profile, workspaces, sessions, personas, tasks list, events list, habits list, dashboard proactive card states.
+- Run both backends in parallel. PB is dryRun/dual-hook (both query, active result selected by `isPbBackend()`). Convex remains the primary backend when the flag is off.
+- Resolved key PocketBase validation rules for boolean/JSON fields in migrations to support development and test seeding.
+- **Deliverable:** UI components render identically when reading from PocketBase or Convex. All 11 read path scenarios validated via smoke test. See `docs/migration/phase-3-read-paths.md`.
 
 ### Phase 4: Flip write paths to PB (no historical migration) (~1-2 days)
 - Flip mutations to PB. Convex becomes `dryRun: true` (writes logged but not committed).

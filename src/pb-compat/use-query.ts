@@ -215,14 +215,18 @@ export function argsKey(args: Record<string, unknown> | undefined): string {
 export function useQuery<T>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: PbQuery<any, T>,
-  args?: Record<string, unknown>,
+  args?: any,
 ): T | undefined {
   const [data, setData] = useState<T | undefined>(undefined);
 
   // Stable key for args — re-run the effect when args content changes.
-  const key = argsKey(args);
+  const key = args === "skip" ? "skip" : argsKey(args);
 
   useEffect(() => {
+    if (args === "skip") {
+      setData(undefined);
+      return;
+    }
     let cancelled = false;
     let unsubscribe: (() => Promise<void>) | null = null;
     const client = getPbClient();

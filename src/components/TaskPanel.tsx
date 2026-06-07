@@ -2,6 +2,13 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import {
+  isPbBackend,
+  usePbTasksList,
+  usePbEventsList,
+  usePbHabitsList,
+  usePbWorkspacesList,
+} from "@/pb-compat";
 import { useState, useMemo, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Id, Doc } from "../../convex/_generated/dataModel";
@@ -39,18 +46,25 @@ export function TaskPanel({
   onClose?: () => void;
   onRefer?: (scope: Scope) => void;
 }) {
-  const tasks = useQuery(api.tasks.list, { workspaceId: activeWorkspaceId });
-  const events = useQuery(api.events.list, { workspaceId: activeWorkspaceId });
+  const pbTasks = usePbTasksList({ workspaceId: activeWorkspaceId });
+  const convexTasks = useQuery(api.tasks.list, { workspaceId: activeWorkspaceId });
+  const tasks = isPbBackend() ? pbTasks : convexTasks;
+
+  const pbEvents = usePbEventsList({ workspaceId: activeWorkspaceId });
+  const convexEvents = useQuery(api.events.list, { workspaceId: activeWorkspaceId });
+  const events = isPbBackend() ? pbEvents : convexEvents;
   
   const todayDateString = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }, []);
 
-  const rawHabits = useQuery(api.habits.getHabits, {
+  const pbRawHabits = usePbHabitsList({ workspaceId: activeWorkspaceId });
+  const convexRawHabits = useQuery(api.habits.getHabits, {
     workspaceId: activeWorkspaceId,
     todayDateString,
   });
+  const rawHabits = isPbBackend() ? pbRawHabits : convexRawHabits;
 
   const toggleTask = useMutation(api.tasks.toggleCompleted);
   const deleteTask = useMutation(api.tasks.deleteTask);
@@ -97,7 +111,9 @@ export function TaskPanel({
   const [sortBy, setSortBy] = useState<"date" | "priority" | "category">("date");
   const [showFilters, setShowFilters] = useState(false);
 
-  const workspaces = useQuery(api.workspaces.list, {});
+  const pbWorkspaces = usePbWorkspacesList();
+  const convexWorkspaces = useQuery(api.workspaces.list, {});
+  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];

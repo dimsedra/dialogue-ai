@@ -3,8 +3,9 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard, ChevronDown, Bot } from "lucide-react";
 import { motion } from "framer-motion";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { isPbBackend, usePbPersonasList } from "@/pb-compat";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Doc } from "../../../convex/_generated/dataModel";
 
@@ -47,7 +48,9 @@ export function SessionSidebar({
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [selectedPersonaId, setSelectedPersonaId] = useState<Id<"agentPersonas"> | undefined>(undefined);
 
-  const personas = useQuery(api.personas.list);
+  const pbPersonas = usePbPersonasList();
+  const convexPersonas = useConvexQuery(api.personas.list);
+  const personas = isPbBackend() ? pbPersonas : convexPersonas;
   const activeSession = sessions?.find(s => s._id === activeSessionId);
   const activeSessionPersona = personas?.find(p => p._id === activeSession?.agentPersonaId) || personas?.find(p => p.isDefault);
   const activePersona = personas?.find(p => p._id === selectedPersonaId) || personas?.find(p => p.isDefault);

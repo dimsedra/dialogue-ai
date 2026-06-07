@@ -1,5 +1,11 @@
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import {
+  isPbBackend,
+  usePbPersonasList,
+  useQuery as usePbQuery,
+  api as pbApi,
+} from "@/pb-compat";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 import { motion, AnimatePresence } from "framer-motion";
@@ -183,7 +189,9 @@ export function Dashboard({
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [inputText, setInputText] = useState("");
 
-  const personas = useQuery(api.personas.list);
+  const pbPersonas = usePbPersonasList();
+  const convexPersonas = useConvexQuery(api.personas.list);
+  const personas = isPbBackend() ? pbPersonas : convexPersonas;
   const logHabit = useMutation(api.habits.logHabit);
   const markCardShown = useMutation(api.dashboard.markCardShown);
   const scheduleFocusBlock = useMutation(api.events.scheduleFocusBlock);
@@ -193,7 +201,7 @@ export function Dashboard({
     personas?.find((p) => p.isDefault);
   const activePersonaName = activePersona?.name || "Dialogue";
 
-  const resolvedBgUrl = useQuery(
+  const resolvedBgUrl = useConvexQuery(
     api.messages.getStorageUrl,
     bgSettings.storageId
       ? { storageId: bgSettings.storageId as Id<"_storage"> }
@@ -211,43 +219,95 @@ export function Dashboard({
     [timezone, timezoneOffset],
   );
 
-  const legacyProactiveState = useQuery(
+  const pbLegacyProactiveState = usePbQuery(
+    (pbApi.dashboard as any).getProactiveState,
+    USE_SPLIT_PROACTIVE_STATE ? "skip" : timeArgs,
+  ) as ProactiveState | null | undefined;
+  const convexLegacyProactiveState = useConvexQuery(
     api.dashboard.getProactiveState,
     USE_SPLIT_PROACTIVE_STATE ? "skip" : timeArgs,
   );
+  const legacyProactiveState = isPbBackend() ? pbLegacyProactiveState : convexLegacyProactiveState;
 
-  const splitAttention = useQuery(
+  const pbSplitAttention = usePbQuery(
+    pbApi.dashboard.getAttentionNeeded,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const convexSplitAttention = useConvexQuery(
     api.dashboard.getAttentionNeeded,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
   );
-  const splitReflectionReady = useQuery(
+  const splitAttention = isPbBackend() ? pbSplitAttention : convexSplitAttention;
+
+  const pbSplitReflectionReady = usePbQuery(
+    pbApi.dashboard.getReflectionReady,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const convexSplitReflectionReady = useConvexQuery(
     api.dashboard.getReflectionReady,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
   );
-  const splitTaskTriage = useQuery(
+  const splitReflectionReady = isPbBackend() ? pbSplitReflectionReady : convexSplitReflectionReady;
+
+  const pbSplitTaskTriage = usePbQuery(
+    pbApi.dashboard.getTaskTriage,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const convexSplitTaskTriage = useConvexQuery(
     api.dashboard.getTaskTriage,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
   );
-  const splitEventPrep = useQuery(
+  const splitTaskTriage = isPbBackend() ? pbSplitTaskTriage : convexSplitTaskTriage;
+
+  const pbSplitEventPrep = usePbQuery(
+    pbApi.dashboard.getEventPrep,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const convexSplitEventPrep = useConvexQuery(
     api.dashboard.getEventPrep,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
   );
-  const splitHabitCheck = useQuery(
+  const splitEventPrep = isPbBackend() ? pbSplitEventPrep : convexSplitEventPrep;
+
+  const pbSplitHabitCheck = usePbQuery(
+    pbApi.dashboard.getHabitCheck,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const convexSplitHabitCheck = useConvexQuery(
     api.dashboard.getHabitCheck,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
   );
-  const splitEveningLog = useQuery(
+  const splitHabitCheck = isPbBackend() ? pbSplitHabitCheck : convexSplitHabitCheck;
+
+  const pbSplitEveningLog = usePbQuery(
+    pbApi.dashboard.getEveningLog,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const convexSplitEveningLog = useConvexQuery(
     api.dashboard.getEveningLog,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
   );
-  const splitMorningBrief = useQuery(
+  const splitEveningLog = isPbBackend() ? pbSplitEveningLog : convexSplitEveningLog;
+
+  const pbSplitMorningBrief = usePbQuery(
+    pbApi.dashboard.getMorningBrief,
+    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
+  );
+  const convexSplitMorningBrief = useConvexQuery(
     api.dashboard.getMorningBrief,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
   );
-  const splitMutedStates = useQuery(
+  const splitMorningBrief = isPbBackend() ? pbSplitMorningBrief : convexSplitMorningBrief;
+
+  const pbSplitMutedStates = usePbQuery(
+    pbApi.dashboard.getMutedCardStates,
+    USE_SPLIT_PROACTIVE_STATE ? {} : "skip",
+  );
+  const convexSplitMutedStates = useConvexQuery(
     api.dashboard.getMutedCardStates,
     USE_SPLIT_PROACTIVE_STATE ? {} : "skip",
   );
+  const splitMutedStates = isPbBackend() ? pbSplitMutedStates : convexSplitMutedStates;
 
   // Client-side cascade. Order matches the original server cascade.
   const proactiveState: ProactiveState = useMemo(() => {
