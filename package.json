@@ -12,6 +12,7 @@
     "test:stress:messages": "node scripts/stress-pb-messages.mjs",
     "test:smoke": "node scripts/smoke-pb-userprofile.mjs",
     "test:smoke:reads": "node scripts/smoke-pb-readpaths.mjs",
+    "test:smoke:dashboard": "node scripts/smoke-pb-dashboard.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
