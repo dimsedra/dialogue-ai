@@ -147,11 +147,13 @@ export function isPbBackend(): boolean {
 // =============================================================================
 // Phase status. Used by tests and the migration doc to verify the surface.
 //
-// Phase 2 is in progress as of B.5a: hooks B.1 (useAuth), B.2 (useQuery),
-// B.3 (useMutation), B.4 (useAction), B.5a (usePaginatedQuery) are real.
-// The `isPbBackend` flag is wired but defaults to false. The first consumer
-// call behind the flag lands in B.7.
+// Phases 2-5 are done: hooks B.1-B.5a (useAuth, useQuery, useMutation,
+// useAction, usePaginatedQuery) are real; descriptors + dispatcher +
+// 13 mutation hooks + 8 dashboard unified queries are wired behind
+// `isPbBackend()`; chat realtime + dashboard subscriptions + 5.1-5.4
+// fixes are all in. Realtime accepts the documented reconnect gap;
+// USE_SPLIT_PROACTIVE_STATE is forced true in PB mode.
 // =============================================================================
 
-export const PB_COMPAT_PHASE = 2 as const;
-export const PB_COMPAT_STATUS = "in-progress" as const;
+export const PB_COMPAT_PHASE = 5 as const;
+export const PB_COMPAT_STATUS = "done" as const;

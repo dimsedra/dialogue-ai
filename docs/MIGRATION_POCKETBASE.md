@@ -208,8 +208,8 @@ Rough effort estimates. Each phase is independently shippable.
 | 1.5 — PB migration end-to-end verification | ✅ Done | `phase-1-5-pb-verification.md`; 117/117 checks pass |
 | 2 — `pb-compat/` adapter | ✅ Done | Stream A (memory refinement, ADR-012 §3 items 1-3) + Stream B (all 5 hooks + descriptor pattern + dispatcher + 3 consumer flips) shipped. See `phase-2-adapter.md`. Stream C.4 (`memory-system.md`) still pending. |
 | 3 — Read paths | ✅ Done | workspaces, personas, sessions, tasks, events, habits, and dashboard proactive card states ported behind `isPbBackend()` flag. See `phase-3-read-paths.md`. |
-| 4 — Flip write paths | Pending | No migration script; ~1-2 days |
-| 5 — Realtime + dashboard cards | Pending | Highest risk |
+| 4 — Flip write paths | ✅ Done | 13 mutation hook files + 10 consumer components + parameter adapter wrappers. See `phase-4-write-paths.md`. |
+| 5 — Realtime + dashboard cards | ✅ Done | 6 `useQuery` + 1 `usePaginatedQuery` in Chat + 9 dual-queries in Dashboard. Real-collection stress (5.2, 22/22) + Dashboard mount smoke (5.3, 30/30) + 5.1 guard + 5.4 set-state-in-effect fix + habits migration fix. See `phase-5-realtime.md`. |
 | 6 — Background jobs | Pending | Second-highest risk |
 | 7 — On-open scheduler | Pending | |
 | 8 — File storage + public share | Pending | |
@@ -262,11 +262,21 @@ Rough effort estimates. Each phase is independently shippable.
 - `usePbUpdatePreferences` rewritten to match Convex's flat parameter signature with merge logic.
 - **Deliverable:** all new writes go to PB. Convex becomes a frozen snapshot of junk that gets deleted in Phase 9. See `docs/migration/phase-4-write-paths.md`.
 
-### Phase 5: Migrate chat realtime + dashboard cards (~1 week)
+### Phase 5: Migrate chat realtime + dashboard cards (~1 week) — ✅ DONE
 - Highest-risk UI surface: `usePaginatedQuery` for messages, 6 `useQuery` calls in `Chat.tsx`, dashboard proactive cards.
 - Verify cursor pagination parity.
 - Verify WebSocket subscription reconnect behavior (Convex WebSocket vs PB WebSocket — both use WS, but reconnect semantics differ).
-- **Deliverable:** chat works identically on PB. Realtime updates flow over WebSocket.
+- **Deliverable:** chat works identically on PB. Realtime updates flow over WebSocket. See `docs/migration/phase-5-realtime.md` for the 6+ lessons learned.
+
+**Phase 5 sub-steps (all done):**
+- **5.1** `USE_SPLIT_PROACTIVE_STATE` forced true in PB mode (commit `44380b4`).
+- **5.2** Real-collection stress test against `messages` (22/22, commit `43582a8`).
+- **5.3** Dashboard mount smoke test (8 simultaneous subscriptions, multi-listener fanout, 30/30, commit `dc38cd9`).
+- **5.4** `react-hooks/set-state-in-effect` fix in `use-query.ts` (commit `28aea19`).
+- **5.5** 50K pagination edge case in `stress-pagination.mjs`.
+- **5.6** Lessons doc `phase-5-realtime.md`.
+- **5.7** Status sync (this commit).
+- **Habits fix** (commit `6be9ea4`): `currentStreak`/`longestStreak` `required:false` so a fresh habit can have a real 0 streak.
 
 ### Phase 6: Migrate background jobs (LLM orchestration) (~1-2 weeks)
 - Port `convex/background_jobs.ts` to either PB JS hooks or Next.js API routes.

@@ -74,7 +74,7 @@ The custom memory system gets three additive improvements that prove the graph s
 
 ### Stream B — `pb-compat/` adapter (replaces Phase-1 stubs)
 
-The Phase-1 stubs in `src/pb-compat/api.ts` and `src/pb-compat/hooks.ts` threw "Phase 1 stub" on every call. **Stream B is complete** as of commits `7d8482a` through `5c35fe5`. All five hooks (`useAuth`, `useQuery`, `useMutation`, `useAction`, `usePaginatedQuery`) plus the descriptor pattern, the action dispatcher, and three real consumer flips are in. Per-call subscription, no optimistic updates, build-time `isPbBackend()` flag. 130/130 unit tests pass; the 10K stress test (`npm run test:stress`) passes 17/17; the smoke test (`npm run test:smoke`) passes 13/13.
+The Phase-1 stubs in `src/pb-compat/api.ts` and `src/pb-compat/hooks.ts` threw "Phase 1 stub" on every call. **Stream B is complete** as of commits `7d8482a` through `5c35fe5`. All five hooks (`useAuth`, `useQuery`, `useMutation`, `useAction`, `usePaginatedQuery`) plus the descriptor pattern, the action dispatcher, and three real consumer flips are in. Per-call subscription, no optimistic updates, build-time `isPbBackend()` flag. 130/130 unit tests pass at the end of Phase 2; **170/170 unit tests pass overall** (after Phase 3 added 40 descriptor unit tests — see `phase-3-read-paths.md`). The 10K stress test (`npm run test:stress`) passes 17/17; the smoke test (`npm run test:smoke`) passes 13/13.
 
 #### B.1 Add `pocketbase` npm dep + client singleton + auth context — ✅ DONE (commit `7d8482a`)
 
@@ -189,7 +189,7 @@ The provider was built in B.1 but not wired in. B.7.1 wraps the app in it: `app/
 - `src/pb-compat/descriptors/userProfile.test.ts` (~93 LOC, NEW) — **11 unit tests pass.**
 - `src/pb-compat/use-query.ts` — added `buildFilter?` callback on `PbQueryDescriptor` (Q10 in §4). When set, the hook uses it INSTEAD of `encodeArgsAsFilter(args)`. Lets a query encode filters needing runtime state (the current user id from `pb.authStore.record`) that the args object doesn't carry.
 - `src/pb-compat/api.ts` — `userProfile.get` is now a real descriptor; the stub `{} as StubNamespace` was replaced. **First non-stub on the public surface.**
-- `src/pb-compat/_generated/dataModel.ts` — added optional `created?: string` to `PbUserProfile` for the PB system `created` field (used to compute `_creationTime` in the wrapper). +13 tests = **130/130** after B.7.2.
+- `src/pb-compat/_generated/dataModel.ts` — added optional `created?: string` to `PbUserProfile` for the PB system `created` field (used to compute `_creationTime` in the wrapper). +13 tests = **130/130** after B.7.2 (now **170/170** overall after Phase 3's 40 descriptor unit tests).
 
 **B.7.3 — `usePbProfile()` wrapper + 3 consumer flips — ✅ DONE (commit `14308df`)**
 
@@ -312,7 +312,7 @@ End-to-end doc of the custom memory system. Currently scattered across `saveSema
 
 **Critical path: COMPLETED.** The risk-theater around `usePaginatedQuery` (the plan's ⭐ HIGHEST RISK) was split across B.5a (helpers + hook, low-risk) and B.5b (10K stress, high-risk). Splitting meant we shipped the hook without the 10K claim, then verified the claim in its own commit. **Phase 3 risks remain** (reconnect storms, real-time at scale) but those are now the migration plan §6.1 concern, not a Phase 2 deliverable.
 
-**Test count progression**: 24 (pre-Phase-2) → 34 (after 1.1) → 44 (after 1.2) → 50 (after 1.3) → 57 (after B.1) → 76 (after B.2) → 78 (after B.3) → 82 (after B.4) → 115 (after B.5a) → 117 (after B.7.1) → 130 (after B.7.2) → 130 (after B.7.3) → 130 (after B.7.4, +13 smoke opt-in) → 130 (after B.7.5). **130/130 unit + 17/17 stress + 13/13 smoke.** 0 failures across all three suites.
+**Test count progression**: 24 (pre-Phase-2) → 34 (after 1.1) → 44 (after 1.2) → 50 (after 1.3) → 57 (after B.1) → 76 (after B.2) → 78 (after B.3) → 82 (after B.4) → 115 (after B.5a) → 117 (after B.7.1) → 130 (after B.7.2) → 130 (after B.7.3) → 130 (after B.7.4, +13 smoke opt-in) → 130 (after B.7.5) → 130 (after Phase 4, no new tests) → **170 (after Phase 3, +40 from 7 new descriptor unit tests, retroactively bumped when the test files landed in commit `b125581`)**. **170/170 unit + 17/17 stress + 13/13 userprofile smoke + 11/11 read-paths smoke + 30/30 dashboard smoke + 22/22 messages stress.** 0 failures across all six suites.
 
 ---
 
@@ -359,7 +359,7 @@ End-to-end doc of the custom memory system. Currently scattered across `saveSema
 ## 6. Exit criteria (Phase 2 done when ALL are true)
 
 1. `npx tsc --noEmit` clean ✅
-2. `npm run test` passes (target: 50+ tests) ✅ (currently **130/130**)
+2. `npm run test` passes (target: 50+ tests) ✅ (currently **170/170**)
 3. `npx eslint` produces no new errors (pre-existing 144 errors are out of scope; see ADR-011 freeze) ✅ — Stream A introduced 4 (in `edges.ts`/`traversal.ts`/`health.ts`, pre-Phase-2; documented in §9.4); Stream B (B.1-B.7.5) introduced **0**.
 4. `api.userProfile.get` works behind `NEXT_PUBLIC_BACKEND=pocketbase` in dev with PB running ✅ (B.7.1-B.7.5; smoke-tested via `npm run test:smoke`)
 5. Same call still works with Convex (regression) when flag is unset ✅ (verified during B.7.1's "body zero-cost in Convex mode" design)

@@ -55,12 +55,14 @@ import {
 } from "../src/pb-compat";
 
 describe("pb-compat: phase status", () => {
-  it("is currently in Phase 2 (in-progress)", () => {
-    // Phase 2 is in progress as of B.5a. Phase 1 stub status was
-    // superseded by the real hooks (B.1-B.5a). B.7 is the first consumer
-    // call behind the flag.
-    expect(PB_COMPAT_PHASE).toBe(2);
-    expect(PB_COMPAT_STATUS).toBe("in-progress");
+  it("is currently at Phase 5 (done)", () => {
+    // Phases 2-5 are all done. B.1-B.5a hooks are real; the descriptor
+    // pattern, action dispatcher, 13 mutation hooks, 8 dashboard
+    // unified queries are wired behind isPbBackend(); chat realtime
+    // + dashboard subscriptions + the 5.1-5.4 fixes are all in.
+    // (Bumped from Phase 2 / "in-progress" in 5.7.)
+    expect(PB_COMPAT_PHASE).toBe(5);
+    expect(PB_COMPAT_STATUS).toBe("done");
   });
 
   it("reports PB backend as not active when NEXT_PUBLIC_BACKEND is unset", () => {
