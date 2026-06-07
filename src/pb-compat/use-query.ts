@@ -223,10 +223,7 @@ export function useQuery<T>(
   const key = args === "skip" ? "skip" : argsKey(args);
 
   useEffect(() => {
-    if (args === "skip") {
-      setData(undefined);
-      return;
-    }
+    if (args === "skip") return;
     let cancelled = false;
     let unsubscribe: (() => Promise<void>) | null = null;
     const client = getPbClient();
@@ -329,5 +326,10 @@ export function useQuery<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, query]);
 
-  return data;
+  // When args === "skip", return undefined without touching state. The
+  // previous version called setData(undefined) synchronously inside the
+  // effect body, which trips react-hooks/set-state-in-effect. The state
+  // is preserved (last fetched value) in case args flips back to a real
+  // value — semantically equivalent for the consumer.
+  return args === "skip" ? undefined : data;
 }
