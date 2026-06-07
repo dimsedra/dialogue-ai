@@ -206,7 +206,7 @@ Rough effort estimates. Each phase is independently shippable.
 | 0 — Tauri skeleton | ✅ Done | `phase-0-tauri-skeleton.md` |
 | 1 — Schema mapping + graph decision | ✅ Done | `phase-1-schema-mapping.md`, `phase-1-graph-decision.md`; `pb-compat/` stubs landed |
 | 1.5 — PB migration end-to-end verification | ✅ Done | `phase-1-5-pb-verification.md`; 117/117 checks pass |
-| 2 — `pb-compat/` adapter | 🟡 In progress | Stream A (memory refinement) done per ADR-012 — see `phase-2-adapter.md`. Streams B+C pending. |
+| 2 — `pb-compat/` adapter | ✅ Done | Stream A (memory refinement, ADR-012 §3 items 1-3) + Stream B (all 5 hooks + descriptor pattern + dispatcher + 3 consumer flips) shipped. See `phase-2-adapter.md`. Stream C.4 (`memory-system.md`) still pending. |
 | 3 — Read paths | Pending | |
 | 4 — Flip write paths | Pending | No migration script; ~1-2 days |
 | 5 — Realtime + dashboard cards | Pending | Highest risk |
@@ -417,7 +417,7 @@ This doc is the high-level source of truth. Update it when:
 - `docs/migration/phase-1-schema-mapping.md` — ✅ PB collection definitions (done)
 - `docs/migration/phase-1-graph-decision.md` — ✅ Graph layer decision: 4 keep / 6 delete (done)
 - `docs/migration/phase-1-5-pb-verification.md` — ✅ 117/117 schema checks pass (done)
-- `docs/migration/phase-2-adapter.md` — 🟡 `pb-compat/` API surface; refinement roadmap from ADR-012 §3 (Stream A done, B+C pending)
+- `docs/migration/phase-2-adapter.md` — ✅ `pb-compat/` API surface; refinement roadmap from ADR-012 §3 (Streams A + B done, C.4 pending)
 - `docs/migration/phase-4-cutover.md` — *pending* — flip write paths to PB; no migration scripts, no re-encrypt
 - `docs/migration/cutover-runbook.md` — *pending* — step-by-step cutover + rollback
 - `docs/architecture/memory-system.md` — *pending* — single end-to-end doc of the custom memory system (ADR-012 §3 item 6)
