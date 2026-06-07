@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:stress": "node scripts/stress-pagination.mjs",
+    "test:smoke": "node scripts/smoke-pb-userprofile.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
