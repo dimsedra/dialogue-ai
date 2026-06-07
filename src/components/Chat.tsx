@@ -144,13 +144,20 @@ export function Chat({
     activeSessionId ? { sessionId: activeSessionId } : "skip",
     { initialNumItems: 50 },
   );
-  // usePaginatedQuery returns newest-first; downstream consumers expect
-  // chronological (oldest first). Reverse once via useMemo so the array
-  // reference is stable per paginated refetch.
+  // B.7.5: sort by `timestamp` desc then reverse for chronological
+  // (oldest first) display. The Convex `listPaginated` already returns
+  // -timestamp order (so this is a no-op there), but the PB path's
+  // `usePaginatedQuery` returns -id order — and PB ids are random
+  // 15-char strings, NOT time-prefixed, so the previous implicit
+  // reliance on backend order would break chronological display on
+  // PB. Sorting by `timestamp` explicitly normalizes both backends.
   const messages = useMemo(() => {
     if (!activeSessionId) return undefined;
     if (messagesPaginated.status === "LoadingFirstPage") return undefined;
-    return [...messagesPaginated.results].reverse();
+    const sorted = [...messagesPaginated.results].sort(
+      (a, b) => b.timestamp - a.timestamp,
+    );
+    return sorted.reverse();
   }, [messagesPaginated.results, messagesPaginated.status, activeSessionId]);
   const loadOlderMessages = useCallback(() => {
     if (messagesPaginated.status === "CanLoadMore") {
