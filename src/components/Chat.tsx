@@ -4,6 +4,7 @@ import { useQuery, useMutation, useConvex, usePaginatedQuery } from "convex/reac
 import { api } from "../../convex/_generated/api";
 import {
   isPbBackend,
+  getPbClient,
   usePbProfile,
   usePbWorkspacesList,
   usePbSessionsList,
@@ -243,7 +244,24 @@ export function Chat({
   const deleteSession = isPbBackend() ? pbDeleteSession : (args: any) => convexDeleteSession(args);
 
   const convexTriggerAutoTitle = useMutation(api.messages.triggerAutoTitle);
-  const pbTriggerAutoTitle = async () => {};
+  const pbTriggerAutoTitle = async ({ sessionId }: { sessionId: string }) => {
+    if (!sessionId) return;
+    const token = getPbClient().authStore.token;
+    if (!token) return;
+    // Fire-and-forget. The route does its own auth, session lookup, and
+    // idempotency check. We intentionally don't await — the title
+    // appears via the `usePbSession` subscription, not via this call.
+    void fetch("/api/jobs/generateSessionTitle", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ args: { sessionId } }),
+    }).catch((err) => {
+      console.error("[pbTriggerAutoTitle] fetch failed:", err);
+    });
+  };
   const triggerAutoTitle = isPbBackend() ? pbTriggerAutoTitle : (args: any) => convexTriggerAutoTitle(args);
 
   const { signOut } = useAuthActions();
