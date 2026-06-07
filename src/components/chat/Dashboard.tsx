@@ -37,8 +37,9 @@ import { NotificationBell } from "../notifications-bell";
 import { CardMenu } from "./CardMenu";
 
 // Plan C feature flag. Flip to false to roll back to the monolithic
-// getProactiveState query (still available as a fallback).
-const USE_SPLIT_PROACTIVE_STATE = true;
+// getProactiveState query (still available as a fallback in Convex mode).
+// PB mode forces this to true — the legacy query is not on the PB API.
+const USE_SPLIT_PROACTIVE_STATE = isPbBackend() || true;
 
 type ProactiveState = FunctionReturnType<
   typeof api.dashboard.getProactiveState
