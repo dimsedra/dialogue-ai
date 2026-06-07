@@ -298,7 +298,7 @@ Rough effort estimates. Each phase is independently shippable.
 - **6.1.4** `generateMonthlyOCEAN` port (1.5d): ✅ **Done** — Wrote pure `generateMonthlyOCEAN.ts` job function handling data archiving and profile updates, and created the securely wrapped Next.js API route.
 - **6.1.5** `generateDailySummary` port (1d): ✅ **Done** — Extracted timezone utilities to `dateUtils.ts`, implemented `generateDailySummary.ts` filtering today's `messages`, and mapped it to Next.js API route.
 - **6.1.6** Update 4 callers (`reflections.ts`, `ocean.ts`, `dailySummary.ts` — `messages.ts` stays untouched for Convex mode) (1d): ✅ **Done** — Added `if (process.env.USE_PB === "true") return;` to short-circuit the legacy Convex crons when PB mode is active. No Vercel Next.js cron endpoints needed since this is a local-first app.
-- **6.1.7** Write `scripts/smoke-pb-jobs.mjs` (the 6.1.1 POC laid the groundwork; 6.1.7 extends it): *Pending*.
+- **6.1.7** Write `scripts/smoke-pb-jobs.mjs` (the 6.1.1 POC laid the groundwork; 6.1.7 extends it): ✅ **Done** — Added fixtures for `session_summaries`, `reflections`, `weekly_digests`, and `archived_summaries` with full tenant isolation access control checks. 17/17 checks pass.
 - **6.1.8** Write `docs/migration/phase-6-background-jobs.md`: *Pending*.
 
 **Delivery:** all 5 background jobs run as Next.js API routes behind `isPbBackend()`. Mastra agent still makes correct calls.

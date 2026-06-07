@@ -255,6 +255,59 @@ const sessionB = await createSession(userB.pb, userB.id, "Chat B", [
 console.log(`Created sessionB=${sessionB.id}`);
 
 // =============================================================================
+// Background Job Data Layer Fixtures
+// =============================================================================
+
+const nowMs = Date.now();
+
+// 1. session_summaries
+const sessionSummaryA = await userA.pb.collection("session_summaries").create({
+  user: userA.id,
+  date: "2026-06-08",
+  summary: "User A talked about pb migration.",
+  createdAt: nowMs,
+});
+console.log(`Created sessionSummaryA=${sessionSummaryA.id}`);
+
+// 2. reflections
+const reflectionA = await userA.pb.collection("reflections").create({
+  user: userA.id,
+  type: "weekly",
+  periodStart: nowMs - 7 * 86400000,
+  periodStartStr: "2026-06-01",
+  periodEnd: nowMs,
+  periodEndStr: "2026-06-08",
+  periodLabel: "June 1-8",
+  summary: "A great week.",
+  stats: { messages: 10 },
+  createdAt: nowMs,
+});
+console.log(`Created reflectionA=${reflectionA.id}`);
+
+// 3. weekly_digests
+const weeklyDigestA = await userA.pb.collection("weekly_digests").create({
+  user: userA.id,
+  weekStart: nowMs - 7 * 86400000,
+  weekStartStr: "2026-06-01",
+  weekLabel: "Week of June 1",
+  digest: "Weekly digest content.",
+  createdAt: nowMs,
+});
+console.log(`Created weeklyDigestA=${weeklyDigestA.id}`);
+
+// 4. archived_summaries
+const archivedSummaryA = await userA.pb.collection("archived_summaries").create({
+  user: userA.id,
+  type: "weekly",
+  originalDate: nowMs - 14 * 86400000,
+  originalDateStr: "2026-05-25",
+  content: "Archived content for A.",
+  archivedAt: nowMs,
+  createdAt: nowMs - 86400000,
+});
+console.log(`Created archivedSummaryA=${archivedSummaryA.id}`);
+
+// =============================================================================
 // Checks
 // =============================================================================
 console.log("\n=== Data-layer integration checks ===\n");
@@ -328,6 +381,62 @@ try {
   check("Superuser can list all sessions", all.totalItems >= 4, `count=${all.totalItems}`);
 } catch (err) {
   check("Superuser can list all sessions", false, err.message);
+}
+
+// 8. session_summaries tenant isolation
+try {
+  const ss = await userA.pb.collection("session_summaries").getOne(sessionSummaryA.id);
+  check("User A reads own session_summary", ss.id === sessionSummaryA.id);
+} catch (err) {
+  check("User A reads own session_summary", false, err.message);
+}
+try {
+  await userB.pb.collection("session_summaries").getOne(sessionSummaryA.id);
+  check("User B cannot read User A session_summary", false, "should have thrown 404");
+} catch (err) {
+  check("User B cannot read User A session_summary", err.status === 404, `status=${err.status}`);
+}
+
+// 9. reflections tenant isolation
+try {
+  const r = await userA.pb.collection("reflections").getOne(reflectionA.id);
+  check("User A reads own reflection", r.id === reflectionA.id);
+} catch (err) {
+  check("User A reads own reflection", false, err.message);
+}
+try {
+  await userB.pb.collection("reflections").getOne(reflectionA.id);
+  check("User B cannot read User A reflection", false, "should have thrown 404");
+} catch (err) {
+  check("User B cannot read User A reflection", err.status === 404, `status=${err.status}`);
+}
+
+// 10. weekly_digests tenant isolation
+try {
+  const w = await userA.pb.collection("weekly_digests").getOne(weeklyDigestA.id);
+  check("User A reads own weekly_digest", w.id === weeklyDigestA.id);
+} catch (err) {
+  check("User A reads own weekly_digest", false, err.message);
+}
+try {
+  await userB.pb.collection("weekly_digests").getOne(weeklyDigestA.id);
+  check("User B cannot read User A weekly_digest", false, "should have thrown 404");
+} catch (err) {
+  check("User B cannot read User A weekly_digest", err.status === 404, `status=${err.status}`);
+}
+
+// 11. archived_summaries tenant isolation
+try {
+  const a = await userA.pb.collection("archived_summaries").getOne(archivedSummaryA.id);
+  check("User A reads own archived_summary", a.originalDateStr === "2026-05-25");
+} catch (err) {
+  check("User A reads own archived_summary", false, err.message);
+}
+try {
+  await userB.pb.collection("archived_summaries").getOne(archivedSummaryA.id);
+  check("User B cannot read User A archived_summary", false, "should have thrown 404");
+} catch (err) {
+  check("User B cannot read User A archived_summary", err.status === 404, `status=${err.status}`);
 }
 
 // =============================================================================
