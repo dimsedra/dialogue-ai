@@ -17,16 +17,32 @@
 //   - Touch any app code. `api.*` still resolves to Convex (this phase is schema-only).
 //   - Add system rules or hooks. Those come in Phase 2 with the pb-compat adapter.
 //
+// PB 0.22+ JS migration API (verified against https://pocketbase.io/docs/js-migrations):
+//   - migrate((app) => {...}, (app) => {...}) — `app` is a transactional App instance.
+//   - app.findCollectionByNameOrId(name)        — fetch a collection.
+//   - app.save(collection)                       — persist a new or modified collection.
+//   - app.delete(collection)                     — delete a collection.
+//   - For NEW collections: pass `fields: [plainObj, ...]` and `indexes: [sqlStr, ...]`
+//     to `new Collection({...})`. The JSVM processes the plain object array and
+//     auto-adds the system `id` field. Class instances (new TextField({...})) in
+//     the array are silently ignored — confirmed by direct testing.
+//   - For MODIFYING existing collections (e.g. extending `users`): use
+//     `collection.fields.add(new TextField({...}))` with class instances.
+//   - Rules: use `fieldName = @request.auth.id` (PB auto-derefs relation fields).
+//   - Specific field types (per PB docs): text, number, bool, email, url, date,
+//     select, file, relation, json, geoPoint. All are passed as plain objects.
+//
 // Conventions (full table in schema-mapping.md "Conventions" section):
-//   - v.id("table")     -> relation field, maxSelect:1, cascadeDelete:true
-//   - v.number()        -> number field (NOT date; preserve epoch-ms byte format)
-//   - v.array(v.X())    -> json field
-//   - v.object({...})   -> json field
-//   - v.any()           -> json field
-//   - v.union(v.lit..)  -> select field
-//   - v.optional(v.X()) -> field with required:false
-//   - v.id("_storage")  -> file field (single); for arrays, json of file refs
-//   - v.id("_sched...") -> text field (string ID); see scheduled_notifications table
+//   - v.id("table")     -> { type: "relation", collectionId: ..., cascadeDelete: true,
+//                              maxSelect: 1, minSelect: 0 }
+//   - v.number()        -> { type: "number", ... }
+//   - v.array(v.X())    -> { type: "json", ... }
+//   - v.object({...})   -> { type: "json", ... }
+//   - v.any()           -> { type: "json", ... }
+//   - v.union(v.lit..)  -> { type: "select", maxSelect: 1, values: [...] }
+//   - v.optional(v.X()) -> field with required: false
+//   - v.id("_storage")  -> { type: "file", maxSelect: 1, maxSize: 52428800, mimeTypes: [] }
+//   - v.id("_sched...") -> { type: "text", max: 64 }
 //
 // Idempotency: PB auto-skips already-applied migrations on startup. This file is
 // run once. To re-apply, delete the corresponding row from `_migrations`.
@@ -38,8 +54,7 @@
 /// <reference path="../pb_data/types.d.ts" />
 
 migrate(
-  (db) => {
-    const dao = new Dao(db);
+  (app) => {
     const collections = {};
 
     // ========================================================================
@@ -47,48 +62,27 @@ migrate(
     //    PB users already has: id, email, verified, created, updated, etc.
     //    We add the fields from @convex-dev/auth's authTables.users:
     //      name, image, emailVerificationTime, phone, phoneVerificationTime, isAnonymous
+    //
+    //    For MODIFYING existing collections, use `collection.fields.add(new XField({...}))`
+    //    with class instances. This works (verified).
     // ========================================================================
-    const users = dao.findCollectionByNameOrId("users");
-    // authTables.users fields:
-    users.schema.addField(
-      new Field({ name: "name", type: "text", required: false, options: { max: 256 } }),
-    );
-    users.schema.addField(
-      new Field({ name: "image", type: "url", required: false, options: { max: 2048 } }),
-    );
-    users.schema.addField(
-      new Field({ name: "emailVerificationTime", type: "number", required: false }),
-    );
-    users.schema.addField(
-      new Field({ name: "phone", type: "text", required: false, options: { max: 32 } }),
-    );
-    users.schema.addField(
-      new Field({ name: "phoneVerificationTime", type: "number", required: false }),
-    );
-    users.schema.addField(
-      new Field({ name: "isAnonymous", type: "bool", required: false }),
-    );
+    const users = app.findCollectionByNameOrId("users");
+    users.fields.add(new TextField({ name: "name", max: 256 }));
+    users.fields.add(new URLField({ name: "image", max: 2048 }));
+    users.fields.add(new NumberField({ name: "emailVerificationTime" }));
+    users.fields.add(new TextField({ name: "phone", max: 32 }));
+    users.fields.add(new NumberField({ name: "phoneVerificationTime" }));
+    users.fields.add(new BoolField({ name: "isAnonymous" }));
     // No "by_email" / "by_phone" indexes on users here — PB auto-indexes email
     // (built-in) and phone is not currently queried by index in the app.
-    dao.saveCollection(users);
+    app.save(users);
     collections.users = users;
 
-    // ========================================================================
-    // Helper: create a relation field referencing another collection.
-    // Resolves the target collection's id and sets cascadeDelete:true (Convex parity).
-    // ========================================================================
-    const rel = (target, opts = {}) =>
-      new Field({
-        type: "relation",
-        required: opts.required ?? false,
-        collectionId: collections[target].id,
-        cascadeDelete: opts.cascadeDelete ?? true,
-        minSelect: 0,
-        maxSelect: 1,
-      });
+    // Cache users collection id for relation fields.
+    const userCollectionId = users.id;
 
     // ========================================================================
-    // 2. agent_personas (no app-level FKs; depends only on users)
+    // 2. agent_personas (depends on users)
     //    Convex: agentPersonas { userId, name, prompt, description?, isDefault?, createdAt }
     //           .index("by_user", ["userId"])
     // ========================================================================
@@ -100,19 +94,19 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "name", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "prompt", type: "text", required: true, options: { max: 65535 } }),
-        new Field({ name: "description", type: "text", required: false, options: { max: 1024 } }),
-        new Field({ name: "isDefault", type: "bool", required: false }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "name", type: "text", required: true, max: 256 },
+        { name: "prompt", type: "text", required: true, max: 65535 },
+        { name: "description", type: "text", required: false, max: 1024 },
+        { name: "isDefault", type: "bool", required: false },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_agent_personas_user ON agent_personas (user)",
       ],
     });
-    dao.saveCollection(collections.agent_personas);
+    app.save(collections.agent_personas);
 
     // ========================================================================
     // 3. workspaces (depends on users, agent_personas)
@@ -128,21 +122,21 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "name", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "icon", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "color", type: "text", required: true, options: { max: 32 } }),
-        new Field({ name: "context", type: "text", required: false, options: { max: 65535 } }),
-        new Field({ name: "agentName", type: "text", required: false, options: { max: 256 } }),
-        rel("agent_personas", { required: false }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "name", type: "text", required: true, max: 256 },
+        { name: "icon", type: "text", required: true, max: 256 },
+        { name: "color", type: "text", required: true, max: 32 },
+        { name: "context", type: "text", required: false, max: 65535 },
+        { name: "agentName", type: "text", required: false, max: 256 },
+        { name: "defaultAgentPersona", type: "relation", required: false, collectionId: collections.agent_personas.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_workspaces_user ON workspaces (user)",
       ],
     });
-    dao.saveCollection(collections.workspaces);
+    app.save(collections.workspaces);
 
     // ========================================================================
     // 4. chat_sessions (depends on users, workspaces, agent_personas)
@@ -159,15 +153,15 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "title", type: "text", required: false, options: { max: 512 } }),
-        rel("workspaces", { required: false }),
-        rel("agent_personas", { required: false }),
-        new Field({ name: "timezone", type: "text", required: false, options: { max: 64 } }),
-        new Field({ name: "createdAt", type: "number", required: true }),
-        new Field({ name: "lastActivity", type: "number", required: true }),
-        new Field({ name: "pinned", type: "bool", required: false }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "title", type: "text", required: false, max: 512 },
+        { name: "workspace", type: "relation", required: false, collectionId: collections.workspaces.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
+        { name: "agentPersona", type: "relation", required: false, collectionId: collections.agent_personas.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
+        { name: "timezone", type: "text", required: false, max: 64 },
+        { name: "createdAt", type: "number", required: true },
+        { name: "lastActivity", type: "number", required: true },
+        { name: "pinned", type: "bool", required: false },
       ],
       indexes: [
         "CREATE INDEX idx_chat_sessions_user ON chat_sessions (user)",
@@ -175,7 +169,7 @@ migrate(
         "CREATE INDEX idx_chat_sessions_user_lastActivity ON chat_sessions (user, lastActivity)",
       ],
     });
-    dao.saveCollection(collections.chat_sessions);
+    app.save(collections.chat_sessions);
 
     // ========================================================================
     // 5. messages (depends on chat_sessions)
@@ -195,29 +189,29 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "@request.auth.id != ''",
       deleteRule: "@request.auth.id != ''",
-      schema: [
-        rel("chat_sessions", { required: false, cascadeDelete: true }),
-        new Field({ name: "text", type: "text", required: true, options: { max: 65535 } }),
-        new Field({ name: "author", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "timestamp", type: "number", required: true }),
-        new Field({ name: "timezoneOffset", type: "number", required: false }),
-        new Field({ name: "toolCall", type: "json", required: false }),
-        new Field({ name: "toolCalls", type: "json", required: false }),
-        new Field({ name: "reasoning", type: "text", required: false, options: { max: 65535 } }),
+      fields: [
+        { name: "session", type: "relation", required: false, collectionId: collections.chat_sessions.id, cascadeDelete: true, maxSelect: 1, minSelect: 0 },
+        { name: "text", type: "text", required: true, max: 65535 },
+        { name: "author", type: "text", required: true, max: 256 },
+        { name: "timestamp", type: "number", required: true },
+        { name: "timezoneOffset", type: "number", required: false },
+        { name: "toolCall", type: "json", required: false },
+        { name: "toolCalls", type: "json", required: false },
+        { name: "reasoning", type: "text", required: false, max: 65535 },
         // Convex v.id("_storage") -> PB file field
-        new Field({ name: "storageId", type: "file", required: false, options: { maxSelect: 1, maxSize: 52428800, mimeTypes: [] } }),
-        new Field({ name: "fileType", type: "text", required: false, options: { max: 256 } }),
-        new Field({ name: "fileName", type: "text", required: false, options: { max: 512 } }),
+        { name: "storageId", type: "file", required: false, maxSelect: 1, maxSize: 52428800, mimeTypes: [] },
+        { name: "fileType", type: "text", required: false, max: 256 },
+        { name: "fileName", type: "text", required: false, max: 512 },
         // Convex v.array(v.object({...})) -> json array of file refs
-        new Field({ name: "attachments", type: "json", required: false }),
-        new Field({ name: "scope", type: "json", required: false }),
+        { name: "attachments", type: "json", required: false },
+        { name: "scope", type: "json", required: false },
       ],
       indexes: [
         "CREATE INDEX idx_messages_session ON messages (session)",
         "CREATE INDEX idx_messages_session_timestamp ON messages (session, timestamp)",
       ],
     });
-    dao.saveCollection(collections.messages);
+    app.save(collections.messages);
 
     // ========================================================================
     // 6. tasks (depends on users, workspaces)
@@ -236,30 +230,24 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "text", type: "text", required: true, options: { max: 65535 } }),
-        rel("workspaces", { required: false }),
-        new Field({ name: "completed", type: "bool", required: true }),
-        new Field({ name: "dueDate", type: "number", required: false }),
-        new Field({ name: "dueDateStr", type: "text", required: false, options: { max: 16 } }),
-        new Field({
-          name: "priority",
-          type: "select",
-          required: false,
-          maxSelect: 1,
-          values: ["low", "medium", "high"],
-        }),
-        new Field({ name: "category", type: "text", required: false, options: { max: 128 } }),
-        new Field({ name: "notes", type: "text", required: false, options: { max: 65535 } }),
-        new Field({ name: "progress", type: "number", required: false, options: { min: 0, max: 100 } }),
-        new Field({ name: "statusHook", type: "text", required: false, options: { max: 256 } }),
-        new Field({ name: "contextUpdatedAt", type: "number", required: false }),
-        new Field({ name: "createdAt", type: "number", required: true }),
-        new Field({ name: "completedAt", type: "number", required: false }),
-        new Field({ name: "resources", type: "json", required: false }),
-        new Field({ name: "reminderOffset", type: "number", required: false }),
-        new Field({ name: "scheduledNotificationId", type: "text", required: false, options: { max: 64 } }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "text", type: "text", required: true, max: 65535 },
+        { name: "workspace", type: "relation", required: false, collectionId: collections.workspaces.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
+        { name: "completed", type: "bool", required: true },
+        { name: "dueDate", type: "number", required: false },
+        { name: "dueDateStr", type: "text", required: false, max: 16 },
+        { name: "priority", type: "select", required: false, maxSelect: 1, values: ["low", "medium", "high"] },
+        { name: "category", type: "text", required: false, max: 128 },
+        { name: "notes", type: "text", required: false, max: 65535 },
+        { name: "progress", type: "number", required: false, min: 0, max: 100 },
+        { name: "statusHook", type: "text", required: false, max: 256 },
+        { name: "contextUpdatedAt", type: "number", required: false },
+        { name: "createdAt", type: "number", required: true },
+        { name: "completedAt", type: "number", required: false },
+        { name: "resources", type: "json", required: false },
+        { name: "reminderOffset", type: "number", required: false },
+        { name: "scheduledNotificationId", type: "text", required: false, max: 64 },
       ],
       indexes: [
         "CREATE INDEX idx_tasks_user ON tasks (user)",
@@ -268,10 +256,10 @@ migrate(
         "CREATE INDEX idx_tasks_user_dueDate ON tasks (user, dueDate)",
       ],
     });
-    dao.saveCollection(collections.tasks);
+    app.save(collections.tasks);
 
     // ========================================================================
-    // 7. events (depends on users, workspaces, self for seriesId)
+    // 7. events (depends on users, workspaces, self for series)
     //    Convex: events { userId, title, description?, startTime, endTime?,
     //                    eventType?, location?, notes?, outcome?, statusHook?,
     //                    cancelled?, contextUpdatedAt?, workspaceId?, recurrence?,
@@ -289,42 +277,47 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "title", type: "text", required: true, options: { max: 512 } }),
-        new Field({ name: "description", type: "text", required: false, options: { max: 65535 } }),
-        new Field({ name: "startTime", type: "number", required: true }),
-        new Field({ name: "endTime", type: "number", required: false }),
-        new Field({
-          name: "eventType",
-          type: "select",
-          required: false,
-          maxSelect: 1,
-          values: ["interval", "point"],
-        }),
-        new Field({ name: "location", type: "text", required: false, options: { max: 512 } }),
-        new Field({ name: "notes", type: "text", required: false, options: { max: 65535 } }),
-        new Field({ name: "outcome", type: "text", required: false, options: { max: 65535 } }),
-        new Field({ name: "statusHook", type: "text", required: false, options: { max: 256 } }),
-        new Field({ name: "cancelled", type: "bool", required: false }),
-        new Field({ name: "contextUpdatedAt", type: "number", required: false }),
-        rel("workspaces", { required: false }),
-        new Field({ name: "recurrence", type: "json", required: false }),
-        new Field({ name: "createdAt", type: "number", required: true }),
-        // Self-reference for recurring series. PB allows forward self-references.
-        rel("events", { required: false, cascadeDelete: false }),
-        new Field({ name: "resources", type: "json", required: false }),
-        new Field({ name: "reminderOffset", type: "number", required: false }),
-        new Field({ name: "scheduledNotificationId", type: "text", required: false, options: { max: 64 } }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "title", type: "text", required: true, max: 512 },
+        { name: "description", type: "text", required: false, max: 65535 },
+        { name: "startTime", type: "number", required: true },
+        { name: "endTime", type: "number", required: false },
+        { name: "eventType", type: "select", required: false, maxSelect: 1, values: ["interval", "point"] },
+        { name: "location", type: "text", required: false, max: 512 },
+        { name: "notes", type: "text", required: false, max: 65535 },
+        { name: "outcome", type: "text", required: false, max: 65535 },
+        { name: "statusHook", type: "text", required: false, max: 256 },
+        { name: "cancelled", type: "bool", required: false },
+        { name: "contextUpdatedAt", type: "number", required: false },
+        { name: "workspace", type: "relation", required: false, collectionId: collections.workspaces.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
+        { name: "recurrence", type: "json", required: false },
+        { name: "createdAt", type: "number", required: true },
+        // NOTE: `series` (self-reference for recurring events) is added in a second
+        // pass below because the collection's own id is assigned during app.save().
+        { name: "resources", type: "json", required: false },
+        { name: "reminderOffset", type: "number", required: false },
+        { name: "scheduledNotificationId", type: "text", required: false, max: 64 },
       ],
       indexes: [
         "CREATE INDEX idx_events_user ON events (user)",
         "CREATE INDEX idx_events_workspace ON events (workspace)",
-        "CREATE INDEX idx_events_series ON events (series)",
         "CREATE INDEX idx_events_user_startTime ON events (user, startTime)",
       ],
     });
-    dao.saveCollection(collections.events);
+    app.save(collections.events);
+    // Second pass: add the self-referencing `series` relation. PB allows forward
+    // self-references once the collection has its assigned id.
+    collections.events.fields.add(new RelationField({
+      name: "series",
+      required: false,
+      collectionId: collections.events.id,
+      cascadeDelete: false,
+      maxSelect: 1,
+      minSelect: 0,
+    }));
+    collections.events.indexes.push("CREATE INDEX idx_events_series ON events (series)");
+    app.save(collections.events);
 
     // ========================================================================
     // 8. user_profile (depends on users)
@@ -341,20 +334,20 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "name", type: "text", required: false, options: { max: 256 } }),
-        new Field({ name: "bio", type: "text", required: true, options: { max: 65535 } }),
-        new Field({ name: "preferences", type: "json", required: true }),
-        new Field({ name: "weeklyNotesSummaries", type: "json", required: false }),
-        new Field({ name: "monthlyNotesSummaries", type: "json", required: false }),
-        new Field({ name: "behavioralProfile", type: "text", required: false, options: { max: 65535 } }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "name", type: "text", required: false, max: 256 },
+        { name: "bio", type: "text", required: true, max: 65535 },
+        { name: "preferences", type: "json", required: true },
+        { name: "weeklyNotesSummaries", type: "json", required: false },
+        { name: "monthlyNotesSummaries", type: "json", required: false },
+        { name: "behavioralProfile", type: "text", required: false, max: 65535 },
       ],
       indexes: [
         "CREATE INDEX idx_user_profile_user ON user_profile (user)",
       ],
     });
-    dao.saveCollection(collections.user_profile);
+    app.save(collections.user_profile);
 
     // ========================================================================
     // 9. memories (depends on users)
@@ -375,14 +368,14 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "text", type: "text", required: true, options: { max: 65535 } }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "text", type: "text", required: true, max: 65535 },
         // 384-float vector. json field; LadybugDB is the search index.
-        new Field({ name: "embedding", type: "json", required: true }),
-        new Field({ name: "hash", type: "text", required: false, options: { max: 64 } }),
-        new Field({ name: "createdAt", type: "number", required: false }),
-        new Field({ name: "updatedAt", type: "number", required: false }),
+        { name: "embedding", type: "json", required: true },
+        { name: "hash", type: "text", required: false, max: 64 },
+        { name: "createdAt", type: "number", required: false },
+        { name: "updatedAt", type: "number", required: false },
       ],
       indexes: [
         "CREATE INDEX idx_memories_user ON memories (user)",
@@ -390,7 +383,7 @@ migrate(
         "CREATE INDEX idx_memories_user_createdAt ON memories (user, createdAt)",
       ],
     });
-    dao.saveCollection(collections.memories);
+    app.save(collections.memories);
 
     // ========================================================================
     // 10. user_images (depends on users)
@@ -407,18 +400,18 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "storageId", type: "file", required: true, options: { maxSelect: 1, maxSize: 52428800, mimeTypes: ["image/*"] } }),
-        new Field({ name: "fileName", type: "text", required: true, options: { max: 512 } }),
-        new Field({ name: "fileType", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "storageId", type: "file", required: true, maxSelect: 1, maxSize: 52428800, mimeTypes: ["image/*"] },
+        { name: "fileName", type: "text", required: true, max: 512 },
+        { name: "fileType", type: "text", required: true, max: 256 },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_user_images_user ON user_images (user)",
       ],
     });
-    dao.saveCollection(collections.user_images);
+    app.save(collections.user_images);
 
     // ========================================================================
     // 11. habits (depends on users, workspaces)
@@ -436,32 +429,26 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        rel("workspaces", { required: false }),
-        new Field({ name: "name", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "description", type: "text", required: false, options: { max: 65535 } }),
-        new Field({
-          name: "frequency",
-          type: "select",
-          required: true,
-          maxSelect: 1,
-          values: ["daily", "custom"],
-        }),
-        new Field({ name: "frequencyConfig", type: "json", required: true }),
-        new Field({ name: "currentStreak", type: "number", required: true }),
-        new Field({ name: "longestStreak", type: "number", required: true }),
-        new Field({ name: "lastLoggedAt", type: "number", required: false }),
-        new Field({ name: "lastLoggedDate", type: "text", required: false, options: { max: 16 } }),
-        new Field({ name: "archived", type: "bool", required: true }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "workspace", type: "relation", required: false, collectionId: collections.workspaces.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
+        { name: "name", type: "text", required: true, max: 256 },
+        { name: "description", type: "text", required: false, max: 65535 },
+        { name: "frequency", type: "select", required: true, maxSelect: 1, values: ["daily", "custom"] },
+        { name: "frequencyConfig", type: "json", required: true },
+        { name: "currentStreak", type: "number", required: true },
+        { name: "longestStreak", type: "number", required: true },
+        { name: "lastLoggedAt", type: "number", required: false },
+        { name: "lastLoggedDate", type: "text", required: false, max: 16 },
+        { name: "archived", type: "bool", required: true },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_habits_user ON habits (user)",
         "CREATE INDEX idx_habits_workspace ON habits (workspace)",
       ],
     });
-    dao.saveCollection(collections.habits);
+    app.save(collections.habits);
 
     // ========================================================================
     // 12. habit_logs (depends on users, habits)
@@ -482,19 +469,13 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        rel("habits", { required: true }),
-        new Field({ name: "timestamp", type: "number", required: true }),
-        new Field({ name: "dateString", type: "text", required: true, options: { max: 16 } }),
-        new Field({
-          name: "status",
-          type: "select",
-          required: true,
-          maxSelect: 1,
-          values: ["completed", "skipped"],
-        }),
-        new Field({ name: "notes", type: "text", required: false, options: { max: 65535 } }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "habit", type: "relation", required: true, collectionId: collections.habits.id, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "timestamp", type: "number", required: true },
+        { name: "dateString", type: "text", required: true, max: 16 },
+        { name: "status", type: "select", required: true, maxSelect: 1, values: ["completed", "skipped"] },
+        { name: "notes", type: "text", required: false, max: 65535 },
       ],
       indexes: [
         "CREATE INDEX idx_habit_logs_user ON habit_logs (user)",
@@ -503,7 +484,7 @@ migrate(
         "CREATE INDEX idx_habit_logs_habit_dateString ON habit_logs (habit, dateString)",
       ],
     });
-    dao.saveCollection(collections.habit_logs);
+    app.save(collections.habit_logs);
 
     // ========================================================================
     // 13. reflections (depends on users, workspaces)
@@ -521,33 +502,27 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        rel("workspaces", { required: false }),
-        new Field({
-          name: "type",
-          type: "select",
-          required: true,
-          maxSelect: 1,
-          values: ["weekly", "monthly", "yearly"],
-        }),
-        new Field({ name: "periodStart", type: "number", required: true }),
-        new Field({ name: "periodStartStr", type: "text", required: false, options: { max: 16 } }),
-        new Field({ name: "periodEnd", type: "number", required: true }),
-        new Field({ name: "periodEndStr", type: "text", required: false, options: { max: 16 } }),
-        new Field({ name: "periodLabel", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "summary", type: "text", required: true, options: { max: 65535 } }),
-        new Field({ name: "stats", type: "json", required: true }),
-        new Field({ name: "userReflection", type: "text", required: false, options: { max: 65535 } }),
-        new Field({ name: "shared", type: "bool", required: false }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "workspace", type: "relation", required: false, collectionId: collections.workspaces.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
+        { name: "type", type: "select", required: true, maxSelect: 1, values: ["weekly", "monthly", "yearly"] },
+        { name: "periodStart", type: "number", required: true },
+        { name: "periodStartStr", type: "text", required: false, max: 16 },
+        { name: "periodEnd", type: "number", required: true },
+        { name: "periodEndStr", type: "text", required: false, max: 16 },
+        { name: "periodLabel", type: "text", required: true, max: 256 },
+        { name: "summary", type: "text", required: true, max: 65535 },
+        { name: "stats", type: "json", required: true },
+        { name: "userReflection", type: "text", required: false, max: 65535 },
+        { name: "shared", type: "bool", required: false },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_reflections_user_type ON reflections (user, type)",
         "CREATE INDEX idx_reflections_user_period ON reflections (user, periodStart)",
       ],
     });
-    dao.saveCollection(collections.reflections);
+    app.save(collections.reflections);
 
     // ========================================================================
     // 14. page_settings (depends on users)
@@ -562,16 +537,16 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "page", type: "text", required: true, options: { max: 128 } }),
-        new Field({ name: "settings", type: "json", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "page", type: "text", required: true, max: 128 },
+        { name: "settings", type: "json", required: true },
       ],
       indexes: [
         "CREATE UNIQUE INDEX idx_page_settings_user_page ON page_settings (user, page)",
       ],
     });
-    dao.saveCollection(collections.page_settings);
+    app.save(collections.page_settings);
 
     // ========================================================================
     // 15. session_summaries (depends on users)
@@ -586,17 +561,17 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "date", type: "text", required: true, options: { max: 16 } }),
-        new Field({ name: "summary", type: "text", required: true, options: { max: 65535 } }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "date", type: "text", required: true, max: 16 },
+        { name: "summary", type: "text", required: true, max: 65535 },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_session_summaries_user_date ON session_summaries (user, date)",
       ],
     });
-    dao.saveCollection(collections.session_summaries);
+    app.save(collections.session_summaries);
 
     // ========================================================================
     // 16. weekly_digests (depends on users)
@@ -612,19 +587,19 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "weekStart", type: "number", required: true }),
-        new Field({ name: "weekStartStr", type: "text", required: false, options: { max: 16 } }),
-        new Field({ name: "weekLabel", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "digest", type: "text", required: true, options: { max: 65535 } }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "weekStart", type: "number", required: true },
+        { name: "weekStartStr", type: "text", required: false, max: 16 },
+        { name: "weekLabel", type: "text", required: true, max: 256 },
+        { name: "digest", type: "text", required: true, max: 65535 },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_weekly_digests_user_week ON weekly_digests (user, weekStart)",
       ],
     });
-    dao.saveCollection(collections.weekly_digests);
+    app.save(collections.weekly_digests);
 
     // ========================================================================
     // 17. archived_summaries (depends on users)
@@ -640,25 +615,19 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({
-          name: "type",
-          type: "select",
-          required: true,
-          maxSelect: 1,
-          values: ["weekly", "monthly"],
-        }),
-        new Field({ name: "originalDate", type: "number", required: true }),
-        new Field({ name: "originalDateStr", type: "text", required: false, options: { max: 16 } }),
-        new Field({ name: "content", type: "text", required: true, options: { max: 65535 } }),
-        new Field({ name: "archivedAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "type", type: "select", required: true, maxSelect: 1, values: ["weekly", "monthly"] },
+        { name: "originalDate", type: "number", required: true },
+        { name: "originalDateStr", type: "text", required: false, max: 16 },
+        { name: "content", type: "text", required: true, max: 65535 },
+        { name: "archivedAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_archived_summaries_user_type_date ON archived_summaries (user, type, originalDate)",
       ],
     });
-    dao.saveCollection(collections.archived_summaries);
+    app.save(collections.archived_summaries);
 
     // ========================================================================
     // 18. notifications (depends on users)
@@ -675,27 +644,21 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "title", type: "text", required: true, options: { max: 256 } }),
-        new Field({ name: "message", type: "text", required: true, options: { max: 65535 } }),
-        new Field({
-          name: "type",
-          type: "select",
-          required: true,
-          maxSelect: 1,
-          values: ["event_remind", "habit_remind", "task_remind", "system"],
-        }),
-        new Field({ name: "read", type: "bool", required: true }),
-        new Field({ name: "actionUrl", type: "text", required: false, options: { max: 1024 } }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "title", type: "text", required: true, max: 256 },
+        { name: "message", type: "text", required: true, max: 65535 },
+        { name: "type", type: "select", required: true, maxSelect: 1, values: ["event_remind", "habit_remind", "task_remind", "system"] },
+        { name: "read", type: "bool", required: true },
+        { name: "actionUrl", type: "text", required: false, max: 1024 },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_notifications_user_unread ON notifications (user, read)",
         "CREATE INDEX idx_notifications_user_created ON notifications (user, createdAt)",
       ],
     });
-    dao.saveCollection(collections.notifications);
+    app.save(collections.notifications);
 
     // ========================================================================
     // 19. push_subscriptions (depends on users)
@@ -714,20 +677,20 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "endpoint", type: "text", required: true, options: { max: 2048 } }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "endpoint", type: "text", required: true, max: 2048 },
         // v.union(v.number(), v.null()) -> optional number (nullable at runtime)
-        new Field({ name: "expirationTime", type: "number", required: false }),
-        new Field({ name: "createdAt", type: "number", required: false }),
-        new Field({ name: "keys", type: "json", required: true }),
+        { name: "expirationTime", type: "number", required: false },
+        { name: "createdAt", type: "number", required: false },
+        { name: "keys", type: "json", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_push_subscriptions_user ON push_subscriptions (user)",
         "CREATE UNIQUE INDEX idx_push_subscriptions_endpoint ON push_subscriptions (endpoint)",
       ],
     });
-    dao.saveCollection(collections.push_subscriptions);
+    app.save(collections.push_subscriptions);
 
     // ========================================================================
     // 20. card_state (depends on users)
@@ -745,14 +708,14 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({ name: "cardType", type: "text", required: true, options: { max: 128 } }),
-        new Field({ name: "cardId", type: "text", required: false, options: { max: 256 } }),
-        new Field({ name: "dismissedAt", type: "number", required: false }),
-        new Field({ name: "snoozedUntil", type: "number", required: false }),
-        new Field({ name: "mutedAt", type: "number", required: false }),
-        new Field({ name: "lastShownAt", type: "number", required: false }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "cardType", type: "text", required: true, max: 128 },
+        { name: "cardId", type: "text", required: false, max: 256 },
+        { name: "dismissedAt", type: "number", required: false },
+        { name: "snoozedUntil", type: "number", required: false },
+        { name: "mutedAt", type: "number", required: false },
+        { name: "lastShownAt", type: "number", required: false },
       ],
       indexes: [
         "CREATE INDEX idx_card_state_user ON card_state (user)",
@@ -760,7 +723,7 @@ migrate(
         "CREATE INDEX idx_card_state_user_type_cardid ON card_state (user, cardType, cardId)",
       ],
     });
-    dao.saveCollection(collections.card_state);
+    app.save(collections.card_state);
 
     // ========================================================================
     // 21. scheduled_notifications (NEW table, replaces Convex's _scheduled_functions)
@@ -775,34 +738,27 @@ migrate(
       createRule: "@request.auth.id != ''",
       updateRule: "user = @request.auth.id",
       deleteRule: "user = @request.auth.id",
-      schema: [
-        rel("users", { required: true }),
-        new Field({
-          name: "kind",
-          type: "select",
-          required: true,
-          maxSelect: 1,
-          values: ["event_remind", "task_remind", "habit_remind"],
-        }),
-        new Field({ name: "targetId", type: "text", required: true, options: { max: 64 } }),
-        new Field({ name: "triggerAt", type: "number", required: true }),
-        new Field({ name: "delivered", type: "bool", required: true }),
-        new Field({ name: "createdAt", type: "number", required: true }),
+      fields: [
+        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
+        { name: "kind", type: "select", required: true, maxSelect: 1, values: ["event_remind", "task_remind", "habit_remind"] },
+        { name: "targetId", type: "text", required: true, max: 64 },
+        { name: "triggerAt", type: "number", required: true },
+        { name: "delivered", type: "bool", required: true },
+        { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
         "CREATE INDEX idx_scheduled_notifications_user ON scheduled_notifications (user)",
         "CREATE INDEX idx_scheduled_notifications_pending ON scheduled_notifications (delivered, triggerAt)",
       ],
     });
-    dao.saveCollection(collections.scheduled_notifications);
+    app.save(collections.scheduled_notifications);
   },
 
   // ========================================================================
   // Rollback: removes everything we created, in reverse order.
   // PB does NOT preserve data on rollback. Acceptable: greenfield, no data migrated yet.
   // ========================================================================
-  (db) => {
-    const dao = new Dao(db);
+  (app) => {
     const collectionNames = [
       "scheduled_notifications",
       "card_state",
@@ -826,11 +782,11 @@ migrate(
       "agent_personas",
     ];
     for (const name of collectionNames) {
-      const c = dao.findCollectionByNameOrId(name);
-      if (c) dao.deleteCollection(c);
+      const c = app.findCollectionByNameOrId(name);
+      if (c) app.delete(c);
     }
     // Revert users extension.
-    const users = dao.findCollectionByNameOrId("users");
+    const users = app.findCollectionByNameOrId("users");
     for (const fieldName of [
       "name",
       "image",
@@ -839,8 +795,8 @@ migrate(
       "phoneVerificationTime",
       "isAnonymous",
     ]) {
-      try { users.schema.removeField(fieldName); } catch (_) { /* field not present */ }
+      try { users.fields.removeByName(fieldName); } catch (_) { /* field not present */ }
     }
-    dao.saveCollection(users);
+    app.save(users);
   },
 );
