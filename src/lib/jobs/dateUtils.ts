@@ -166,3 +166,29 @@ export function expandRecurringEventsForWindow(
   }
   return expanded;
 }
+
+export function getOffsetMinutes(timezone: string, date?: Date): number {
+  const now = date || new Date();
+  const utcStr = now.toLocaleString("en-US", { timeZone: "UTC" });
+  const localStr = now.toLocaleString("en-US", { timeZone: timezone });
+  const utc = new Date(utcStr);
+  const local = new Date(localStr);
+  return (utc.getTime() - local.getTime()) / 60000;
+}
+
+export function getLocalDateString(timezone: string, date?: Date): string {
+  const now = date || new Date();
+  return now.toLocaleDateString("en-CA", { timeZone: timezone });
+}
+
+export function getTodayBounds(timezone: string, date?: Date): { start: number; end: number } {
+  const now = date || new Date();
+  const localDateStr = getLocalDateString(timezone, now);
+  const [year, month, day] = localDateStr.split("-").map(Number);
+
+  const offset = getOffsetMinutes(timezone, now);
+  const localMidnight = new Date(Date.UTC(year, month - 1, day));
+  const start = localMidnight.getTime() + offset * 60000;
+  const end = start + 24 * 60 * 60 * 1000;
+  return { start, end };
+}
