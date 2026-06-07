@@ -295,7 +295,7 @@ Rough effort estimates. Each phase is independently shippable.
 - **6.1.1** `generateSessionTitle` port (0.5d POC): ✅ **Done** (commit `e9315cc`) — New `src/lib/jobs/generateSessionTitle.ts` (pure function with PB client arg) + `src/app/api/jobs/generateSessionTitle/route.ts` (HTTP wrapper with Bearer auth) + `pbTriggerAutoTitle` real impl in `Chat.tsx` (was `async () => {}` stub). 10 unit tests (vitest) + 9-check data-layer smoke test.
 - **6.1.2** `generateCronReflection` port (1d): ✅ **Done** — Extracted `dateUtils.ts`, created `compileReflectionStats` for PB, wrote pure `generateCronReflection.ts`, and wrapped it in a secure Next.js API route.
 - **6.1.3** `generateWeeklyOCEAN` port (1d): ✅ **Done** — Extracted `compileWeeklyData.ts`, wrote pure `generateWeeklyOCEAN.ts` job function, and created the securely wrapped Next.js API route.
-- **6.1.4** `generateMonthlyOCEAN` port (1.5d): *Pending*.
+- **6.1.4** `generateMonthlyOCEAN` port (1.5d): ✅ **Done** — Wrote pure `generateMonthlyOCEAN.ts` job function handling data archiving and profile updates, and created the securely wrapped Next.js API route.
 - **6.1.5** `generateDailySummary` port (1d): *Pending*.
 - **6.1.6** Update 4 callers (`reflections.ts`, `ocean.ts`, `dailySummary.ts` — `messages.ts` stays untouched for Convex mode) (1d): *Pending*.
 - **6.1.7** Write `scripts/smoke-pb-jobs.mjs` (the 6.1.1 POC laid the groundwork; 6.1.7 extends it): *Pending*.
