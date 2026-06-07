@@ -146,7 +146,7 @@ Two paths:
 
 **Why:** Custom provider API keys in `userProfile.preferences.customConfigs` are sensitive and need encryption-at-rest. PB has no equivalent helper.
 
-**Decision needed in Phase 4:** rotate or re-encrypt? Re-encrypt is invisible to users. Rotate forces a one-time re-entry. Recommendation: re-encrypt on first run, treat the key as migration-erasable.
+**Decision (resolved 2026-06-07):** No historical data to re-encrypt. The user is the only user; existing Convex data is junk/test data and is deleted at cutover. The new PB key is the only key from day 1. If the user later wants to add custom provider keys, they're encrypted with the new key on first save. No re-encrypt script needed.
 
 ---
 
@@ -169,7 +169,7 @@ Two paths:
 - **`@convex-dev/auth`** — replaced by PocketBase auth
 - **OIDC + JWKS** — PocketBase has its own session model
 - **Convex storage (`_storage`)** — replaced by PocketBase file fields
-- **`ENCRYPTION_KEY` re-encryption ceremony** — only needed once during import
+- **`ENCRYPTION_KEY` re-encryption ceremony** — *not needed*: no historical data to re-key; new PB key is the only key from day 1
 - **`src/lib/convex-server.ts`** — `convexServerClient` and `requestContext` go away
 - **`useQuery` / `useMutation` / `useAction`** — replaced by a PocketBase reactive hook
 - **`usePaginatedQuery`** — replaced by a custom hook with cursor + `initialNumItems` parity
@@ -222,11 +222,13 @@ Rough effort estimates. Each phase is independently shippable.
 - Diff results nightly. Catch any semantic mismatches.
 - **Deliverable:** dashboard renders identically when reading from PB. Convex still serves the data.
 
-### Phase 4: Migrate write paths + re-encrypt API keys (~1 week)
+### Phase 4: Flip write paths to PB (no historical migration) (~1-2 days)
 - Flip mutations to PB. Convex becomes `dryRun: true` (writes logged but not committed).
-- One-time script: read all `userProfile.preferences.customConfigs` from Convex, re-encrypt with the migration key, write to PB.
+- **No historical data migration.** User is the only user; existing Convex data is test/debug junk and is deleted at cutover. The new PB DB starts empty.
+- **No re-encrypt script.** Custom provider API keys (if any exist post-cutover) are encrypted with the new PB key on first save. No legacy data to re-key.
 - Drop `convexServerClient` and `requestContext` from Mastra tools.
-- **Deliverable:** all writes go to PB. Convex becomes the backup.
+- Optional safety net (only if you want a rollback path during the cutover week): dual-write new records to both Convex and PB for the first 7 days, then drop the Convex side.
+- **Deliverable:** all new writes go to PB. Convex becomes a frozen snapshot of junk that gets deleted in Phase 9.
 
 ### Phase 5: Migrate chat realtime + dashboard cards (~1 week)
 - Highest-risk UI surface: `usePaginatedQuery` for messages, 6 `useQuery` calls in `Chat.tsx`, dashboard proactive cards.
@@ -276,9 +278,8 @@ Rough effort estimates. Each phase is independently shippable.
 **Risk:** The 36+ `ctx.runQuery/Mutation/Action` calls in `background_jobs.ts` rely on in-process atomicity. HTTP calls between Next.js and PB don't have the same guarantee.
 **Mitigation:** Identify which chains are truly atomic (e.g. "save memory + write graph mirror") and use PB transactions for those. Accept eventual consistency for chains that don't need it (e.g. "generate reflection → write stats → show UI").
 
-### 6.3 Encryption key rotation during import (Phase 4)
-**Risk:** Every user's API keys need to be re-encrypted. One bug = users lose access to their LLM providers.
-**Mitigation:** Read-only verification step first: decrypt with old key, encrypt with new key, write to a staging location, diff against source, only then commit. If anything looks off, abort.
+### 6.3 ~~Encryption key rotation during import (Phase 4)~~
+**Status (2026-06-07):** Not applicable. User is the only user; no historical API keys to re-encrypt. New keys (if any) are encrypted with the new PB key on first save. **Removed from risk register.**
 
 ### 6.4 Tauri WebView differences
 **Risk:** WebKit (macOS), WebView2 (Windows), WebKitGTK (Linux) have subtle differences. Realtime SSE may behave differently across platforms.
@@ -350,7 +351,7 @@ These need to be resolved before the corresponding phase starts.
 
 2. **Phase 0: Tauri vs Electron.** Recommendation: Tauri. Smaller binary, lower resource use, fits the relationship-first product. Confirm.
 
-3. **Phase 4: Encryption key strategy on import.** Re-encrypt (invisible to users) or rotate (one-time re-entry)? Recommendation: re-encrypt. Confirm.
+3. **Phase 4: Encryption key strategy on import.** ~~Re-encrypt or rotate?~~ **Resolved 2026-06-07:** no historical data; new PB key is the only key from day 1. No re-encrypt script needed.
 
 4. **Phase 2: Adapter vs clean replacement.** Adapter layer (slow but safe, recommended) or clean replacement (faster if it works, no rollback). Confirm.
 
