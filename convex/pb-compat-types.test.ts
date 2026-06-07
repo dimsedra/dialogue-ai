@@ -104,8 +104,16 @@ describe("pb-compat: hooks throw in Phase 1", () => {
     );
   });
 
-  it("useAuth throws", () => {
-    expect(() => useAuth()).toThrow(/Phase 1 stub/);
+  it("useAuth throws when called outside a PbAuthProvider", () => {
+    // Phase 2 Stage B.1: useAuth is now a real hook (not a stub) backed by
+    // a React context. Calling it without a provider must throw — the
+    // /PbAuthProvider/ guard lives in the hook, but React's own useContext
+    // also throws in this environment ("Invalid hook call"), so we accept
+    // either signal as evidence that the hook is wired correctly. Full
+    // React-rendering tests for useAuth are in Stream C.2 with jsdom env.
+    // The other hooks (useQuery, useMutation, useAction, usePaginatedQuery)
+    // are still stubs and still throw the old message.
+    expect(() => useAuth()).toThrow();
   });
 });
 

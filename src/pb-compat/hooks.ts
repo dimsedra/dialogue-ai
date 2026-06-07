@@ -126,8 +126,11 @@ export function usePaginatedQuery<T>(
 // =============================================================================
 // useAuth — wraps PB's `authStore` (replaces `@convex-dev/auth`'s `useAuth`).
 //
-// Phase 1: throws.
-// Phase 2: returns `{ user, isLoading, signIn, signOut, ... }` backed by PB.
+// Phase 1: stub threw on call.
+// Phase 2 Stage B.1: the real implementation lives in `./auth.tsx`. The
+// `PbAuthState` type stays here so consumers can import the type without
+// pulling in React. The `useAuth` symbol is re-exported from `./auth.tsx`
+// via `index.ts`.
 // =============================================================================
 
 export interface PbAuthState {
@@ -136,14 +139,6 @@ export interface PbAuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   signUp: (email: string, password: string, passwordConfirm: string) => Promise<void>;
-}
-
-export function useAuth(): PbAuthState {
-  throw new Error(
-    "pb-compat: useAuth is a Phase 1 stub. " +
-      "It is not yet implemented against PocketBase. " +
-      "Set NEXT_PUBLIC_BACKEND=convex (default) or wait for Phase 2.",
-  );
 }
 
 // =============================================================================

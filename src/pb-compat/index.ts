@@ -24,11 +24,12 @@ export {
   useMutation,
   useAction,
   usePaginatedQuery,
-  useAuth,
   type PaginationStatus,
   type UsePaginatedQueryResult,
   type PbAuthState,
 } from "./hooks";
+export { useAuth, PbAuthProvider } from "./auth";
+export { getPbClient, resolvePbUrl } from "./client";
 
 export type {
   PbId,
