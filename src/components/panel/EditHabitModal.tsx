@@ -1,12 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Flame, X, Save, Trash2, FolderKanban, Archive } from "lucide-react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
 import { HabitWithLogs } from "./HabitList";
-import { isPbBackend, usePbHabitUpdate, usePbHabitDelete, usePbWorkspacesList } from "@/pb-compat";
-
+import { usePbHabitUpdate, usePbHabitDelete, usePbWorkspacesList } from "@/pb-compat";
 interface EditHabitModalProps {
   habit: HabitWithLogs;
   isLargeViewport: boolean;
@@ -28,18 +24,10 @@ export function EditHabitModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
-  // Convex Queries and Mutations
-  const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, {});
-  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+  const workspaces = usePbWorkspacesList();
 
-  const pbUpdateHabit = usePbHabitUpdate();
-  const convexUpdateHabit = useMutation(api.habits.updateHabit);
-  const updateHabitMutation: (args: any) => Promise<any> = isPbBackend() ? pbUpdateHabit : (args: any) => convexUpdateHabit(args);
-
-  const pbDeleteHabit = usePbHabitDelete();
-  const convexDeleteHabit = useMutation(api.habits.deleteHabit);
-  const deleteHabitMutation: (args: any) => Promise<any> = isPbBackend() ? pbDeleteHabit : (args: any) => convexDeleteHabit(args);
+  const updateHabitMutation = usePbHabitUpdate();
+  const deleteHabitMutation = usePbHabitDelete();
 
   useEffect(() => {
     if (habit) {
@@ -47,7 +35,7 @@ export function EditHabitModal({
       setDescription(habit.description || "");
       setFrequency(habit.frequency);
       setDaysOfWeek(habit.frequencyConfig?.daysOfWeek || []);
-      setWorkspaceId(habit.workspaceId || "");
+      setWorkspaceId(habit.workspace || "");
       setArchived(habit.archived);
     }
   }, [habit]);
@@ -66,7 +54,7 @@ export function EditHabitModal({
         description: description.trim() || undefined,
         frequency,
         frequencyConfig: freqConfig,
-        workspaceId: workspaceId ? (workspaceId as Id<"workspaces">) : null,
+        workspaceId: workspaceId || null,
         archived,
       });
       onClose();
@@ -344,3 +332,9 @@ export function EditHabitModal({
     </motion.div>
   );
 }
+
+
+
+
+
+

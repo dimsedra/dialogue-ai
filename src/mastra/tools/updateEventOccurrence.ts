@@ -1,8 +1,5 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getConvexClient } from '../../lib/convex-server';
-import { api } from '../../../convex/_generated/api';
-import { Id } from '../../../convex/_generated/dataModel';
 
 export const updateEventOccurrenceTool = createTool({
   id: 'updateEventOccurrence',
@@ -19,41 +16,24 @@ export const updateEventOccurrenceTool = createTool({
   }),
   outputSchema: z.object({ success: z.boolean(), detachedEventId: z.string() }),
   execute: async (input) => {
-    const { isPbBackend } = await import('../../pb-compat/env');
-    if (isPbBackend()) {
-      const { getPbClient } = await import('../../lib/pb-server');
-      const pb = getPbClient();
-      const user = pb.authStore.record?.id;
-      if (!user) throw new Error("Unauthorized");
+    const { getPbClient } = await import('../../lib/pb-server');
+    const pb = getPbClient();
+    const user = pb.authStore.record?.id;
+    if (!user) throw new Error("Unauthorized");
 
-      // Create a detached occurrence record that overrides the parent series
-      const record = await pb.collection("events").create({
-        user,
-        title: input.title,
-        startTime: input.startTime ? new Date(input.startTime).getTime() : new Date(input.originalStartTime).getTime(),
-        endTime: input.endTime ? new Date(input.endTime).getTime() : undefined,
-        eventType: input.eventType || "point",
-        location: input.location,
-        parentSeriesId: input.seriesId,
-        originalStartTime: new Date(input.originalStartTime).getTime(),
-        isException: true,
-        cancelled: input.cancelled || false,
-        createdAt: Date.now(),
-      });
-      return { success: true, detachedEventId: record.id };
-    }
-
-    const client = getConvexClient();
-    const detachedId = await client.mutation(api.events.updateOccurrence, {
-      seriesId: input.seriesId as Id<"events">,
-      originalStartTime: new Date(input.originalStartTime).getTime(),
-      startTime: input.startTime ? new Date(input.startTime).getTime() : undefined,
-      endTime: input.endTime ? new Date(input.endTime).getTime() : undefined,
-      eventType: input.eventType as "interval" | "point",
+    const record = await pb.collection("events").create({
+      user,
       title: input.title,
+      startTime: input.startTime ? new Date(input.startTime).getTime() : new Date(input.originalStartTime).getTime(),
+      endTime: input.endTime ? new Date(input.endTime).getTime() : undefined,
+      eventType: input.eventType || "point",
       location: input.location,
-      cancelled: input.cancelled,
+      parentSeriesId: input.seriesId,
+      originalStartTime: new Date(input.originalStartTime).getTime(),
+      isException: true,
+      cancelled: input.cancelled || false,
+      createdAt: Date.now(),
     });
-    return { success: true, detachedEventId: detachedId as string };
+    return { success: true, detachedEventId: record.id };
   }
 });

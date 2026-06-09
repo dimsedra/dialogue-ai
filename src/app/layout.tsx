@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono, Geist } from "next/font/google";
 import "./globals.css";
-import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { PbAuthProvider } from "@/pb-compat/auth";
 import { cn } from "@/lib/utils";
 
@@ -50,9 +49,7 @@ export default function RootLayout({
       <body
         className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased h-full bg-[#0a0a0a] text-zinc-200`}
       >
-        <ConvexClientProvider>
-          <PbAuthProvider>{children}</PbAuthProvider>
-        </ConvexClientProvider>
+        <PbAuthProvider>{children}</PbAuthProvider>
       </body>
     </html>
   );

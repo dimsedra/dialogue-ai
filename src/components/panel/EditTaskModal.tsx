@@ -19,29 +19,25 @@ import {
   FileText,
   Bell
 } from "lucide-react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
 import { TaskDoc } from "./types";
-import { isPbBackend, usePbTaskUpdate, usePbWorkspacesList } from "@/pb-compat";
-
+import { usePbTaskUpdate, usePbWorkspacesList } from "@/pb-compat";
 interface EditTaskModalProps {
   task: TaskDoc;
   isLargeViewport: boolean;
   onSave: (
-    id: Id<"tasks">,
+    id: string,
     updates: {
       text: string;
       priority: "low" | "medium" | "high";
       category: string;
       dueDate?: number;
-      workspaceId?: Id<"workspaces"> | null;
-      resources?: any[];
+      workspace?: string | null;
+      resources?: unknown[];
       overwriteResources?: boolean;
       reminderOffset: number | null;
     }
   ) => Promise<void>;
-  onDelete: (id: Id<"tasks">) => void;
+  onDelete: (id: string) => void;
   onClose: () => void;
 }
 
@@ -73,18 +69,11 @@ export function EditTaskModal({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Convex Queries and Mutations
-  const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, {});
-  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+  const workspaces = usePbWorkspacesList();
 
-  const pbUpdateTask = usePbTaskUpdate();
-  const convexUpdateTask = useMutation(api.tasks.updateTask);
-  const updateTaskMutation: (args: any) => Promise<any> = isPbBackend() ? pbUpdateTask : (args: any) => convexUpdateTask(args);
+  const updateTaskMutation = usePbTaskUpdate();
 
-  const pbGenerateUploadUrl = async () => "";
-  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
-  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
+  const generateUploadUrl = async () => "";
 
   useEffect(() => {
     if (task) {
@@ -92,7 +81,7 @@ export function EditTaskModal({
         setEditTaskText(task.text);
         setEditTaskPriority((task.priority as "low" | "medium" | "high") || "medium");
         setEditTaskCategory(task.category || "");
-        setEditTaskWorkspaceId(task.workspaceId || "");
+        setEditTaskWorkspaceId(task.workspace || "");
         setResources(task.resources || []);
         setEditTaskReminderOffset(task.reminderOffset !== undefined && task.reminderOffset !== null ? String(task.reminderOffset) : "none");
         if (task.dueDate) {
@@ -121,7 +110,7 @@ export function EditTaskModal({
         priority: editTaskPriority,
         category: editTaskCategory,
         dueDate: finalDueDate,
-        workspaceId: editTaskWorkspaceId ? (editTaskWorkspaceId as Id<"workspaces">) : null,
+        workspace: editTaskWorkspaceId || null,
         resources: resources,
         overwriteResources: true,
         reminderOffset: finalReminderOffset,
@@ -137,9 +126,8 @@ export function EditTaskModal({
     setIsAddingNote(true);
     try {
       await updateTaskMutation({
-        id: task._id,
+        taskId: task._id,
         notes: newNote.trim(),
-        timezoneOffset: new Date().getTimezoneOffset(),
       });
       setNewNote("");
       setNoteAddedToast(true);
@@ -597,3 +585,5 @@ export function EditTaskModal({
     </motion.div>
   );
 }
+
+

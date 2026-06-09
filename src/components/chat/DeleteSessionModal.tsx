@@ -1,10 +1,8 @@
 import { Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Id } from "../../../convex/_generated/dataModel";
-
 interface DeleteSessionModalProps {
-  session: { id: Id<"chatSessions">; title: string } | null;
-  onConfirm: (id: Id<"chatSessions">) => void;
+  session: { id: string; title: string } | null;
+  onConfirm: (id: string) => void;
   onCancel: () => void;
   isLargeViewport: boolean;
 }

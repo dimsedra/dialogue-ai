@@ -6,7 +6,6 @@ import {
   habitLogsListRecentQuery,
   habitsGetHabitConsistencyQuery,
 } from "../descriptors/habits";
-import type { Doc } from "../../../convex/_generated/dataModel";
 import type { PbHabits, PbHabitLogs } from "../_generated/dataModel";
 
 // --- Date helpers matching convex/habits.ts ---
@@ -79,42 +78,18 @@ export function isStreakActive(
   return true;
 }
 
-export function mapHabit(pb: PbHabits): Doc<"habits"> {
-  return {
-    _id: pb.id as unknown as Doc<"habits">["_id"],
-    _creationTime: pb.createdAt,
-    userId: pb.user as unknown as Doc<"habits">["userId"],
-    workspaceId: pb.workspace as unknown as Doc<"habits">["workspaceId"],
-    name: pb.name,
-    description: pb.description,
-    frequency: pb.frequency,
-    frequencyConfig: pb.frequencyConfig,
-    currentStreak: pb.currentStreak,
-    longestStreak: pb.longestStreak,
-    lastLoggedAt: pb.lastLoggedAt,
-    lastLoggedDate: pb.lastLoggedDate,
-    archived: pb.archived,
-    createdAt: pb.createdAt,
-  } as unknown as Doc<"habits">;
+export function mapHabit(pb: PbHabits): PbHabits {
+  return pb;
 }
 
-export function mapHabitLog(pb: PbHabitLogs): Doc<"habitLogs"> {
-  return {
-    _id: pb.id as unknown as Doc<"habitLogs">["_id"],
-    _creationTime: pb.timestamp,
-    userId: pb.user as unknown as Doc<"habitLogs">["userId"],
-    habitId: pb.habit as unknown as Doc<"habitLogs">["habitId"],
-    timestamp: pb.timestamp,
-    dateString: pb.dateString,
-    status: pb.status,
-    notes: pb.notes,
-  } as unknown as Doc<"habitLogs">;
+export function mapHabitLog(pb: PbHabitLogs): PbHabitLogs {
+  return pb;
 }
 
 export function usePbHabitsList(args?: {
   workspaceId?: string;
   todayDateString?: string;
-}): (Doc<"habits"> & {
+}): (PbHabits & {
   weeklyRate: number;
   weeklyStats: { completed: number; scheduled: number };
   recentLogs: Array<{ dateString: string; status: "completed" | "skipped"; notes?: string }>;
@@ -205,7 +180,7 @@ export function usePbHabitsList(args?: {
 export function usePbHabit(
   id: string | undefined,
   args?: { todayDateString?: string },
-): Doc<"habits"> | null | undefined {
+): PbHabits | null | undefined {
   const { user } = useAuth();
   const habit = useQuery(
     habitsGetQuery,

@@ -51,6 +51,7 @@ export {
 export { useAuth, PbAuthProvider } from "./auth";
 export { getPbClient, resolvePbUrl } from "./client";
 export { usePbProfile } from "./hooks/use-pb-profile";
+export { pageSettingsGetQuery } from "./descriptors/pageSettings";
 export { usePbWorkspacesList, usePbWorkspace } from "./hooks/use-pb-workspaces";
 export { usePbSessionsList, usePbSession } from "./hooks/use-pb-sessions";
 export { usePbPersonasList } from "./hooks/use-pb-personas";

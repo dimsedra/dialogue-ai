@@ -28,6 +28,7 @@
 
 import type { PbCollectionName, PbId, PbRecord } from "./_generated/dataModel";
 import { userProfileGetQuery } from "./descriptors/userProfile";
+import { pageSettingsGetQuery } from "./descriptors/pageSettings";
 import { workspacesListQuery, workspacesGetQuery } from "./descriptors/workspaces";
 import { personasListQuery } from "./descriptors/personas";
 import { listSessionsQuery, getSessionQuery } from "./descriptors/chatSessions";
@@ -107,7 +108,7 @@ export const api = {
     getHabitConsistency: habitsGetHabitConsistencyQuery,
   },
   habitLogs: {} as StubNamespace,
-  pageSettings: {} as StubNamespace,
+  pageSettings: { get: pageSettingsGetQuery },
   sessionSummaries: {} as StubNamespace,
   weeklyDigests: {} as StubNamespace,
   archivedSummaries: {} as StubNamespace,
@@ -151,8 +152,7 @@ const stubError = (namespace: string, fn: string): never => {
   throw new Error(
     `pb-compat: api.${namespace}.${fn}() is a Phase 1 stub. ` +
       `It is not yet implemented against PocketBase. ` +
-      `Either set NEXT_PUBLIC_BACKEND=convex (default), ` +
-      `or wait for Phase 2 of the migration.`,
+      `PocketBase is the sole backend. This stub should not be called.`,
   );
 };
 

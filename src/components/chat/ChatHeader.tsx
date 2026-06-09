@@ -1,12 +1,12 @@
 import { Menu, ClipboardList } from "lucide-react";
-import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { PbWorkspaces } from "@/pb-compat";
 import { NotificationBell } from "../notifications-bell";
 
 interface ChatHeaderProps {
   activeSessionTitle: string | undefined;
-  currentWorkspace: Doc<"workspaces"> | undefined;
-  activeWorkspaceId: Id<"workspaces"> | undefined;
-  workspaces: Doc<"workspaces">[] | undefined;
+  currentWorkspace: PbWorkspaces | undefined;
+  activeWorkspaceId: string | undefined;
+  workspaces: PbWorkspaces[] | undefined;
   messageCount: number;
   provider: string;
   activeModelName: string;

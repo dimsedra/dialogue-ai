@@ -2,17 +2,17 @@ import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, ChevronDown, ChevronUp, MessageSquarePlus, Paperclip, Plus } from "lucide-react";
-import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { PbEvents, PbWorkspaces } from "@/pb-compat/_generated/dataModel";
 import { EventDoc } from "./types";
 import { formatRecurrenceText } from "./utils";
 import { ResourceTray } from "./ResourceTray";
 
 interface EventListProps {
-  events: Doc<"events">[] | undefined;
-  workspaces: Doc<"workspaces">[] | undefined;
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  events: PbEvents[] | undefined;
+  workspaces: PbWorkspaces[] | undefined;
+  activeWorkspaceId: string | undefined;
   isLargeViewport: boolean;
-  onEditEvent: (data: { id: Id<"events">; event: EventDoc; timestamp: number }) => void;
+  onEditEvent: (data: { id: string; event: EventDoc; timestamp: number }) => void;
   onDeleteEvent: (event: EventDoc) => void;
   onReferEvent?: (event: EventDoc) => void;
   onCreateEvent?: () => void;
@@ -36,8 +36,8 @@ export function EventList({
   const { upcoming, past } = useMemo(() => {
     if (!events) return { upcoming: [], past: [] };
 
-    const upcomingList: Doc<"events">[] = [];
-    const pastList: Doc<"events">[] = [];
+    const upcomingList: PbEvents[] = [];
+    const pastList: PbEvents[] = [];
 
     for (const event of events) {
       const timeMarker = event.endTime ?? event.startTime;
@@ -56,9 +56,9 @@ export function EventList({
     return { upcoming: upcomingList, past: pastList };
   }, [events, now, sevenDaysAgo]);
 
-  const renderEventCard = (event: Doc<"events">) => {
+  const renderEventCard = (event: PbEvents) => {
     const isCancelled = (event as any).cancelled === true;
-    const eventWorkspace = workspaces?.find((w) => w._id === event.workspaceId);
+    const eventWorkspace = workspaces?.find((w) => w._id === event.workspace);
     return (
       <motion.div
         key={`${event._id}_${event.startTime}`}
@@ -268,3 +268,4 @@ export function EventList({
     </motion.div>
   );
 }
+

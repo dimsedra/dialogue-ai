@@ -1,13 +1,12 @@
 import { motion } from "framer-motion";
 import { Trash2, X } from "lucide-react";
-import { Id } from "../../../convex/_generated/dataModel";
 import { ConfirmDeleteData } from "./types";
 
 interface DeleteConfirmModalProps {
   target: ConfirmDeleteData;
   isLargeViewport: boolean;
   onConfirmDelete: (id: string, type: "task" | "event") => void;
-  onConfirmDeleteOccurrence: (id: Id<"events">, timestamp: number) => void;
+  onConfirmDeleteOccurrence: (id: string, timestamp: number) => void;
   onCancel: () => void;
 }
 
@@ -82,7 +81,7 @@ export function DeleteConfirmModal({
               <button
                 onClick={() => {
                   if (target.event) {
-                    onConfirmDeleteOccurrence(target.id as Id<"events">, target.event.startTime);
+                    onConfirmDeleteOccurrence(target.id as string, target.event.startTime);
                   }
                 }}
                 className="w-full sm:w-auto px-5 py-3 sm:py-2.5 bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 sm:order-3"
@@ -111,3 +110,7 @@ export function DeleteConfirmModal({
     </motion.div>
   );
 }
+
+
+
+

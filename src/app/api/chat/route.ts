@@ -2,14 +2,10 @@ import { handleChatStream } from '@mastra/ai-sdk';
 import { createUIMessageStreamResponse } from 'ai';
 import { Mastra } from '@mastra/core/mastra';
 import { createDialogueAgent } from '@/mastra/agents/dialogueAgent';
-import { ConvexHttpClient } from 'convex/browser';
-import { requestContext } from '@/lib/convex-server';
 import { isPbBackend } from '@/pb-compat/env';
 import PocketBase from 'pocketbase';
 import { pbRequestContext } from '@/lib/pb-server';
 import { verifyPbToken } from '@/lib/pb-actions/auth';
-
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL!;
 
 export async function POST(req: Request) {
   try {
@@ -21,7 +17,7 @@ export async function POST(req: Request) {
     const apiKey = req.headers.get('x-api-key');
     const baseUrl = req.headers.get('x-base-url');
     const timezone = req.headers.get('x-timezone') || 'UTC';
-    const authToken = req.headers.get('x-convex-auth-token') || undefined;
+    const authToken = req.headers.get('x-auth-token') || req.headers.get('x-convex-auth-token') || undefined;
     const scopeHeader = req.headers.get('x-active-scope');
     let scope: { type: string; id: string; title: string } | null = null;
     if (scopeHeader) {
@@ -30,12 +26,6 @@ export async function POST(req: Request) {
 
     const isPb = isPbBackend();
 
-    // Create an authenticated Convex client for this request
-    const authenticatedClient = new ConvexHttpClient(convexUrl);
-    if (authToken && !isPb) {
-      authenticatedClient.setAuth(authToken);
-    }
-    
     // Create an authenticated PB client
     let pbClient: PocketBase | null = null;
     if (isPb) {
@@ -70,16 +60,6 @@ export async function POST(req: Request) {
           monthlyDigest = profile.monthlyDigest;
           latestWeeklyDigest = profile.latestWeeklyDigest;
         }
-      } else if (!isPb) {
-        const { api } = await import('../../../../convex/_generated/api');
-        const profile = await authenticatedClient.query(api.ai.getSystemProfileContext);
-        if (profile) {
-          userName = profile.name;
-          userBio = profile.bio;
-          behavioralProfile = profile.behavioralProfile;
-          monthlyDigest = profile.monthlyDigest;
-          latestWeeklyDigest = profile.latestWeeklyDigest;
-        }
       }
     } catch (err) {
       console.warn("Could not fetch user profile for agent context", err);
@@ -90,13 +70,6 @@ export async function POST(req: Request) {
       try {
         if (isPb && pbClient?.authStore.isValid) {
           const session = await pbClient.collection('chat_sessions').getOne(sessionId as string);
-          if (session?.personaName) {
-            personaName = session.personaName;
-            personaPrompt = session.personaPrompt;
-          }
-        } else if (!isPb) {
-          const { api } = await import('../../../../convex/_generated/api');
-          const session = await authenticatedClient.query(api.messages.getSession, { id: sessionId as any });
           if (session?.personaName) {
             personaName = session.personaName;
             personaPrompt = session.personaPrompt;
@@ -142,8 +115,7 @@ export async function POST(req: Request) {
       params.messages = [scopeMsg, ...(params.messages || [])];
     }
     
-    // Run agent execution within the authenticated contexts
-    // Nested run() calls ensure both Convex and PB clients are available to tools
+    // Run agent execution within the PB authenticated context
     const executeStream = async () => {
       return handleChatStream({
         mastra: tempMastra,
@@ -158,12 +130,10 @@ export async function POST(req: Request) {
     };
 
     let stream;
-    if (isPb) {
-      stream = await pbRequestContext.run(pbClient!, async () => {
-        return requestContext.run(authenticatedClient, executeStream);
-      });
+    if (isPb && pbClient) {
+      stream = await pbRequestContext.run(pbClient, executeStream);
     } else {
-      stream = await requestContext.run(authenticatedClient, executeStream);
+      stream = await executeStream();
     }
     
     // Return the response back in Vercel AI SDK UI streaming format

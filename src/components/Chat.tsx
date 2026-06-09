@@ -1,9 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useConvex, usePaginatedQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import {
-  isPbBackend,
   getPbClient,
   usePbProfile,
   usePbWorkspacesList,
@@ -28,13 +25,21 @@ import {
   usePbHabitLog,
   usePbMessagesPaginated,
   usePaginatedQuery as usePbPaginatedQuery,
+  PbId,
+  PbWorkspaces,
+  PbChatSessions,
+  PbAgentPersonas,
+  PbTasks,
+  PbEvents,
+  PbMemories,
+  PbReflections,
+  PbUserProfile,
 } from "@/pb-compat";
-import { api as pbApi } from "@/pb-compat/api";
+import { api } from "@/pb-compat/api";
+import { useAuth } from "@/pb-compat/auth";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Doc, Id } from "../../convex/_generated/dataModel";
-import { useAuthActions, useAuthToken } from "@convex-dev/auth/react";
 import { EnrichedToolArgs, Scope } from "./chat/types";
 import { CreateWorkspaceModal } from "./chat/CreateWorkspaceModal";
 import { DeleteSessionModal } from "./chat/DeleteSessionModal";
@@ -104,12 +109,12 @@ type EventUpdateFields = {
 };
 
 type ChatProps = {
-  activeSessionId: Id<"chatSessions"> | null;
-  setActiveSessionIdAction: (id: Id<"chatSessions"> | null) => void;
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  activeSessionId: string | null;
+  setActiveSessionIdAction: (id: string | null) => void;
+  activeWorkspaceId: string | undefined;
   setActiveWorkspaceIdAction: (
-    id: Id<"workspaces"> | undefined,
-    sessionId?: Id<"chatSessions"> | null,
+    id: string | undefined,
+    sessionId?: string | null,
   ) => void;
   activeScope: Scope | null;
   setActiveScopeAction: (scope: Scope | null) => void;
@@ -158,72 +163,29 @@ export function Chat({
   onChatInputResizeAction,
   onShowTasksAction,
 }: ChatProps) {
-  const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, isPbBackend() ? "skip" : {});
-  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
-
-  const pbSessions = usePbSessionsList({ workspaceId: activeWorkspaceId });
-  const convexSessions = useQuery(
-    api.messages.listSessions,
-    isPbBackend() ? "skip" : { workspaceId: activeWorkspaceId }
-  );
-  const sessions = isPbBackend() ? pbSessions : convexSessions;
+  const { signOut } = useAuth();
+  const workspaces = usePbWorkspacesList();
+  const sessions = usePbSessionsList({ workspaceId: activeWorkspaceId });
 
   // All sessions across every workspace — used only by the Dashboard landing view
-  const pbAllSessions = usePbSessionsList({ allWorkspaces: true });
-  const convexAllSessions = useQuery(
-    api.messages.listSessions,
-    isPbBackend() ? "skip" : { allWorkspaces: true }
-  );
-  const allSessions = isPbBackend() ? pbAllSessions : convexAllSessions;
+  const allSessions = usePbSessionsList({ allWorkspaces: true });
 
-  // B.7.3: read profile from PB when the flag is on, from Convex
-  // otherwise. Both hooks run unconditionally (Rules of Hooks); the
-  // unused result is discarded at the ternary below. In production
-  // with the flag off, the entire PB branch is DCE'd at build time.
-  const pbProfile = usePbProfile();
-  const convexProfile = useQuery(api.ai.getProfile, isPbBackend() ? "skip" : {});
-  const profile = isPbBackend() ? pbProfile : convexProfile;
-
-  const pbPersonas = usePbPersonasList();
-  const convexPersonas = useQuery(api.personas.list, isPbBackend() ? "skip" : "skip");
-  const personas = isPbBackend() ? pbPersonas : convexPersonas;
+  const profile = usePbProfile();
+  const personas = usePbPersonasList();
 
   const activeSession = sessions?.find((s) => s._id === activeSessionId);
   const activePersona =
-    personas?.find((p) => p._id === activeSession?.agentPersonaId) ||
+    personas?.find((p) => p._id === activeSession?.agentPersona) ||
     personas?.find((p) => p.isDefault);
 
-  const convexCreateWorkspace = useMutation(api.workspaces.create);
-  const pbCreateWorkspace = usePbWorkspaceCreate();
-  const createWorkspace = isPbBackend() ? pbCreateWorkspace : (args: any) => convexCreateWorkspace(args);
-
-  const convexSendMessage = useMutation(api.messages.send);
-  const pbSendMessage = usePbMessageSend();
-  const sendMessage = isPbBackend() ? (args: any) => pbSendMessage(args) : (args: any) => convexSendMessage(args);
-
-  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
-  const pbGenerateUploadUrl = async () => "";
-  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
-
-  const convexCreateSession = useMutation(api.messages.createSession);
-  const pbCreateSession = usePbSessionCreate();
-  const createSession = isPbBackend()
-    ? (args: any) => pbCreateSession(args).then(id => id as any)
-    : (args: any) => convexCreateSession(args);
-
-  const convexDeleteSession = useMutation(api.messages.deleteSession);
-  const pbDeleteSession = usePbSessionDelete();
-  const deleteSession = isPbBackend() ? pbDeleteSession : (args: any) => convexDeleteSession(args);
-
-  const convexTriggerAutoTitle = useMutation(api.messages.triggerAutoTitle);
-  const pbTriggerAutoTitle = async ({ sessionId }: { sessionId: string }) => {
+  const createWorkspace = usePbWorkspaceCreate();
+  const sendMessage = usePbMessageSend();
+  const createSession = usePbSessionCreate();
+  const deleteSession = usePbSessionDelete();
+  const triggerAutoTitle = async ({ sessionId }: { sessionId: string }) => {
     if (!sessionId) return;
     const token = getPbClient().authStore.token;
     if (!token) return;
-    // Fire-and-forget. The route does its own auth, session lookup, and
-    // idempotency check. We intentionally don't await — the title
-    // appears via the `usePbSession` subscription, not via this call.
     void fetch("/api/jobs/generateSessionTitle", {
       method: "POST",
       headers: {
@@ -235,80 +197,21 @@ export function Chat({
       console.error("[pbTriggerAutoTitle] fetch failed:", err);
     });
   };
-  const triggerAutoTitle = isPbBackend() ? pbTriggerAutoTitle : (args: any) => convexTriggerAutoTitle(args);
-
-  const { signOut } = useAuthActions();
 
   // Tool Mutations for local LLM
-  const convexAddTask = useMutation(api.ai.addTask);
-  const pbAddTask = usePbTaskCreate();
-  const addTask = isPbBackend() ? pbAddTask : (args: any) => convexAddTask(args);
-
-  const convexAddEvent = useMutation(api.events.add);
-  const pbAddEvent = usePbEventCreate();
-  const addEvent = isPbBackend() ? pbAddEvent : (args: any) => convexAddEvent(args);
-
-  const convexUpdateEvent = useMutation(api.events.update);
-  const pbUpdateEvent = usePbEventUpdate();
-  const updateEvent = isPbBackend()
-    ? (args: any) => {
-        const { id, ...rest } = args;
-        return pbUpdateEvent({ eventId: id, ...rest });
-      }
-    : (args: any) => convexUpdateEvent(args);
-
-  const convexUpdateOccurrence = useMutation(api.events.updateOccurrence);
-  const pbUpdateOccurrence = usePbEventUpdateOccurrence();
-  const updateOccurrence = isPbBackend() ? pbUpdateOccurrence : (args: any) => convexUpdateOccurrence(args);
-
-  const convexDeleteEvent = useMutation(api.events.remove);
-  const pbDeleteEvent = usePbEventDelete();
-  const deleteEvent = isPbBackend() ? pbDeleteEvent : (args: any) => convexDeleteEvent(args);
-
-  const convexCompleteTask = useMutation(api.tasks.toggleCompleted);
-  const pbCompleteTask = usePbTaskToggleCompleted();
-  const completeTask = isPbBackend()
-    ? async (args: { id: string }) => {
-        const task = await pbApi.tasks.get({ id: args.id });
-        const completed = task ? !task.completed : true;
-        return pbCompleteTask({ id: args.id, completed });
-      }
-    : (args: any) => convexCompleteTask(args);
-
-  const convexDeleteTask = useMutation(api.tasks.deleteTask);
-  const pbDeleteTask = usePbTaskDelete();
-  const deleteTask = isPbBackend() ? pbDeleteTask : (args: any) => convexDeleteTask(args);
-
-  const convexUpdateTask = useMutation(api.tasks.updateTask);
-  const pbUpdateTask = usePbTaskUpdate();
-  const updateTask = isPbBackend()
-    ? (args: any) => {
-        const { id, ...rest } = args;
-        return pbUpdateTask({ taskId: id, ...rest });
-      }
-    : (args: any) => convexUpdateTask(args);
-
-  const convexUpdateUserBio = useMutation(api.ai.updateProfile);
-  const pbUpdateUserBio = usePbUpdateProfile();
-  const updateUserBio = isPbBackend() ? pbUpdateUserBio : (args: any) => convexUpdateUserBio(args);
-
-  const convexDeleteSemanticMemory = useMutation(api.ai.deleteMemory);
-  const pbDeleteSemanticMemory = usePbMemoryDelete();
-  const deleteSemanticMemory = isPbBackend() ? pbDeleteSemanticMemory : (args: any) => convexDeleteSemanticMemory(args);
-
-  const convexUpdatePreferences = useMutation(api.ai.updatePreferences);
-  const pbUpdatePreferences = usePbUpdatePreferences();
-  const updatePreferences = isPbBackend() ? pbUpdatePreferences : (args: any) => convexUpdatePreferences(args);
-
-  const convexCreateHabit = useMutation(api.habits.createHabit);
-  const pbCreateHabit = usePbHabitCreate();
-  const createHabit = isPbBackend() ? pbCreateHabit : (args: any) => convexCreateHabit(args);
-
-  const convexLogHabit = useMutation(api.habits.logHabit);
-  const pbLogHabit = usePbHabitLog();
-  const logHabit = isPbBackend() ? pbLogHabit : (args: any) => convexLogHabit(args);
-
-  const convex = useConvex();
+  const addTask = usePbTaskCreate();
+  const addEvent = usePbEventCreate();
+  const updateEvent = usePbEventUpdate();
+  const updateOccurrence = usePbEventUpdateOccurrence();
+  const deleteEvent = usePbEventDelete();
+  const completeTask = usePbTaskToggleCompleted();
+  const deleteTask = usePbTaskDelete();
+  const updateTask = usePbTaskUpdate();
+  const updateUserBio = usePbUpdateProfile();
+  const deleteSemanticMemory = usePbMemoryDelete();
+  const updatePreferences = usePbUpdatePreferences();
+  const createHabit = usePbHabitCreate();
+  const logHabit = usePbHabitLog();
 
   const [provider, setProvider] = useState<AIProvider>(() => {
     if (typeof window !== "undefined") {
@@ -320,16 +223,17 @@ export function Chat({
   });
 
   const [lastSyncedProfileId, setLastSyncedProfileId] =
-    useState<Id<"userProfile"> | null>(null);
+    useState<string | null>(null);
 
   // Sync provider with DB profile during render
   if (profile && profile._id !== lastSyncedProfileId) {
     setLastSyncedProfileId(profile._id);
+    const prefs = profile.preferences as Record<string, unknown> | undefined;
     if (
-      profile.preferences?.provider &&
-      profile.preferences.provider !== provider
+      prefs?.provider &&
+      prefs.provider !== provider
     ) {
-      setProvider(profile.preferences.provider as AIProvider);
+      setProvider(prefs.provider as AIProvider);
     }
   }
 
@@ -344,7 +248,8 @@ export function Chat({
   };
 
   const getActiveModelName = useMemo((): string => {
-    const customConfigs = profile?.preferences?.customConfigs as
+    const prefs = profile?.preferences as Record<string, unknown> | undefined;
+    const customConfigs = prefs?.customConfigs as
       | ProviderConfigs
       | undefined;
     const config = customConfigs?.[provider];
@@ -397,21 +302,22 @@ export function Chat({
       default:
         return "ai";
     }
-  }, [profile?.preferences?.customConfigs, provider]);
+  }, [profile?.preferences, provider]);
 
   const getActiveConfig = useMemo(() => {
-    const customConfigs = profile?.preferences?.customConfigs as ProviderConfigs | undefined;
+    const prefs = profile?.preferences as Record<string, unknown> | undefined;
+    const customConfigs = prefs?.customConfigs as ProviderConfigs | undefined;
     return customConfigs?.[provider] || {};
-  }, [profile?.preferences?.customConfigs, provider]);
+  }, [profile?.preferences, provider]);
 
   const pendingInitialMessageRef = useRef<{ sessionId: string; text: string } | null>(null);
   const activeSyncRef = useRef<(() => void) | null>(null);
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [confirmDeleteSession, setConfirmDeleteSession] = useState<{
-    id: Id<"chatSessions">;
+    id: string;
     title: string;
   } | null>(null);
-  const [openReflectionId, setOpenReflectionId] = useState<Id<"reflections"> | null>(null);
+  const [openReflectionId, setOpenReflectionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (
@@ -426,15 +332,16 @@ export function Chat({
 
   // OCEAN Heartbeat: Automatically trigger background OCEAN digest generation if pending
   useEffect(() => {
-    if (profile?.userId) {
+    const p = profile as { userId?: string } | undefined;
+    if (p?.userId) {
       // Fire and forget
       fetch('/api/cron/ocean', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: profile.userId })
+        body: JSON.stringify({ userId: p.userId })
       }).catch(err => console.error("OCEAN heartbeat failed", err));
     }
-  }, [profile?.userId]);
+  }, [profile]);
 
   // ---- Sync handler (used by both the sidebar button and TaskPanel) ----
   const handleSync = async () => {
@@ -473,15 +380,15 @@ export function Chat({
   };
 
   const currentWorkspace = workspaces?.find(
-    (w: Doc<"workspaces">) => w._id === activeWorkspaceId,
+    (w: PbWorkspaces) => w._id === activeWorkspaceId,
   );
 
   const handleDeleteChat = async (
-    id: Id<"chatSessions">,
+    id: string,
     e: React.MouseEvent,
   ) => {
     e.stopPropagation();
-    const session = sessions?.find((s: Doc<"chatSessions">) => s._id === id);
+    const session = sessions?.find((s: PbChatSessions) => s._id === id);
     if (session) {
       setConfirmDeleteSession({
         id,
@@ -490,7 +397,7 @@ export function Chat({
     }
   };
 
-  const executeDeleteChat = async (id: Id<"chatSessions">) => {
+  const executeDeleteChat = async (id: string) => {
     await deleteSession({ id });
     if (activeSessionId === id) {
       setActiveSessionIdAction(null);
@@ -499,8 +406,8 @@ export function Chat({
   };
 
   const handleNewChat = async (
-    workspaceOverride?: Id<"workspaces"> | null,
-    agentPersonaId?: Id<"agentPersonas">,
+    workspaceOverride?: string | null,
+    agentPersonaId?: string,
     initialMessage?: string,
   ) => {
     const wsId = workspaceOverride === null ? undefined : workspaceOverride || activeWorkspaceId;
@@ -531,12 +438,12 @@ export function Chat({
 
   // When selecting a session from the Dashboard, switch to its workspace if needed
   const handleDashboardSelectSession = useCallback(
-    (id: Id<"chatSessions">) => {
+    (id: string) => {
       const session = allSessions?.find(
-        (s: Doc<"chatSessions">) => s._id === id,
+        (s: PbChatSessions) => s._id === id,
       );
-      if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
-        setActiveWorkspaceIdAction(session.workspaceId);
+      if (session?.workspace && session.workspace !== activeWorkspaceId) {
+        setActiveWorkspaceIdAction(session.workspace);
       }
       setActiveSessionIdAction(id);
       if (!isLargeViewport) {
@@ -619,10 +526,9 @@ export function Chat({
             onShowTasksAction={onShowTasksAction}
             setShowHistoryAction={setShowHistoryAction}
             onChatInputResizeAction={onChatInputResizeAction}
-            signOut={() => signOut()}
+            signOut={signOut}
             handleProviderChange={handleProviderChange}
             sendMessage={sendMessage}
-            generateUploadUrl={generateUploadUrl}
             addTask={addTask}
             updateTask={updateTask}
             addEvent={addEvent}
@@ -662,21 +568,17 @@ export function Chat({
         onClose={() => setOpenReflectionId(null)}
         onExportImage={async (id) => {
           let data: any;
-          if (isPbBackend()) {
-            try {
-              const pb = (await import("@/pb-compat/client")).getPbClient();
-              const rec = await pb.collection("reflections").getOne(id);
-              data = {
-                ...rec,
-                _id: rec.id,
-                userId: rec.user,
-                workspaceId: rec.workspace,
-              };
-            } catch (e) {
-              console.error("Failed to fetch reflection from PB for export:", e);
-            }
-          } else {
-            data = await convex.query(api.reflections.getReflection, { id });
+          try {
+            const pb = (await import("@/pb-compat/client")).getPbClient();
+            const rec = await pb.collection("reflections").getOne(id);
+            data = {
+              ...rec,
+              _id: rec.id,
+              userId: rec.user,
+              workspaceId: rec.workspace,
+            };
+          } catch (e) {
+            console.error("Failed to fetch reflection from PB for export:", e);
           }
           if (data) await exportReflectionAsImage(data);
         }}
@@ -686,10 +588,10 @@ export function Chat({
 }
 
 interface ActiveChatProps {
-  activeSessionId: Id<"chatSessions"> | null;
-  activeWorkspaceId: Id<"workspaces"> | undefined;
-  workspaces: Doc<"workspaces">[] | undefined;
-  sessions: Doc<"chatSessions">[] | undefined;
+  activeSessionId: string | null;
+  activeWorkspaceId: string | undefined;
+  workspaces: PbWorkspaces[] | undefined;
+  sessions: PbChatSessions[] | undefined;
   profile: any;
   activePersona: any;
   provider: AIProvider;
@@ -705,7 +607,6 @@ interface ActiveChatProps {
   signOut: () => void;
   handleProviderChange: (p: AIProvider) => void;
   sendMessage: any;
-  generateUploadUrl: any;
   addTask: any;
   updateTask: any;
   addEvent: any;
@@ -744,7 +645,6 @@ function ActiveChat({
   signOut,
   handleProviderChange,
   sendMessage,
-  generateUploadUrl,
   addTask,
   updateTask,
   addEvent,
@@ -762,7 +662,7 @@ function ActiveChat({
   pendingInitialMessageRef,
   activeSyncRef,
 }: ActiveChatProps) {
-  const convex = useConvex();
+
   const idMapRef = useRef<Map<string, string>>(new Map());
   const [localScopes, setLocalScopes] = useState<Record<string, Scope>>({});
   const [isTyping, setIsTyping] = useState(false);
@@ -772,17 +672,11 @@ function ActiveChat({
     setLocalScopes({});
   }, [activeSessionId]);
 
-  const pbMessagesPaginated = usePbPaginatedQuery(
+  const messagesPaginated = usePbPaginatedQuery(
     usePbMessagesPaginated,
-    (isPbBackend() && activeSessionId) ? { sessionId: activeSessionId } : "skip",
+    activeSessionId ? { sessionId: activeSessionId } : "skip",
     { initialNumItems: 50 },
   );
-  const convexMessagesPaginated = usePaginatedQuery(
-    api.messages.listPaginated,
-    (!isPbBackend() && activeSessionId) ? { sessionId: activeSessionId } : "skip",
-    { initialNumItems: 50 },
-  );
-  const messagesPaginated = isPbBackend() ? pbMessagesPaginated : convexMessagesPaginated;
 
   const messages = useMemo(() => {
     if (!activeSessionId) return undefined;
@@ -805,8 +699,7 @@ function ActiveChat({
   }, [messagesPaginated]);
 
   const isSyncing = !!(activeSessionId && messages === undefined);
-  const convexAuthToken = useAuthToken();
-  const authToken = isPbBackend() ? getPbClient().authStore.token : convexAuthToken;
+  const authToken = getPbClient().authStore.token;
 
   const pendingScopeRef = useRef<Scope | null | undefined>(undefined);
 
@@ -824,7 +717,7 @@ function ActiveChat({
             'x-api-key': getActiveConfig.apiKey || "",
             'x-base-url': getActiveConfig.baseUrl || "",
             'x-timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
-            'x-convex-auth-token': authToken || "",
+            'x-auth-token': authToken || "",
             ...(scopeHeader ? { 'x-active-scope': scopeHeader } : {}),
           }
         });
@@ -906,7 +799,7 @@ function ActiveChat({
               result: tc.result,
               state: tc.result !== undefined ? "result" : "call",
             })),
-            attachments: isPbBackend() && Array.isArray(m.attachments)
+            attachments: Array.isArray(m.attachments)
               ? m.attachments.map((att: any) => {
                   if (typeof att === "string") {
                     const pb = getPbClient();
@@ -923,7 +816,7 @@ function ActiveChat({
             storageId: m.storageId,
             fileName: m.fileName,
             fileType: m.fileType,
-            url: isPbBackend() && m.storageId ? getPbClient().files.getUrl(m, m.storageId) : undefined,
+            url: m.storageId ? getPbClient().files.getUrl(m, m.storageId) : undefined,
             scope: m.scope,
             reasoning: (m as any).reasoning,
             sessionId: m.sessionId,
@@ -937,17 +830,17 @@ function ActiveChat({
   // Run LM Studio logic
   const runLocalLLMForSession = useCallback(
     async (
-      sessionId: Id<"chatSessions">,
+      sessionId: string,
       userText: string,
       opts?: { brief?: boolean; scope?: Scope | null },
     ) => {
       try {
-        const promptCtx = await convex.query(api.ai.getPromptContext, {
+        const promptCtx = await api.ai.getPromptContext({
           sessionId,
           timezoneOffset: new Date().getTimezoneOffset(),
           ...(opts?.brief !== undefined ? { brief: opts.brief } : {}),
           ...(opts?.scope ? { scope: opts.scope } : {}),
-        });
+        }) as { systemInstruction: string; workspaceId?: string; timezoneOffset?: number };
 
         const recentMsgs = (messages || []).slice(-10);
 
@@ -1010,11 +903,7 @@ function ActiveChat({
                   workspaceId: promptCtx.workspaceId ?? undefined,
                 });
               } else {
-                const oldTask = isPbBackend()
-                  ? await pbApi.tasks.get({ id: args.taskId as string })
-                  : await convex.query(api.tasks.get, {
-                      id: args.taskId as Id<"tasks">,
-                    });
+                const oldTask = await api.tasks.get({ id: args.taskId as string });
                 const taskUpdates: Record<
                   string,
                   string | number | boolean | undefined
@@ -1042,7 +931,7 @@ function ActiveChat({
                 }
 
                 await updateTask({
-                  id: args.taskId as Id<"tasks">,
+                  id: args.taskId as string,
                   timezoneOffset: promptCtx.timezoneOffset ?? undefined,
                   ...taskUpdates,
                 });
@@ -1063,12 +952,8 @@ function ActiveChat({
                   : undefined;
               }
             } else if (name === "deleteTask") {
-              const oldTask = isPbBackend()
-                ? await pbApi.tasks.get({ id: args.taskId as string })
-                : await convex.query(api.tasks.get, {
-                    id: args.taskId as Id<"tasks">,
-                  });
-              await deleteTask({ id: args.taskId as Id<"tasks"> });
+              const oldTask = await api.tasks.get({ id: args.taskId as string });
+              await deleteTask({ id: args.taskId as string });
               enrichedArgs.titleHint = oldTask?.text;
             } else if (name === "addEvent" || name === "updateEvent") {
               if (name === "addEvent") {
@@ -1087,11 +972,7 @@ function ActiveChat({
                   workspaceId: promptCtx.workspaceId ?? undefined,
                 });
               } else {
-                const oldEvent = isPbBackend()
-                  ? await pbApi.events.get({ id: args.eventId as string })
-                  : await convex.query(api.events.get, {
-                      id: args.eventId as Id<"events">,
-                    });
+                const oldEvent = await api.events.get({ id: args.eventId as string });
                 const updates: EventUpdateFields = {};
                 if (args.title) updates.title = args.title as string;
                 if (args.location) updates.location = args.location as string;
@@ -1120,7 +1001,7 @@ function ActiveChat({
                 }
 
                 await updateEvent({
-                  id: args.eventId as Id<"events">,
+                  id: args.eventId as string,
                   timezoneOffset: promptCtx.timezoneOffset ?? undefined,
                   ...updates,
                 });
@@ -1142,13 +1023,9 @@ function ActiveChat({
                   : undefined;
               }
             } else if (name === "updateEventOccurrence") {
-              const oldEvent = isPbBackend()
-                ? await pbApi.events.get({ id: args.eventId as string })
-                : await convex.query(api.events.get, {
-                    id: args.eventId as Id<"events">,
-                  });
+              const oldEvent = await api.events.get({ id: args.eventId as string });
               await updateOccurrence({
-                id: args.eventId as Id<"events">,
+                id: args.eventId as string,
                 occurrenceId: args.occurrenceId as string,
                 startTime: args.startTime
                   ? parseLocal(args.startTime as string)
@@ -1163,12 +1040,8 @@ function ActiveChat({
               });
               enrichedArgs.titleHint = oldEvent?.title;
             } else if (name === "deleteEvent") {
-              const oldEvent = isPbBackend()
-                ? await pbApi.events.get({ id: args.eventId as string })
-                : await convex.query(api.events.get, {
-                    id: args.eventId as Id<"events">,
-                  });
-              await deleteEvent({ id: args.eventId as Id<"events"> });
+              const oldEvent = await api.events.get({ id: args.eventId as string });
+              await deleteEvent({ id: args.eventId as string });
               enrichedArgs.titleHint = oldEvent?.title;
             } else if (name === "updateUserBio") {
               await updateUserBio({
@@ -1178,7 +1051,7 @@ function ActiveChat({
               // Handled by background cron in Mastra agent (silent)
             } else if (name === "deleteSemanticMemory") {
               await deleteSemanticMemory({
-                memoryId: args.memoryId as Id<"memories">,
+                memoryId: args.memoryId as string,
               });
             } else if (name === "retrieveGraphContext") {
               // Read-only tool
@@ -1187,15 +1060,10 @@ function ActiveChat({
                 args.limit !== undefined ? Number(args.limit) : 10;
               const statusHook = args.statusHook as string | undefined;
 
-              const tasks = isPbBackend()
-                ? await pbApi.tasks.list({
-                    workspaceId: promptCtx.workspaceId ?? undefined,
-                    statusHook,
-                  } as any)
-                : await convex.query(api.tasks.list, {
-                    workspaceId: promptCtx.workspaceId ?? undefined,
-                    statusHook,
-                  } as any);
+              const tasks = await api.tasks.list({
+                workspaceId: promptCtx.workspaceId ?? undefined,
+                statusHook,
+              } as any);
 
               enrichedArgs.tasks = tasks.slice(0, limit);
               enrichedArgs.count = tasks.length;
@@ -1204,15 +1072,10 @@ function ActiveChat({
                 args.limit !== undefined ? Number(args.limit) : 10;
               const statusHook = args.statusHook as string | undefined;
 
-              const events = isPbBackend()
-                ? await pbApi.events.list({
-                    workspaceId: promptCtx.workspaceId ?? undefined,
-                    statusHook,
-                  } as any)
-                : await convex.query(api.events.list, {
-                    workspaceId: promptCtx.workspaceId ?? undefined,
-                    statusHook,
-                  } as any);
+              const events = await api.events.list({
+                workspaceId: promptCtx.workspaceId ?? undefined,
+                statusHook,
+              } as any);
 
               enrichedArgs.events = events.slice(0, limit);
               enrichedArgs.count = events.length;
@@ -1222,70 +1085,36 @@ function ActiveChat({
               const queryStr = args.query as string;
 
               let results: any[] = [];
-              if (isPbBackend()) {
-                const tasks = await pbApi.tasks.list({
-                  workspaceId: promptCtx.workspaceId ?? undefined,
-                });
-                const events = await pbApi.events.list({
-                  workspaceId: promptCtx.workspaceId ?? undefined,
-                });
-                const q = queryStr.toLowerCase();
-                const filteredTasks = tasks.filter((t: any) =>
-                  t.text.toLowerCase().includes(q),
-                );
-                const filteredEvents = events.filter((e: any) =>
-                  e.title.toLowerCase().includes(q),
-                );
-                results = results.concat(
-                  filteredTasks.map((t: any) => ({
-                    type: "task",
-                    id: t.id,
-                    title: t.text,
-                    completed: t.completed,
-                  })),
-                );
-                results = results.concat(
-                  filteredEvents.map((e: any) => ({
-                    type: "event",
-                    id: e.id,
-                    title: e.title,
-                    startTime: e.startTime,
-                    location: e.location,
-                  })),
-                );
-              } else {
-                const tasks = await convex.query((api.tasks as any).search, {
-                  workspaceId: promptCtx.workspaceId ?? undefined,
-                  query: queryStr,
-                  limit,
-                });
-                results = results.concat(
-                  tasks.map((t: any) => ({
-                    type: "task",
-                    id: t._id ?? t.id,
-                    title: t.text,
-                    completed: t.completed,
-                  })),
-                );
-                if (results.length < limit) {
-                  const events = await convex.query(
-                    (api.events as any).search,
-                    {
-                      workspaceId: promptCtx.workspaceId ?? undefined,
-                      query: queryStr,
-                      limit,
-                    });
-                  results = results.concat(
-                    events.map((e: any) => ({
-                      type: "event",
-                      id: e._id ?? e.id,
-                      title: e.title,
-                      startTime: e.startTime,
-                      location: e.location,
-                    })),
-                  );
-                }
-              }
+              const tasks = await api.tasks.list({
+                workspaceId: promptCtx.workspaceId ?? undefined,
+              });
+              const events = await api.events.list({
+                workspaceId: promptCtx.workspaceId ?? undefined,
+              });
+              const q = queryStr.toLowerCase();
+              const filteredTasks = tasks.filter((t: any) =>
+                t.text.toLowerCase().includes(q),
+              );
+              const filteredEvents = events.filter((e: any) =>
+                e.title.toLowerCase().includes(q),
+              );
+              results = results.concat(
+                filteredTasks.map((t: any) => ({
+                  type: "task",
+                  id: t.id,
+                  title: t.text,
+                  completed: t.completed,
+                })),
+              );
+              results = results.concat(
+                filteredEvents.map((e: any) => ({
+                  type: "event",
+                  id: e.id,
+                  title: e.title,
+                  startTime: e.startTime,
+                  location: e.location,
+                })),
+              );
 
               results = results.slice(0, limit);
               enrichedArgs.count = results.length;
@@ -1309,95 +1138,53 @@ function ActiveChat({
                 notes: t.notes,
               }));
 
-              const ids = isPbBackend()
-                ? await Promise.all(
-                    parsedTasks.map((t) =>
-                      addTask({
-                        ...t,
-                        workspaceId: promptCtx.workspaceId ?? undefined,
-                      } as any)
-                    )
-                  )
-                : await convex.mutation(api.tasks.batchAdd, {
-                    tasks: parsedTasks,
+              const ids = await Promise.all(
+                parsedTasks.map((t) =>
+                  addTask({
+                    ...t,
                     workspaceId: promptCtx.workspaceId ?? undefined,
-                  });
+                  } as any)
+                )
+              );
               enrichedArgs.ids = ids;
               enrichedArgs.count = ids.length;
             } else if (name === "getTaskNotes") {
-              const task = isPbBackend()
-                ? await pbApi.tasks.get({ id: args.taskId as string })
-                : await convex.query(api.tasks.get, {
-                    id: args.taskId as Id<"tasks">,
-                  });
+              const task = await api.tasks.get({ id: args.taskId as string });
               enrichedArgs.notes = task?.notes || null;
               enrichedArgs.hasNotes = !!task?.notes;
               enrichedArgs.titleHint = task?.text;
             } else if (name === "listWorkspaces") {
-              const workspaces = isPbBackend()
-                ? await pbApi.workspaces.list({})
-                : await convex.query(api.workspaces.list, {});
+              const workspaces = await api.workspaces.list({});
               enrichedArgs.workspaces = workspaces;
             } else if (name === "create_habit") {
-              const habitId = isPbBackend()
-                ? await createHabit({
-                    workspaceId: promptCtx.workspaceId ?? undefined,
-                    name: args.name as string,
-                    description: args.description as string | undefined,
-                    frequency: args.frequency as "daily" | "custom",
-                    frequencyConfig: {
-                      daysOfWeek: args.daysOfWeek as number[] | undefined,
-                    },
-                  })
-                : await convex.mutation(api.habits.createHabit, {
-                    workspaceId: promptCtx.workspaceId ?? undefined,
-                    name: args.name as string,
-                    description: args.description as string | undefined,
-                    frequency: args.frequency as "daily" | "custom",
-                    frequencyConfig: {
-                      daysOfWeek: args.daysOfWeek as number[] | undefined,
-                    },
-                  });
+              const habitId = await createHabit({
+                workspaceId: promptCtx.workspaceId ?? undefined,
+                name: args.name as string,
+                description: args.description as string | undefined,
+                frequency: args.frequency as "daily" | "custom",
+                frequencyConfig: {
+                  daysOfWeek: args.daysOfWeek as number[] | undefined,
+                },
+              });
               enrichedArgs.habitId = habitId;
             } else if (name === "log_habit") {
-              const logId = isPbBackend()
-                ? await logHabit({
-                    habitId: args.habitId as string,
-                    dateString: args.dateString as string,
-                    status: args.status as "completed" | "skipped",
-                    notes: args.notes as string | undefined,
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  })
-                : await convex.mutation(api.habits.logHabit, {
-                    habitId: args.habitId as Id<"habits">,
-                    dateString: args.dateString as string,
-                    status: args.status as "completed" | "skipped",
-                    notes: args.notes as string | undefined,
-                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  });
-              const habit = isPbBackend()
-                ? await pbApi.habits.get({ id: args.habitId as string })
-                : await convex.query(api.habits.get, {
-                    id: args.habitId as Id<"habits">,
-                  });
+              const logId = await logHabit({
+                habitId: args.habitId as string,
+                dateString: args.dateString as string,
+                status: args.status as "completed" | "skipped",
+                notes: args.notes as string | undefined,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              });
+              const habit = await api.habits.get({ id: args.habitId as string });
               enrichedArgs.logId = logId;
               enrichedArgs.newStreak = habit?.currentStreak || 0;
               enrichedArgs.titleHint = habit?.name;
             } else if (name === "get_habit_consistency") {
-              const report = isPbBackend()
-                ? await pbApi.habits.getHabitConsistency({
-                    workspaceId: promptCtx.workspaceId ?? undefined,
-                    periodStartDate: args.periodStartDate as string,
-                    periodEndDate: args.periodEndDate as string,
-                  })
-                : await convex.query(
-                    api.habits.getHabitConsistency,
-                    {
-                      workspaceId: promptCtx.workspaceId ?? undefined,
-                      periodStartDate: args.periodStartDate as string,
-                      periodEndDate: args.periodEndDate as string,
-                    },
-                  );
+              const report = await api.habits.getHabitConsistency({
+                workspaceId: promptCtx.workspaceId ?? undefined,
+                periodStartDate: args.periodStartDate as string,
+                periodEndDate: args.periodEndDate as string,
+              });
               enrichedArgs.report = report;
             }
 
@@ -1453,7 +1240,6 @@ function ActiveChat({
       addEvent,
       addTask,
       completeTask,
-      convex,
       deleteEvent,
       deleteSemanticMemory,
       deleteTask,
@@ -1487,7 +1273,7 @@ function ActiveChat({
 
         if (provider === "lmstudio") {
           try {
-            await runLocalLLMForSession(activeSessionId as Id<"chatSessions">, syncText, {
+            await runLocalLLMForSession(activeSessionId as string, syncText, {
               brief: true,
             });
           } finally {
@@ -1528,7 +1314,7 @@ function ActiveChat({
         });
 
         if (provider === "lmstudio") {
-          await runLocalLLMForSession(activeSessionId as Id<"chatSessions">, pending.text);
+          await runLocalLLMForSession(activeSessionId as string, pending.text);
         } else {
           await sendVercelMessage({ text: pending.text });
         }
@@ -1598,29 +1384,7 @@ function ActiveChat({
       if (!activeSessionId) return;
 
       try {
-        let uploadedAttachments: any[] = [];
-        
-        if (isPbBackend()) {
-          // PB handles files directly in the mutation
-        } else {
-          // Parallel uploads for Convex
-          const uploadPromises = files.map(async (file) => {
-            const postUrl = await generateUploadUrl();
-            const result = await fetch(postUrl, {
-              method: "POST",
-              headers: { "Content-Type": file.type },
-              body: file,
-            });
-            const { storageId } = await result.json();
-            return {
-              storageId,
-              fileName: file.name,
-              fileType: file.type,
-            };
-          });
-
-          uploadedAttachments = await Promise.all(uploadPromises);
-        }
+        // PB handles files directly in the mutation
 
         const textMessageContent = userText || (files.length > 0 ? `Attached ${files.length} files` : "");
 
@@ -1651,8 +1415,7 @@ function ActiveChat({
               timezoneOffset: new Date().getTimezoneOffset(),
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               provider,
-              attachments: !isPbBackend() && uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
-              files: isPbBackend() && files.length > 0 ? files : undefined,
+              files: files.length > 0 ? files : undefined,
               scope: scope || undefined,
             }),
             aiPromise
@@ -1669,7 +1432,7 @@ function ActiveChat({
     [
       activeSessionId,
       provider,
-      generateUploadUrl,
+
       runLocalLLMForSession,
       sendMessage,
       sendVercelMessage,
@@ -1681,7 +1444,7 @@ function ActiveChat({
   }, []);
 
   const currentWorkspace = workspaces?.find(
-    (w: Doc<"workspaces">) => w._id === activeWorkspaceId,
+    (w: PbWorkspaces) => w.id === activeWorkspaceId,
   );
 
   return (
@@ -1690,7 +1453,7 @@ function ActiveChat({
         activeSessionTitle={
           activeSessionId
             ? sessions?.find(
-                (s: Doc<"chatSessions">) => s._id === activeSessionId,
+                (s: PbChatSessions) => s.id === activeSessionId,
               )?.title
             : undefined
         }
@@ -1718,7 +1481,7 @@ function ActiveChat({
         agentName={activePersona?.name}
         onLoadOlder={loadOlderMessages}
         canLoadOlder={messagesPaginated.status === "CanLoadMore"}
-        isLoadingOlder={messagesPaginated.status === "LoadingMore"}
+        isLoadingOlder={false}
       />
 
       <ChatInput

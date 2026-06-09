@@ -1,34 +1,23 @@
 "use client";
 
-import { useQuery as useConvexQuery, useMutation } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
-import { isPbBackend, usePbWorkspace, usePbPersonasList, usePbWorkspaceUpdate } from "@/pb-compat";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { usePbWorkspace, usePbPersonasList, usePbWorkspaceUpdate } from "@/pb-compat";
+import type { PbId } from "@/pb-compat/_generated/dataModel";
 import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Authenticated, Unauthenticated } from "convex/react";
-import { SignInForm } from "@/components/auth/SignInForm";
 
 export default function WorkspaceSettingsPage() {
   const params = useParams();
   const router = useRouter();
   const workspaceId = params.id as string;
 
-  const pbWorkspace = usePbWorkspace(workspaceId);
-  const convexWorkspace = useConvexQuery(api.workspaces.get, { id: workspaceId });
-  const workspace = isPbBackend() ? pbWorkspace : convexWorkspace;
+  const workspace = usePbWorkspace(workspaceId);
+  const personas = usePbPersonasList();
+  const updateSettings = usePbWorkspaceUpdate();
 
-  const pbPersonas = usePbPersonasList();
-  const convexPersonas = useConvexQuery(api.personas.list);
-  const personas = isPbBackend() ? pbPersonas : convexPersonas;
-  const convexUpdateSettings = useMutation(api.workspaces.updateSettings);
-  const pbUpdateSettings = usePbWorkspaceUpdate();
-  const updateSettings = isPbBackend() ? pbUpdateSettings : (args: any) => convexUpdateSettings(args);
-
-  const [defaultAgentPersonaId, setDefaultAgentPersonaId] = useState<Id<"agentPersonas"> | "default_dialogue">("default_dialogue");
+  const [defaultAgentPersonaId, setDefaultAgentPersonaId] = useState<string | "default_dialogue">("default_dialogue");
   const [workspaceColor, setWorkspaceColor] = useState("#d4a373");
   const [isSaving, setIsSaving] = useState(false);
   const [prevId, setPrevId] = useState<string | null>(null);
@@ -56,9 +45,9 @@ export default function WorkspaceSettingsPage() {
     };
   }, []);
 
-  if (workspace && workspace._id !== prevId) {
-    setPrevId(workspace._id);
-    setDefaultAgentPersonaId(workspace.defaultAgentPersonaId || "default_dialogue");
+  if (workspace && workspace.id !== prevId) {
+    setPrevId(workspace.id);
+    setDefaultAgentPersonaId(workspace.defaultAgentPersona || "default_dialogue");
     setWorkspaceColor(workspace.color || "#d4a373");
   }
 
@@ -68,13 +57,13 @@ export default function WorkspaceSettingsPage() {
     return null;
   }
 
-  const currentPersona = personas?.find(p => p._id === defaultAgentPersonaId) || personas?.find(p => p.isDefault);
+  const currentPersona = personas?.find(p => p.id === defaultAgentPersonaId) || personas?.find(p => p.isDefault);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
       await updateSettings({
-        id: workspaceId as Id<"workspaces">,
+        id: workspaceId,
         color: workspaceColor,
         defaultAgentPersonaId: defaultAgentPersonaId === "default_dialogue" ? null : defaultAgentPersonaId,
       });
@@ -87,11 +76,7 @@ export default function WorkspaceSettingsPage() {
 
   return (
     <>
-      <Unauthenticated>
-        <SignInForm />
-      </Unauthenticated>
-      <Authenticated>
-        <div className="bg-[#0f0e0c] text-[#f2efeb] selection:bg-[#d4a373]/30 custom-scrollbar min-h-screen">
+      <div className="bg-[#0f0e0c] text-[#f2efeb] selection:bg-[#d4a373]/30 custom-scrollbar min-h-screen">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 pb-32 md:pb-12">
             {/* Header */}
             <div className="flex flex-col items-start gap-1 mb-8">
@@ -163,10 +148,10 @@ export default function WorkspaceSettingsPage() {
                           <div className="p-4 text-center text-xs text-[#a8a29e]">Loading personas...</div>
                         ) : personas.map((p) => (
                           <button
-                            key={p._id}
+                            key={p.id}
                             type="button"
                             onClick={() => {
-                              setDefaultAgentPersonaId(p._id);
+                              setDefaultAgentPersonaId(p.id);
                               setDropdownOpen(false);
                             }}
                             className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold transition-all hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb] text-left border-b border-[#2a2723]/30 last:border-none"
@@ -177,7 +162,7 @@ export default function WorkspaceSettingsPage() {
                               </div>
                               <span className="truncate">{p.name}</span>
                             </div>
-                            {defaultAgentPersonaId === p._id && (
+                            {defaultAgentPersonaId === p.id && (
                               <Check className="w-3.5 h-3.5 text-[#d4a373]" />
                             )}
                           </button>
@@ -238,7 +223,6 @@ export default function WorkspaceSettingsPage() {
             </div>
           </div>
         </div>
-      </Authenticated>
     </>
   );
 }

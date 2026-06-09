@@ -1,13 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Flame, X, Save, FolderKanban } from "lucide-react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
-import { isPbBackend, usePbHabitCreate, usePbWorkspacesList } from "@/pb-compat";
-
+import { usePbHabitCreate, usePbWorkspacesList } from "@/pb-compat";
 interface CreateHabitModalProps {
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  activeWorkspaceId: string | undefined;
   isLargeViewport: boolean;
   onClose: () => void;
 }
@@ -24,14 +20,9 @@ export function CreateHabitModal({
   const [workspaceId, setWorkspaceId] = useState<string>(activeWorkspaceId || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Convex Queries and Mutations
-  const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, {});
-  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+  const workspaces = usePbWorkspacesList();
 
-  const pbCreateHabit = usePbHabitCreate();
-  const convexCreateHabit = useMutation(api.habits.createHabit);
-  const createHabitMutation: (args: any) => Promise<any> = isPbBackend() ? pbCreateHabit : (args: any) => convexCreateHabit(args);
+  const createHabitMutation = usePbHabitCreate();
 
   const handleCreate = async () => {
     if (!name.trim() || isSubmitting) return;
@@ -46,7 +37,7 @@ export function CreateHabitModal({
         description: description.trim() || undefined,
         frequency,
         frequencyConfig: freqConfig,
-        workspaceId: workspaceId ? (workspaceId as Id<"workspaces">) : undefined,
+        workspaceId: workspaceId || undefined,
       });
       onClose();
     } catch (err) {
@@ -247,3 +238,9 @@ export function CreateHabitModal({
     </motion.div>
   );
 }
+
+
+
+
+
+

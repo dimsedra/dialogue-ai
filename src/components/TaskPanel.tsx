@@ -1,9 +1,6 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import {
-  isPbBackend,
   usePbTasksList,
   usePbEventsList,
   usePbHabitsList,
@@ -21,7 +18,7 @@ import {
 import { api as pbApi } from "@/pb-compat/api";
 import { useState, useMemo, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Id, Doc } from "../../convex/_generated/dataModel";
+import { PbTasks, PbEvents } from "@/pb-compat/_generated/dataModel";
 import { Scope } from "@/components/chat/types";
 import { isSameDay } from "date-fns";
 import {
@@ -51,102 +48,62 @@ export function TaskPanel({
   onClose,
   onRefer,
 }: {
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  activeWorkspaceId: string | undefined;
   onSync?: () => void;
   onClose?: () => void;
   onRefer?: (scope: Scope) => void;
 }) {
-  const pbTasks = usePbTasksList({ workspaceId: activeWorkspaceId });
-  const convexTasks = useQuery(api.tasks.list, { workspaceId: activeWorkspaceId });
-  const tasks = isPbBackend() ? pbTasks : convexTasks;
-
-  const pbEvents = usePbEventsList({ workspaceId: activeWorkspaceId });
-  const convexEvents = useQuery(api.events.list, { workspaceId: activeWorkspaceId });
-  const events = isPbBackend() ? pbEvents : convexEvents;
+  const tasks = usePbTasksList({ workspaceId: activeWorkspaceId });
+  const events = usePbEventsList({ workspaceId: activeWorkspaceId });
   
   const todayDateString = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }, []);
 
-  const pbRawHabits = usePbHabitsList({ workspaceId: activeWorkspaceId });
-  const convexRawHabits = useQuery(api.habits.getHabits, {
-    workspaceId: activeWorkspaceId,
-    todayDateString,
-  });
-  const rawHabits = isPbBackend() ? pbRawHabits : convexRawHabits;
+  const rawHabits = usePbHabitsList({ workspaceId: activeWorkspaceId, todayDateString });
 
-  const convexToggleTask = useMutation(api.tasks.toggleCompleted);
   const pbToggleTask = usePbTaskToggleCompleted();
-  const toggleTask: (args: any) => Promise<any> = isPbBackend()
-    ? async (args: { id: string }) => {
-        const task = await pbApi.tasks.get({ id: args.id });
-        const completed = task ? !task.completed : true;
-        return pbToggleTask({ id: args.id, completed });
-      }
-    : (args: any) => convexToggleTask(args);
+  const toggleTask = async (args: { id: string }) => {
+    const task = await pbApi.tasks.get({ id: args.id });
+    const completed = task ? !task.completed : true;
+    return pbToggleTask({ id: args.id, completed });
+  };
 
-  const convexDeleteTask = useMutation(api.tasks.deleteTask);
-  const pbDeleteTask = usePbTaskDelete();
-  const deleteTask: (args: any) => Promise<any> = isPbBackend() ? pbDeleteTask : (args: any) => convexDeleteTask(args);
-
-  const convexUpdateTask = useMutation(api.tasks.updateTask);
+  const deleteTask = usePbTaskDelete();
   const pbUpdateTask = usePbTaskUpdate();
-  const updateTask: (args: any) => Promise<any> = isPbBackend()
-    ? (args: any) => {
-        const { id, ...rest } = args;
-        return pbUpdateTask({ taskId: id, ...rest });
-      }
-    : (args: any) => convexUpdateTask(args);
-
-  const convexRemoveEvent = useMutation(api.events.remove);
-  const pbRemoveEvent = usePbEventDelete();
-  const removeEvent: (args: any) => Promise<any> = isPbBackend() ? pbRemoveEvent : (args: any) => convexRemoveEvent(args);
-
-  const convexUpdateEvent = useMutation(api.events.update);
+  const updateTask = (args: any) => {
+    const { id, ...rest } = args;
+    return pbUpdateTask({ taskId: id, ...rest });
+  };
+  const removeEvent = usePbEventDelete();
   const pbUpdateEvent = usePbEventUpdate();
-  const updateEvent: (args: any) => Promise<any> = isPbBackend()
-    ? (args: any) => {
-        const { id, ...rest } = args;
-        return pbUpdateEvent({ eventId: id, ...rest });
-      }
-    : (args: any) => convexUpdateEvent(args);
-
-  const convexUpdateOccurrence = useMutation(api.events.updateOccurrence);
-  const pbUpdateOccurrence = usePbEventUpdateOccurrence();
-  const updateOccurrence: (args: any) => Promise<any> = isPbBackend() ? pbUpdateOccurrence : (args: any) => convexUpdateOccurrence(args);
-
-  const convexCancelEventOccurrence = useMutation(api.events.cancelOccurrence);
-  const pbCancelEventOccurrence = usePbEventCancelOccurrence();
-  const cancelEventOccurrence: (args: any) => Promise<any> = isPbBackend() ? pbCancelEventOccurrence : (args: any) => convexCancelEventOccurrence(args);
-
-  const convexCreateTask = useMutation(api.tasks.add);
+  const updateEvent = (args: any) => {
+    const { id, ...rest } = args;
+    return pbUpdateEvent({ eventId: id, ...rest });
+  };
+  const updateOccurrence = usePbEventUpdateOccurrence();
+  const cancelEventOccurrence = usePbEventCancelOccurrence();
   const pbCreateTask = usePbTaskCreate();
-  const createTask: (args: any) => Promise<any> = isPbBackend()
-    ? (args: any) => {
-        const { workspaceId, reminderOffset, ...rest } = args;
-        return pbCreateTask({
-          ...rest,
-          workspaceId: workspaceId || undefined,
-          reminderOffset: reminderOffset || undefined,
-        });
-      }
-    : (args: any) => convexCreateTask(args);
-
-  const convexCreateEvent = useMutation(api.events.add);
+  const createTask = (args: any) => {
+    const { workspaceId, reminderOffset, ...rest } = args;
+    return pbCreateTask({
+      ...rest,
+      workspaceId: workspaceId || undefined,
+      reminderOffset: reminderOffset || undefined,
+    });
+  };
   const pbCreateEvent = usePbEventCreate();
-  const createEvent: (args: any) => Promise<any> = isPbBackend()
-    ? (args: any) => {
-        const { workspaceId, reminderOffset, ...rest } = args;
-        return pbCreateEvent({
-          ...rest,
-          workspaceId: workspaceId || undefined,
-          reminderOffset: reminderOffset || undefined,
-        });
-      }
-    : (args: any) => convexCreateEvent(args);
+  const createEvent = (args: any) => {
+    const { workspaceId, reminderOffset, ...rest } = args;
+    return pbCreateEvent({
+      ...rest,
+      workspaceId: workspaceId || undefined,
+      reminderOffset: reminderOffset || undefined,
+    });
+  };
 
-  const [expandedTaskId, setExpandedTaskId] = useState<Id<"tasks"> | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [view, setView] = useState<"tasks" | "events" | "calendar" | "habits">("tasks");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isLargeViewport, setIsLargeViewport] = useState(true);
@@ -170,7 +127,7 @@ export function TaskPanel({
 
   // Editing State
   const [editingTaskObj, setEditingTaskObj] = useState<TaskDoc | null>(null);
-  const [editingEventData, setEditingEventData] = useState<{ id: Id<"events">; event: EventDoc; timestamp: number } | null>(null);
+  const [editingEventData, setEditingEventData] = useState<{ id: string; event: EventDoc; timestamp: number } | null>(null);
   const [confirmEditRecurring, setConfirmEditRecurring] = useState<ConfirmEditRecurringData | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDeleteData | null>(null);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
@@ -181,13 +138,11 @@ export function TaskPanel({
   const [sortBy, setSortBy] = useState<"date" | "priority" | "category">("date");
   const [showFilters, setShowFilters] = useState(false);
 
-  const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, {});
-  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+  const workspaces = usePbWorkspacesList();
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return [];
-    return (tasks as Doc<"tasks">[]).filter((t) => {
+    return (tasks as PbTasks[]).filter((t) => {
       const matchSearch =
         t.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.category?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -215,7 +170,7 @@ export function TaskPanel({
 
   const taskDates = useMemo(() => {
     if (!tasks) return [];
-    return (tasks as Doc<"tasks">[]).map((t) => parseTaskDate(t.dueDate)).filter(Boolean) as Date[];
+    return (tasks as PbTasks[]).map((t) => parseTaskDate(t.dueDate)).filter(Boolean) as Date[];
   }, [tasks]);
 
   const eventDates = useMemo(() => {
@@ -225,15 +180,15 @@ export function TaskPanel({
 
   const displayEvents = useMemo(() => {
     if (!events) return [];
-    const filtered = (events as Doc<"events">[]).filter(
+    const filtered = (events as PbEvents[]).filter(
       (e) =>
         e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         e.description?.toLowerCase().includes(searchQuery.toLowerCase())
     ).sort((a, b) => a.startTime - b.startTime);
 
     const now = Date.now();
-    const seriesBest = new Map<string, Doc<"events">>();
-    const deduplicated: Doc<"events">[] = [];
+    const seriesBest = new Map<string, PbEvents>();
+    const deduplicated: PbEvents[] = [];
 
     for (const event of filtered) {
       if (event.recurrence) {
@@ -263,7 +218,7 @@ export function TaskPanel({
 
   const tasksOnSelectedDate = useMemo(() => {
     if (!tasks || !selectedDate) return [];
-    return (tasks as Doc<"tasks">[]).filter((t) => {
+    return (tasks as PbTasks[]).filter((t) => {
       const taskDate = parseTaskDate(t.dueDate);
       return taskDate ? isSameDay(taskDate, selectedDate) : false;
     });
@@ -294,7 +249,7 @@ export function TaskPanel({
     priority: "low" | "medium" | "high";
     category: string;
     dueDate?: number;
-    workspaceId?: Id<"workspaces"> | null;
+    workspaceId?: string | null;
     resources?: any[];
     reminderOffset: number | null;
   }) => {
@@ -310,7 +265,7 @@ export function TaskPanel({
     eventType: "interval" | "point";
     location?: string;
     recurrence: any;
-    workspaceId?: Id<"workspaces"> | null;
+    workspaceId?: string | null;
     reminderOffset: number | null;
     resources?: any[];
   }) => {
@@ -322,13 +277,13 @@ export function TaskPanel({
   };
 
   const handleUpdateTask = async (
-    id: Id<"tasks">,
+    id: string,
     updates: {
       text: string;
       priority: "low" | "medium" | "high";
       category: string;
       dueDate?: number;
-      workspaceId?: Id<"workspaces"> | null;
+      workspaceId?: string | null;
       resources?: any[];
       overwriteResources?: boolean;
       reminderOffset?: number | null;
@@ -338,16 +293,16 @@ export function TaskPanel({
     setEditingTaskObj(null);
   };
 
-  const handleDeleteTask = (id: Id<"tasks">) => {
+  const handleDeleteTask = (id: string) => {
     setConfirmDelete({ id, type: "task" });
   };
 
-  const executeDeleteTask = async (id: Id<"tasks">) => {
+  const executeDeleteTask = async (id: string) => {
     await deleteTask({ id });
     setConfirmDelete(null);
   };
 
-  const handleUpdateEvent = async (id: Id<"events">, updates: EventUpdateData) => {
+  const handleUpdateEvent = async (id: string, updates: EventUpdateData) => {
     await updateEvent({ id, ...updates });
     setEditingEventData(null);
   };
@@ -361,7 +316,7 @@ export function TaskPanel({
     setConfirmDelete({ id: event._id, type: "event", event });
   };
 
-  const executeDeleteEvent = async (id: Id<"events">) => {
+  const executeDeleteEvent = async (id: string) => {
     await removeEvent({ id });
     setConfirmDelete(null);
   };
@@ -454,9 +409,9 @@ export function TaskPanel({
             isLargeViewport={isLargeViewport}
             onConfirmDelete={async (id, type) => {
               if (type === "task") {
-                await executeDeleteTask(id as Id<"tasks">);
+                await executeDeleteTask(id as string);
               } else {
-                await executeDeleteEvent(id as Id<"events">);
+                await executeDeleteEvent(id as string);
               }
             }}
             onConfirmDeleteOccurrence={async (id, timestamp) => {
@@ -540,3 +495,5 @@ export function TaskPanel({
     </div>
   );
 }
+
+

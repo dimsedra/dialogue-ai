@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { isPbBackend, usePbReflection, usePbReflectionSaveComment, usePbReflectionToggleShare } from "@/pb-compat";
+import { usePbReflection, usePbReflectionSaveComment, 
+usePbReflectionToggleShare, PbReflections } from "@/pb-compat";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,13 +21,11 @@ import {
   Quote,
   Hash,
 } from "lucide-react";
-import { api } from "../../../convex/_generated/api";
-import { Doc, Id } from "../../../convex/_generated/dataModel";
 
 interface ReflectionWrappedModalProps {
-  reflectionId: Id<"reflections"> | null;
+  reflectionId: string | null;
   onClose: () => void;
-  onExportImage?: (reflectionId: Id<"reflections">) => Promise<void>;
+  onExportImage?: (reflectionId: string) => Promise<void>;
 }
 
 const SLIDE_COUNT = 5;
@@ -46,22 +44,12 @@ export function ReflectionWrappedModal({
   const [saved, setSaved] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  const pbReflection = usePbReflection(reflectionId);
-  const convexReflection = useQuery(
-    api.reflections.getReflection,
-    reflectionId ? { id: reflectionId } : "skip",
-  );
-  const reflection = isPbBackend() ? pbReflection : convexReflection;
+  const reflection = usePbReflection(reflectionId);
 
-  const convexSaveComment = useMutation(api.reflections.saveUserComment);
-  const pbSaveComment = usePbReflectionSaveComment();
-  const saveComment = isPbBackend() ? pbSaveComment : (args: any) => convexSaveComment(args);
+  const saveComment = usePbReflectionSaveComment();
+  const toggleShare = usePbReflectionToggleShare();
 
-  const convexToggleShare = useMutation(api.reflections.toggleShareReflection);
-  const pbToggleShare = usePbReflectionToggleShare();
-  const toggleShare = isPbBackend() ? pbToggleShare : (args: any) => convexToggleShare(args);
-
-  const [trackedId, setTrackedId] = useState<Id<"reflections"> | null>(reflectionId);
+  const [trackedId, setTrackedId] = useState<string | null>(reflectionId);
   if (trackedId !== reflectionId) {
     setTrackedId(reflectionId);
     setCurrentSlide(0);
@@ -337,7 +325,7 @@ function AmbientBackdrop({ slideKey }: { slideKey: string }) {
   );
 }
 
-function HeroSlide({ reflection }: { reflection: Doc<"reflections"> }) {
+function HeroSlide({ reflection }: { reflection: PbReflections }) {
   const stats = reflection.stats;
   const heroStat = useMemo(() => {
     const candidates: Array<{ key: string; value: number; suffix?: string }> = [
@@ -450,7 +438,7 @@ function HeroSlide({ reflection }: { reflection: Doc<"reflections"> }) {
   );
 }
 
-function StatsSlide({ reflection }: { reflection: Doc<"reflections"> }) {
+function StatsSlide({ reflection }: { reflection: PbReflections }) {
   const stats = reflection.stats;
   const items: Array<{
     key: string;
@@ -577,7 +565,7 @@ function StatsSlide({ reflection }: { reflection: Doc<"reflections"> }) {
   );
 }
 
-function FocusSlide({ reflection }: { reflection: Doc<"reflections"> }) {
+function FocusSlide({ reflection }: { reflection: PbReflections }) {
   const stats = reflection.stats;
   const categories = useMemo<string[]>(
     () => stats.topCategories ?? [],
@@ -690,7 +678,7 @@ function FocusSlide({ reflection }: { reflection: Doc<"reflections"> }) {
   );
 }
 
-function NarrativeSlide({ reflection }: { reflection: Doc<"reflections"> }) {
+function NarrativeSlide({ reflection }: { reflection: PbReflections }) {
   return (
     <div className="space-y-5 sm:space-y-6">
       <motion.div
@@ -800,7 +788,7 @@ function NarrativeSlide({ reflection }: { reflection: Doc<"reflections"> }) {
 }
 
 interface JournalSlideProps {
-  reflection: Doc<"reflections">;
+  reflection: PbReflections;
   journalText: string;
   setJournalText: (s: string) => void;
   saved: boolean;

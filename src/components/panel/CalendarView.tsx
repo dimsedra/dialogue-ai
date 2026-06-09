@@ -2,27 +2,25 @@ import { format, isSameDay } from "date-fns";
 import { motion } from "framer-motion";
 import { DayPicker, type DayButtonProps } from "react-day-picker";
 import { Calendar as CalendarIcon, Clock, Edit3, RefreshCw, Tag, Trash2, Zap, MessageSquarePlus } from "lucide-react";
-import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { PbTasks, PbEvents, PbWorkspaces } from "@/pb-compat/_generated/dataModel";
 import { EventDoc, TaskDoc } from "./types";
 import { useState, useMemo } from "react";
-import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { usePbHabitLog } from "@/pb-compat";
 import { HabitWithLogs } from "./HabitList";
-import { isPbBackend, usePbHabitLog } from "@/pb-compat";
 
 interface CalendarViewProps {
   selectedDate: Date | undefined;
   setSelectedDate: (date: Date | undefined) => void;
   taskDates: Date[];
   eventDates: Date[];
-  tasksOnSelectedDate: Doc<"tasks">[];
-  eventsOnSelectedDate: Doc<"events">[];
-  workspaces: Doc<"workspaces">[] | undefined;
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  tasksOnSelectedDate: PbTasks[];
+  eventsOnSelectedDate: PbEvents[];
+  workspaces: PbWorkspaces[] | undefined;
+  activeWorkspaceId: string | undefined;
   isLargeViewport: boolean;
-  onEditEvent: (data: { id: Id<"events">; event: EventDoc; timestamp: number }) => void;
+  onEditEvent: (data: { id: string; event: EventDoc; timestamp: number }) => void;
   onDeleteEvent: (event: EventDoc) => void;
-  onDeleteTask: (id: Id<"tasks">) => void;
+  onDeleteTask: (id: string) => void;
   onReferDate?: (date: Date) => void;
   onReferEvent?: (event: EventDoc) => void;
   onReferTask?: (task: TaskDoc) => void;
@@ -51,9 +49,7 @@ export function CalendarView({
   todayDateString,
   onReferHabit,
 }: CalendarViewProps) {
-  const pbLogHabit = usePbHabitLog();
-  const convexLogHabit = useMutation(api.habits.logHabit);
-  const logHabit: (args: any) => Promise<any> = isPbBackend() ? pbLogHabit : (args: any) => convexLogHabit(args);
+  const logHabit = usePbHabitLog();
   const [loggingId, setLoggingId] = useState<string | null>(null);
 
   const selectedDateStr = useMemo(() => {
@@ -81,7 +77,7 @@ export function CalendarView({
     });
   }, [habits, selectedDate, selectedDateStr]);
 
-  const handleLogHabit = async (habitId: Id<"habits">, status: "completed" | "skipped") => {
+  const handleLogHabit = async (habitId: string, status: "completed" | "skipped") => {
     const opId = `${habitId}-${status}`;
     setLoggingId(opId);
     try {
@@ -195,9 +191,9 @@ export function CalendarView({
 
         <div className="space-y-2">
           {/* Events Section */}
-          {eventsOnSelectedDate.map((event: Doc<"events">) => {
+          {eventsOnSelectedDate.map((event: PbEvents) => {
             const isCancelled = (event as any).cancelled === true;
-            const eventWorkspace = workspaces?.find((w) => w._id === event.workspaceId);
+            const eventWorkspace = workspaces?.find((w) => w._id === event.workspace);
             return (
               <div
                 key={`${event._id}_${event.startTime}`}
@@ -322,7 +318,7 @@ export function CalendarView({
           })}
 
           {/* Tasks Section */}
-          {tasksOnSelectedDate.map((task: Doc<"tasks">) => (
+          {tasksOnSelectedDate.map((task: PbTasks) => (
             <div
               key={task._id}
               className={`p-4 rounded-2xl bg-[#1f1d19] border border-[#2a2723] flex items-center gap-4 group hover:border-[#d4a373]/20 transition-all ${
@@ -449,3 +445,4 @@ export function CalendarView({
     </motion.div>
   );
 }
+

@@ -3,19 +3,9 @@ import { useQuery } from "../use-query";
 import { defineQuery } from "../use-query";
 import { getPbClient } from "../client";
 import type { PbMemories } from "../_generated/dataModel";
-import type { Doc } from "../../../convex/_generated/dataModel";
 
-export function mapMemory(pb: PbMemories): Doc<"memories"> {
-  return {
-    _id: pb.id as any,
-    _creationTime: pb.createdAt,
-    userId: pb.user as any,
-    text: pb.text,
-    embedding: pb.embedding,
-    hash: pb.hash || undefined,
-    createdAt: pb.createdAt,
-    updatedAt: pb.updatedAt,
-  } as any;
+export function mapMemory(pb: PbMemories): PbMemories {
+  return pb;
 }
 
 export const memoriesListQuery = defineQuery<
@@ -40,7 +30,7 @@ export const memoriesListQuery = defineQuery<
   }
 );
 
-export function usePbMemoriesList(): Doc<"memories">[] | undefined {
+export function usePbMemoriesList(): PbMemories[] | undefined {
   const { user } = useAuth();
   const list = useQuery(memoriesListQuery, user ? { userId: user.id } : undefined);
   if (list === undefined) return undefined;

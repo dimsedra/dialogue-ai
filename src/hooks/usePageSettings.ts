@@ -1,57 +1,95 @@
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery, useMutation, useAuth, pageSettingsGetQuery, type PbPageSettings } from "@/pb-compat";
+import { useCallback, useState, useEffect, useRef } from "react";
 
 export function usePageSettings<T extends Record<string, any>>(
   page: "dashboard",
   defaults: T
 ): [T, (updates: Partial<T>) => void] {
-  const serverData = useQuery(api.pageSettings.get, { page });
-  const updateMutation = useMutation(api.pageSettings.update);
+  const { user } = useAuth();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // 1. Reactive query to fetch page settings
+  const pbSettingsRecord = useQuery(
+    pageSettingsGetQuery,
+    user ? { user: user.id, page } : undefined
+  );
 
-  // Local settings state
+  // 2. Mutation hooks
+  const mutate = useMutation<PbPageSettings>({
+    collection: "page_settings",
+    kind: "update",
+  });
+  const create = useMutation<PbPageSettings>({
+    collection: "page_settings",
+    kind: "create",
+  });
+
+  // 3. Local settings state for snappy client-side updates
   const [localSettings, setLocalSettings] = useState<T>(defaults);
 
-  // Refs to avoid stale closure issues in debounced save
-  const latestLocalRef = useRef<T>(localSettings);
-  latestLocalRef.current = localSettings;
-
-  const debouncedSaveRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  // Initialize local settings when server data loads
+  // Sync state when database settings load/change
   useEffect(() => {
-    if (serverData !== undefined) {
-      setLocalSettings(serverData ? (serverData.settings as unknown as T) : defaults);
+    if (pbSettingsRecord?.settings) {
+      setLocalSettings(pbSettingsRecord.settings as unknown as T);
     }
-  }, [serverData, defaults]);
+  }, [pbSettingsRecord]);
 
-  const update = useCallback((updates: Partial<T>) => {
-    // Optimistically update local state immediately
-    const nextSettings = { ...latestLocalRef.current, ...updates };
-    setLocalSettings(nextSettings);
-
-    // Debounce saving to the server (100ms)
-    if (debouncedSaveRef.current) {
-      clearTimeout(debouncedSaveRef.current);
-    }
-
-    debouncedSaveRef.current = setTimeout(async () => {
-      try {
-        await updateMutation({ page, settings: nextSettings as any });
-      } catch (error) {
-        console.error(`Failed to save settings for page ${page}:`, error);
-      }
-    }, 100);
-  }, [page, updateMutation]);
-
-  // Clean up timer on unmount
+  // Clean up timeouts on unmount
   useEffect(() => {
     return () => {
-      if (debouncedSaveRef.current) {
-        clearTimeout(debouncedSaveRef.current);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
     };
   }, []);
 
-  return [localSettings, update];
+  const updateSettings = useCallback(
+    (updates: Partial<T>) => {
+      if (!user) return;
+      
+      const newSettings = { ...localSettings, ...updates };
+      
+      // Optimistic update for instant responsiveness
+      setLocalSettings(newSettings);
+
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      timeoutRef.current = setTimeout(async () => {
+        try {
+          const pb = (await import("@/pb-compat/client")).getPbClient();
+          
+          // Find existing record — disable query auto-cancellation
+          const list = await pb.collection("page_settings").getList(1, 1, {
+            filter: `user = "${user.id}" && page = "${page}"`,
+            requestKey: null,
+          });
+          const existing = list.items[0];
+
+          if (existing) {
+            await mutate({
+              id: existing.id,
+              record: {
+                settings: newSettings as any,
+              },
+            });
+          } else {
+            await create({
+              user: user.id as any,
+              page,
+              settings: newSettings as any,
+            } as any);
+          }
+        } catch (err: any) {
+          // Gracefully ignore auto-cancellation aborts from concurrent updates
+          if (err?.isAbort) return;
+          console.error("Failed to save page settings:", err);
+        }
+      }, 300); // 300ms debounce
+    },
+    [user, page, localSettings, mutate, create]
+  );
+
+  return [localSettings, updateSettings];
 }

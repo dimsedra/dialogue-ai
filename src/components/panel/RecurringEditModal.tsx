@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Edit3, X } from "lucide-react";
-import { Id } from "../../../convex/_generated/dataModel";
 import { ConfirmEditRecurringData, EventUpdateData } from "./types";
 
 interface RecurringEditModalProps {
   data: ConfirmEditRecurringData;
   isLargeViewport: boolean;
-  onSaveSeries: (id: Id<"events">, updates: EventUpdateData) => Promise<void>;
-  onSaveOccurrence: (seriesId: Id<"events">, originalStartTime: number, updates: EventUpdateData) => Promise<void>;
+  onSaveSeries: (id: string, updates: EventUpdateData) => Promise<void>;
+  onSaveOccurrence: (seriesId: string, originalStartTime: number, updates: EventUpdateData) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -120,3 +119,7 @@ export function RecurringEditModal({
     </motion.div>
   );
 }
+
+
+
+

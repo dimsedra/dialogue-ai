@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { Sparkles, Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Id } from "../../../convex/_generated/dataModel";
 import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import { ScrollToBottom } from "./ScrollToBottom";
@@ -30,7 +29,7 @@ interface MessageStreamProps {
       title: string;
     };
   }> | undefined;
-  activeSessionId: Id<"chatSessions"> | null;
+  activeSessionId: string | null;
   isTyping: boolean;
   isSyncing: boolean;
   isLargeViewport: boolean;
@@ -61,8 +60,8 @@ export const MessageStream = React.memo(function MessageStream({
   const mainScrollRef = useRef<HTMLElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadOlderSentinelRef = useRef<HTMLDivElement>(null);
-  const prevScrollSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
-  const lastAnchoredSessionIdRef = useRef<Id<"chatSessions"> | null>(null);
+  const prevScrollSessionIdRef = useRef<string | null>(null);
+  const lastAnchoredSessionIdRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef(0);
   const prevScrollHeightRef = useRef<number>(0);
   const expectedLengthOnLoadRef = useRef<number | null>(null);

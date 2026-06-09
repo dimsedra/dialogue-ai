@@ -39,6 +39,7 @@ export const pbId = <T extends keyof PbRecordMap>(s: string): PbId<T> =>
 
 export interface PbRecord {
   id: PbId;
+  _id: PbId;
   collectionId: string;
   collectionName: string;
 }

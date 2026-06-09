@@ -1,5 +1,5 @@
 import type PocketBase from "pocketbase";
-import { decrypt } from "../../../convex/encryption";
+import { decrypt } from "../encryption";
 import { getLocalDateString, getTodayBounds } from "./dateUtils";
 
 export interface GenerateDailySummaryArgs {
@@ -114,7 +114,7 @@ export async function generateDailySummary(
   }
 
   const { runSimpleTask, getTaskProviderAndModel } = await import(
-    "../../../convex/ai_providers"
+    "../ai-providers"
   );
   const resolved = getTaskProviderAndModel(
     { preferences: { provider, taskModels } },

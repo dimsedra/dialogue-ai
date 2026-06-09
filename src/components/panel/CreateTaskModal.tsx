@@ -15,13 +15,9 @@ import {
   FileText,
   Bell
 } from "lucide-react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
-import { isPbBackend, usePbWorkspacesList } from "@/pb-compat";
-
+import { usePbWorkspacesList } from "@/pb-compat";
 interface CreateTaskModalProps {
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  activeWorkspaceId: string | undefined;
   isLargeViewport: boolean;
   onSave: (
     updates: {
@@ -29,7 +25,7 @@ interface CreateTaskModalProps {
       priority: "low" | "medium" | "high";
       category: string;
       dueDate?: number;
-      workspaceId?: Id<"workspaces"> | null;
+      workspaceId?: string | null;
       resources?: any[];
       reminderOffset: number | null;
     }
@@ -59,14 +55,9 @@ export function CreateTaskModal({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Convex Queries and Mutations
-  const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, {});
-  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+  const workspaces = usePbWorkspacesList();
 
-  const pbGenerateUploadUrl = async () => "";
-  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
-  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
+  const generateUploadUrl = async () => "";
 
   // Pre-select active workspace
   useEffect(() => {
@@ -88,7 +79,7 @@ export function CreateTaskModal({
         priority: taskPriority,
         category: taskCategory,
         dueDate: finalDueDate,
-        workspaceId: taskWorkspaceId ? (taskWorkspaceId as Id<"workspaces">) : null,
+        workspaceId: taskWorkspaceId || null,
         resources: resources,
         reminderOffset: finalReminderOffset,
       });
@@ -455,3 +446,9 @@ export function CreateTaskModal({
     </motion.div>
   );
 }
+
+
+
+
+
+

@@ -1,5 +1,5 @@
 import type PocketBase from "pocketbase";
-import { decrypt } from "../../../convex/encryption";
+import { decrypt } from "../encryption";
 import { getPeriodRange, getPeriodLabel } from "./dateUtils";
 import { compileReflectionStats } from "./compileReflectionStats";
 
@@ -65,7 +65,7 @@ export async function generateCronReflection(
   }
 
   const { runSimpleTask, getTaskProviderAndModel } = await import(
-    "../../../convex/ai_providers"
+    "../ai-providers"
   );
   const resolved = getTaskProviderAndModel(
     { preferences: { provider, taskModels } },

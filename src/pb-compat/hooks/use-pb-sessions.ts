@@ -2,30 +2,18 @@ import { useAuth } from "../auth";
 import { useQuery } from "../use-query";
 import { listSessionsQuery, getSessionQuery } from "../descriptors/chatSessions";
 import { usePbPersonasList } from "./use-pb-personas";
-import type { Doc } from "../../../convex/_generated/dataModel";
 import type { PbChatSessions } from "../_generated/dataModel";
 
 const DEFAULT_PROMPT = "You build relationships through concrete behaviors, not prescribed tones.";
 
-export function mapSession(pb: PbChatSessions): Doc<"chatSessions"> {
-  return {
-    _id: pb.id as unknown as Doc<"chatSessions">["_id"],
-    _creationTime: pb.createdAt,
-    userId: pb.user as unknown as Doc<"chatSessions">["userId"],
-    title: pb.title,
-    workspaceId: pb.workspace as unknown as Doc<"chatSessions">["workspaceId"],
-    agentPersonaId: pb.agentPersona as unknown as Doc<"chatSessions">["agentPersonaId"],
-    timezone: pb.timezone,
-    createdAt: pb.createdAt,
-    lastActivity: pb.lastActivity,
-    pinned: pb.pinned,
-  } as unknown as Doc<"chatSessions">;
+export function mapSession(pb: PbChatSessions): PbChatSessions {
+  return pb;
 }
 
 export function usePbSessionsList(args?: {
   workspaceId?: string;
   allWorkspaces?: boolean;
-}): Doc<"chatSessions">[] | undefined {
+}): PbChatSessions[] | undefined {
   const { user } = useAuth();
   const sessions = useQuery(
     listSessionsQuery,
@@ -41,7 +29,7 @@ export function usePbSessionsList(args?: {
   return sessions.map(mapSession);
 }
 
-export interface PbSessionWithPersona extends Doc<"chatSessions"> {
+export interface PbSessionWithPersona extends PbChatSessions {
   personaName: string;
   personaPrompt: string;
 }
@@ -64,7 +52,7 @@ export function usePbSession(
   let personaPrompt = DEFAULT_PROMPT;
 
   if (session.agentPersona) {
-    const persona = personas.find((p) => p._id === (session.agentPersona as any));
+    const persona = personas.find((p) => p.id === session.agentPersona);
     if (persona) {
       personaName = persona.name;
       personaPrompt = persona.prompt;

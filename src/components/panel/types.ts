@@ -1,7 +1,7 @@
-import { Doc, Id } from "../../../convex/_generated/dataModel";
+import { PbTasks, PbEvents } from "@/pb-compat/_generated/dataModel";
 
-export type TaskDoc = Doc<"tasks">;
-export type EventDoc = Doc<"events">;
+export type TaskDoc = PbTasks;
+export type EventDoc = PbEvents;
 
 export interface EventUpdateData {
   title: string;
@@ -11,14 +11,14 @@ export interface EventUpdateData {
   endTime?: number;
   eventType?: "interval" | "point";
   recurrence?: { frequency: "daily" | "weekly"; interval: number; daysOfWeek?: number[]; until?: number } | null;
-  workspaceId?: Id<"workspaces"> | null;
+  workspaceId?: string | null;
   reminderOffset?: number | null;
-  resources?: any[];
+  resources?: unknown[];
   overwriteResources?: boolean;
 }
 
 export interface ConfirmEditRecurringData {
-  id: Id<"events">;
+  id: string;
   event: EventDoc;
   updates: EventUpdateData;
   timestamp: number;

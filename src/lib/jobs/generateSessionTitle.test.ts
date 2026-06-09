@@ -7,12 +7,12 @@
 // Mock strategy:
 //   - The PB client is mocked at the `getOne` / `getFirstListItem` /
 //     `getList` / `update` level.
-//   - The `convex/ai_providers` module is mocked at the dynamic
+//   - The `../ai-providers` module is mocked at the dynamic
 //     `import()` level. Vitest's `vi.mock` can't intercept dynamic
 //     imports from inside `generateSessionTitle`, so we mock the
 //     `runSimpleTask` and `getTaskProviderAndModel` via module-level
 //     hoisted mocks on the module's exports.
-//   - The `convex/encryption` module's `decrypt` is mocked similarly.
+//   - The `../encryption` module's `decrypt` is mocked similarly.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type PocketBase from "pocketbase";
@@ -25,12 +25,12 @@ const mockRunSimpleTask = vi.fn();
 const mockGetTaskProviderAndModel = vi.fn();
 const mockDecrypt = vi.fn();
 
-vi.mock("../../../convex/ai_providers", () => ({
+vi.mock("../ai-providers", () => ({
   runSimpleTask: mockRunSimpleTask,
   getTaskProviderAndModel: mockGetTaskProviderAndModel,
 }));
 
-vi.mock("../../../convex/encryption", () => ({
+vi.mock("../encryption", () => ({
   decrypt: mockDecrypt,
 }));
 

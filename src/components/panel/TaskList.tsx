@@ -1,21 +1,21 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Circle, Edit3, Trash2, ChevronUp, ChevronDown, Clock, AlertCircle, Tag, CheckCircle2, Archive, Paperclip, MessageSquarePlus, Plus } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
-import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { PbTasks, PbWorkspaces } from "@/pb-compat/_generated/dataModel";
 import { TaskDoc } from "./types";
 import { formatDateLabel } from "./utils";
 import { ResourceTray } from "./ResourceTray";
 
 interface TaskListProps {
-  tasks: Doc<"tasks">[] | undefined;
-  workspaces: Doc<"workspaces">[] | undefined;
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  tasks: PbTasks[] | undefined;
+  workspaces: PbWorkspaces[] | undefined;
+  activeWorkspaceId: string | undefined;
   isLargeViewport: boolean;
-  expandedTaskId: Id<"tasks"> | null;
-  setExpandedTaskId: (id: Id<"tasks"> | null) => void;
-  onToggleTask: (id: Id<"tasks">) => void;
+  expandedTaskId: string | null;
+  setExpandedTaskId: (id: string | null) => void;
+  onToggleTask: (id: string) => void;
   onEditTask: (task: TaskDoc) => void;
-  onDeleteTask: (id: Id<"tasks">) => void;
+  onDeleteTask: (id: string) => void;
   onReferTask?: (task: TaskDoc) => void;
   onCreateTask?: () => void;
 }
@@ -43,8 +43,8 @@ export function TaskList({
 
   const { activeTasks, recentCompletedTasks, olderCount } = useMemo(() => {
     if (!tasks) return { activeTasks: [], recentCompletedTasks: [], olderCount: 0 };
-    const active: Doc<"tasks">[] = [];
-    const completed: Doc<"tasks">[] = [];
+    const active: PbTasks[] = [];
+    const completed: PbTasks[] = [];
 
     for (const t of tasks) {
       if (t.completed) completed.push(t);
@@ -52,7 +52,7 @@ export function TaskList({
     }
 
     const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
-    const recentComp: Doc<"tasks">[] = [];
+    const recentComp: PbTasks[] = [];
     let oldCnt = 0;
 
     for (const t of completed) {
@@ -64,8 +64,8 @@ export function TaskList({
     return { activeTasks: active, recentCompletedTasks: recentComp, olderCount: oldCnt };
   }, [tasks, now]);
 
-  const renderTask = (task: Doc<"tasks">, isCompletedArchive: boolean) => {
-    const taskWorkspace = workspaces?.find((w) => w._id === task.workspaceId);
+  const renderTask = (task: PbTasks, isCompletedArchive: boolean) => {
+    const taskWorkspace = workspaces?.find((w) => w._id === task.workspace);
     return (
       <motion.div
         key={task._id}
@@ -323,3 +323,4 @@ export function TaskList({
     </motion.div>
   );
 }
+

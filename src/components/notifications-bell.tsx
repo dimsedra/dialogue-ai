@@ -1,11 +1,18 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { useQuery, useMutation, defineQuery } from "@/pb-compat";
+import type { PbNotifications } from "@/pb-compat/_generated/dataModel";
 import { useState, useRef, useEffect } from "react";
 import { Bell, Check, Calendar, CheckSquare, BellOff, Info, ListTodo } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+
+const listUnreadQuery = defineQuery<Record<string, never>, PbNotifications[]>(
+  { collection: "notifications", kind: "list", buildFilter: () => "read = false" },
+  async () => { throw new Error("stub - use useQuery"); }
+);
+
+const markReadMutation = { collection: "notifications", kind: "update" } as const;
 
 export const rewriteActionUrl = (url?: string) => {
   if (!url) return undefined;
@@ -22,9 +29,9 @@ export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  const notifications = useQuery(api.notifications.listUnread) || [];
-  const markRead = useMutation(api.notifications.markRead);
-  const markAllRead = useMutation(api.notifications.markAllRead);
+  const notifications = useQuery(listUnreadQuery) || [];
+  const markRead = useMutation<PbNotifications>(markReadMutation);
+  const markAllRead = useMutation<PbNotifications>(markReadMutation);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -39,11 +46,13 @@ export function NotificationBell() {
 
   const handleMarkAll = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    await markAllRead();
+    for (const n of notifications) {
+      await markAllRead({ id: n.id, record: { read: true } });
+    }
   };
 
   const handleItemClick = async (id: any, actionUrl?: string) => {
-    await markRead({ ids: [id] });
+    await markRead({ id, record: { read: true } });
     setIsOpen(false);
     const targetUrl = rewriteActionUrl(actionUrl);
     if (targetUrl) {
@@ -131,8 +140,8 @@ export function NotificationBell() {
               ) : (
                 notifications.map((item) => (
                   <button
-                    key={item._id}
-                    onClick={() => handleItemClick(item._id, item.actionUrl)}
+                    key={item.id}
+                    onClick={() => handleItemClick(item.id, item.actionUrl)}
                     className="w-full p-4 hover:bg-[#2a2723]/20 transition-all text-left flex items-start gap-3 border-none group focus:outline-none"
                   >
                     <div className="p-1.5 rounded-lg bg-[#0f0e0c] border border-[#2a2723]/30 group-hover:border-[#d4a373]/20 transition-all shrink-0">
@@ -165,3 +174,4 @@ export function NotificationBell() {
     </div>
   );
 }
+

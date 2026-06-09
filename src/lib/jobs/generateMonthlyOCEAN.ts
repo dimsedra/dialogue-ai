@@ -1,5 +1,5 @@
 import type PocketBase from "pocketbase";
-import { decrypt } from "../../../convex/encryption";
+import { decrypt } from "../encryption";
 
 export interface GenerateMonthlyOCEANArgs {
   userId: string;
@@ -77,7 +77,7 @@ export async function generateMonthlyOCEAN(
 
   // 3. Prepare AI run
   const { runSimpleTask, getTaskProviderAndModel } = await import(
-    "../../../convex/ai_providers"
+    "../ai-providers"
   );
   const resolved = getTaskProviderAndModel(
     { preferences: { provider, taskModels } },

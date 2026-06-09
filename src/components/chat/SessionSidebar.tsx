@@ -3,24 +3,20 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard, ChevronDown, Bot } from "lucide-react";
 import { motion } from "framer-motion";
-import { useMutation, useQuery as useConvexQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { isPbBackend, usePbPersonasList, usePbSessionRename, usePbSessionTogglePin } from "@/pb-compat";
-import { Id } from "../../../convex/_generated/dataModel";
-import { Doc } from "../../../convex/_generated/dataModel";
+import { usePbPersonasList, usePbSessionRename, usePbSessionTogglePin, PbChatSessions, PbWorkspaces } from "@/pb-compat";
 
 interface SessionSidebarProps {
-  sessions: Doc<"chatSessions">[] | undefined;
-  workspaces: Doc<"workspaces">[] | undefined;
-  activeSessionId: Id<"chatSessions"> | null;
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  sessions: PbChatSessions[] | undefined;
+  workspaces: PbWorkspaces[] | undefined;
+  activeSessionId: string | null;
+  activeWorkspaceId: string | undefined;
   showHistory: boolean;
   isLargeViewport: boolean;
-  onSelectSession: (id: Id<"chatSessions">) => void;
-  onSelectWorkspaceSession: (workspaceId: Id<"workspaces">, sessionId: Id<"chatSessions">) => void;
-  onNewChat: (workspaceId?: Id<"workspaces"> | null, agentPersonaId?: Id<"agentPersonas">) => void;
-  onDeleteChat: (id: Id<"chatSessions">, e: React.MouseEvent) => void;
-  onSelectWorkspace: (id: Id<"workspaces"> | undefined) => void;
+  onSelectSession: (id: string) => void;
+  onSelectWorkspaceSession: (workspaceId: string, sessionId: string) => void;
+  onNewChat: (workspaceId?: string | null, agentPersonaId?: string) => void;
+  onDeleteChat: (id: string, e: React.MouseEvent) => void;
+  onSelectWorkspace: (id: string | undefined) => void;
   onOpenCreateWorkspace: () => void;
   onCloseHistory: () => void;
 }
@@ -41,48 +37,41 @@ export function SessionSidebar({
   onCloseHistory,
 }: SessionSidebarProps) {
   // Own state — isolated from Chat.tsx to prevent cross-component re-renders
-  const [editingSessionId, setEditingSessionId] = useState<Id<"chatSessions"> | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
-  const [selectedWsId, setSelectedWsId] = useState<Id<"workspaces"> | undefined>(undefined);
+  const [selectedWsId, setSelectedWsId] = useState<string | undefined>(undefined);
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
-  const [selectedPersonaId, setSelectedPersonaId] = useState<Id<"agentPersonas"> | undefined>(undefined);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | undefined>(undefined);
 
-  const pbPersonas = usePbPersonasList();
-  const convexPersonas = useConvexQuery(api.personas.list);
-  const personas = isPbBackend() ? pbPersonas : convexPersonas;
+  const personas = usePbPersonasList();
   const activeSession = sessions?.find(s => s._id === activeSessionId);
-  const activeSessionPersona = personas?.find(p => p._id === activeSession?.agentPersonaId) || personas?.find(p => p.isDefault);
+  const activeSessionPersona = personas?.find(p => p._id === activeSession?.agentPersona) || personas?.find(p => p.isDefault);
   const activePersona = personas?.find(p => p._id === selectedPersonaId) || personas?.find(p => p.isDefault);
 
-  const convexRenameSession = useMutation(api.messages.renameSession);
-  const pbRenameSession = usePbSessionRename();
-  const renameSession = isPbBackend() ? pbRenameSession : (args: any) => convexRenameSession(args);
+  const renameSession = usePbSessionRename();
+  const togglePinSession = usePbSessionTogglePin();
 
-  const convexTogglePinSession = useMutation(api.messages.togglePinSession);
-  const pbTogglePinSession = usePbSessionTogglePin();
-  const togglePinSession = isPbBackend() ? pbTogglePinSession : (args: any) => convexTogglePinSession(args);
-
-  const startEditing = (id: Id<"chatSessions">, title: string, e: React.MouseEvent) => {
+  const startEditing = (id: string, title: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingSessionId(id);
     setEditTitle(title);
   };
 
-  const handleRename = async (id: Id<"chatSessions">) => {
+  const handleRename = async (id: string) => {
     if (editTitle.trim()) {
       await renameSession({ id, title: editTitle.trim() });
     }
     setEditingSessionId(null);
   };
 
-  const handleTogglePin = async (id: Id<"chatSessions">, e?: React.MouseEvent) => {
+  const handleTogglePin = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     await togglePinSession({ id });
     setActionMenuSessionId(null);
   };
 
-  const [actionMenuSessionId, setActionMenuSessionId] = useState<Id<"chatSessions"> | null>(null);
+  const [actionMenuSessionId, setActionMenuSessionId] = useState<string | null>(null);
   const [sheetRenameMode, setSheetRenameMode] = useState(false);
   const [sheetRenameTitle, setSheetRenameTitle] = useState("");
 
@@ -118,12 +107,12 @@ export function SessionSidebar({
       .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
   }, [sessions]);
 
-  const renderSessionItem = (session: Doc<"chatSessions">) => (
+  const renderSessionItem = (session: PbChatSessions) => (
     <div
       key={session._id}
       onClick={() => {
-        if (!activeWorkspaceId && session.workspaceId) {
-          onSelectWorkspaceSession(session.workspaceId, session._id);
+        if (!activeWorkspaceId && session.workspace) {
+          onSelectWorkspaceSession(session.workspace, session._id);
         } else {
           onSelectSession(session._id);
         }
@@ -160,14 +149,14 @@ export function SessionSidebar({
                 <span className="text-sm font-medium truncate">{session.title}</span>
               </div>
 
-              {!activeWorkspaceId && session.workspaceId && (
+              {!activeWorkspaceId && session.workspace && (
                 <div className="flex items-center gap-1.5">
                   <div 
                     className="w-1 h-1 rounded-full" 
-                    style={{ backgroundColor: workspaces?.find(w => w._id === session.workspaceId)?.color }} 
+                    style={{ backgroundColor: workspaces?.find(w => w._id === session.workspace)?.color }} 
                   />
                   <span className="text-[8px] font-bold uppercase tracking-wider text-[#a8a29e]/50 truncate">
-                    {workspaces?.find(w => w._id === session.workspaceId)?.name}
+                    {workspaces?.find(w => w._id === session.workspace)?.name}
                   </span>
                 </div>
               )}

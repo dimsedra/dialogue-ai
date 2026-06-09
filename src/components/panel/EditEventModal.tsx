@@ -18,16 +18,12 @@ import {
   FolderKanban,
   FileText 
 } from "lucide-react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
 import { ConfirmEditRecurringData, EventDoc, EventUpdateData } from "./types";
-import { isPbBackend, usePbEventUpdate, usePbWorkspacesList } from "@/pb-compat";
-
+import { usePbEventUpdate, usePbWorkspacesList } from "@/pb-compat";
 interface EditEventModalProps {
-  editingData: { id: Id<"events">; event: EventDoc; timestamp: number };
+  editingData: { id: string; event: EventDoc; timestamp: number };
   isLargeViewport: boolean;
-  onSave: (id: Id<"events">, updates: EventUpdateData) => Promise<void>;
+  onSave: (id: string, updates: EventUpdateData) => Promise<void>;
   onSaveRecurring: (data: ConfirmEditRecurringData) => void;
   onDelete: (event: EventDoc) => void;
   onClose: () => void;
@@ -70,18 +66,11 @@ export function EditEventModal({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Convex queries & mutations
-  const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, {});
-  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+  const workspaces = usePbWorkspacesList();
 
-  const pbUpdateEvent = usePbEventUpdate();
-  const convexUpdateEvent = useMutation(api.events.update);
-  const updateEventMutation: (args: any) => Promise<any> = isPbBackend() ? pbUpdateEvent : (args: any) => convexUpdateEvent(args);
+  const updateEventMutation = usePbEventUpdate();
 
-  const pbGenerateUploadUrl = async () => "";
-  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
-  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
+  const generateUploadUrl = async () => "";
 
   useEffect(() => {
     if (event) {
@@ -96,7 +85,7 @@ export function EditEventModal({
             : format(new Date(event.startTime + 3600000), "yyyy-MM-dd'T'HH:mm")
         );
         setEditEventType(event.eventType || (event.endTime ? "interval" : "point"));
-        setEditEventWorkspaceId(event.workspaceId || "");
+        setEditEventWorkspaceId(event.workspace || "");
         setResources(event.resources || []);
         
         if (event.reminderOffset === undefined || event.reminderOffset === null) {
@@ -163,7 +152,7 @@ export function EditEventModal({
         endTime: editEventType === "interval" && finalEndTime ? finalEndTime : undefined,
         eventType: editEventType,
         recurrence: recurrenceRule,
-        workspaceId: editEventWorkspaceId ? (editEventWorkspaceId as Id<"workspaces">) : null,
+        workspaceId: editEventWorkspaceId || null,
         reminderOffset: finalReminderOffset,
         resources: resources,
         overwriteResources: true,
@@ -187,9 +176,8 @@ export function EditEventModal({
     setIsAddingNote(true);
     try {
       await updateEventMutation({
-        id: id,
+        eventId: id,
         notes: newNote.trim(),
-        timezoneOffset: new Date().getTimezoneOffset(),
       });
       setNewNote("");
       setNoteAddedToast(true);
@@ -755,3 +743,7 @@ export function EditEventModal({
     </motion.div>
   );
 }
+
+
+
+

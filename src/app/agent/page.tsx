@@ -1,9 +1,6 @@
 "use client";
 
-import { useQuery as useConvexQuery, useMutation as useConvexMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { isPbBackend, usePbPersonasList, usePbPersonaCreate, usePbPersonaUpdate, usePbPersonaDelete } from "@/pb-compat";
-import { Id, Doc } from "../../../convex/_generated/dataModel";
+import { usePbPersonasList, usePbPersonaCreate, usePbPersonaUpdate, usePbPersonaDelete } from "@/pb-compat";
 import { 
   ArrowLeft, 
   Trash2, 
@@ -21,21 +18,10 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function AgentPage() {
-  const pbPersonas = usePbPersonasList();
-  const convexPersonas = useConvexQuery(api.personas.list);
-  const personas = isPbBackend() ? pbPersonas : convexPersonas;
-
-  const pbCreatePersona = usePbPersonaCreate();
-  const pbUpdatePersona = usePbPersonaUpdate();
-  const pbDeletePersona = usePbPersonaDelete();
-
-  const convexCreatePersona = useConvexMutation(api.personas.create);
-  const convexUpdatePersona = useConvexMutation(api.personas.update);
-  const convexDeletePersona = useConvexMutation(api.personas.remove);
-
-  const createPersona = isPbBackend() ? pbCreatePersona : convexCreatePersona;
-  const updatePersona = isPbBackend() ? pbUpdatePersona : convexUpdatePersona;
-  const removePersona = isPbBackend() ? pbDeletePersona : convexDeletePersona;
+  const personas = usePbPersonasList();
+  const createPersona = usePbPersonaCreate();
+  const updatePersona = usePbPersonaUpdate();
+  const removePersona = usePbPersonaDelete();
 
   useEffect(() => {
     document.documentElement.classList.add("allow-scroll");
@@ -48,7 +34,7 @@ export default function AgentPage() {
 
   // Modal State Control
   const [activeModal, setActiveModal] = useState<"view" | "create" | "edit" | "delete" | null>(null);
-  const [selectedPersona, setSelectedPersona] = useState<Doc<"agentPersonas"> | null>(null);
+  const [selectedPersona, setSelectedPersona] = useState<any | null>(null);
 
   // Form states
   const [name, setName] = useState("");
@@ -65,12 +51,12 @@ export default function AgentPage() {
     setActiveModal("create");
   };
 
-  const handleOpenView = (p: Doc<"agentPersonas">) => {
+  const handleOpenView = (p: any) => {
     setSelectedPersona(p);
     setActiveModal("view");
   };
 
-  const handleOpenEdit = (p: Doc<"agentPersonas">) => {
+  const handleOpenEdit = (p: any) => {
     setSelectedPersona(p);
     setName(p.name);
     setDescription(p.description || "");
@@ -79,7 +65,7 @@ export default function AgentPage() {
     setActiveModal("edit");
   };
 
-  const handleOpenDelete = (p: Doc<"agentPersonas">) => {
+  const handleOpenDelete = (p: any) => {
     setSelectedPersona(p);
     setActiveModal("delete");
   };
@@ -109,7 +95,7 @@ export default function AgentPage() {
     try {
       if (activeModal === "edit" && selectedPersona) {
         await updatePersona({ 
-          id: selectedPersona._id, 
+          id: selectedPersona.id, 
           name: cleanName, 
           prompt: cleanPrompt, 
           description: cleanDescription 
@@ -137,7 +123,7 @@ export default function AgentPage() {
     if (!selectedPersona) return;
     setError(null);
     try {
-      await removePersona({ id: selectedPersona._id });
+      await removePersona({ id: selectedPersona.id });
       setSelectedPersona(null);
       setActiveModal(null);
     } catch (err: any) {
@@ -190,7 +176,7 @@ export default function AgentPage() {
             {/* Persona cards */}
             {personas.map((p) => (
               <div
-                key={p._id}
+                key={p.id}
                 onClick={() => handleOpenView(p)}
                 className="p-5 min-h-[140px] rounded-2xl border border-[#2a2723] hover:border-[#d4a373]/30 bg-[#1a1814]/40 hover:bg-[#1a1814]/60 transition-all duration-300 flex flex-col justify-between cursor-pointer group shadow-lg hover:shadow-[#d4a373]/5"
               >

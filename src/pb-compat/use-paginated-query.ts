@@ -40,6 +40,7 @@ import {
   type PbSubscribeEvent,
   type PaginationStatus,
 } from "./pagination";
+import { ensureIdProperties } from "./use-query";
 
 export type { PaginationStatus } from "./pagination";
 
@@ -115,7 +116,14 @@ export function usePaginatedQuery<
 
   // ---- Hooks below this line. Same order on every render. ----
 
-  const [results, setResults] = useState<TResult[]>([]);
+  const [rawResults, setRawResults] = useState<TResult[]>([]);
+  const setResults = (updater: TResult[] | ((prev: TResult[]) => TResult[])) => {
+    setRawResults((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      return ensureIdProperties(next);
+    });
+  };
+  const results = rawResults;
   const [status, setStatus] = useState<PaginationStatus>(
     isSkip ? "Exhausted" : "LoadingFirstPage",
   );

@@ -1,10 +1,7 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { isPbBackend, usePbProfile, usePbMemoriesList, usePbUpdateProfile, usePbUpdatePreferences, usePbAddSubscription, usePbRemoveSubscription, usePbMemoryCreate, usePbMemoryUpdate, usePbMemoryDelete } from "@/pb-compat";
+import { usePbProfile, usePbMemoriesList, usePbUpdateProfile, usePbUpdatePreferences, usePbAddSubscription, usePbRemoveSubscription, usePbMemoryCreate, usePbMemoryUpdate, usePbMemoryDelete } from "@/pb-compat";
 import { useAuth } from "@/pb-compat/auth";
-import { Doc, Id } from "../../../convex/_generated/dataModel";
 import {
   ArrowLeft,
   User,
@@ -31,7 +28,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuthActions } from "@convex-dev/auth/react";
+
 import { getProviderIcon } from "@/components/ProviderIcons";
 import { checkEmbeddingModel } from "@/app/actions/checkEmbeddingModel";
 import { getLocalEmbedding } from "@/lib/graph/embedding";
@@ -53,54 +50,29 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 export default function SettingsPage() {
-  // B.7.3: read profile from PB when the flag is on, from Convex
-  // otherwise. Both hooks run unconditionally (Rules of Hooks); the
-  // unused result is discarded at the ternary below. In production
-  // with the flag off, the entire PB branch is DCE'd at build time.
-  const pbProfile = usePbProfile();
-  const convexProfile = useQuery(api.ai.getProfile, {});
-  const profile = isPbBackend() ? pbProfile : convexProfile;
+  const profile = usePbProfile();
 
   const pbAuth = useAuth();
-  // ... rest of the hooks ...
 
-  const pbMemories = usePbMemoriesList();
-  const convexMemories = useQuery(api.ai.getAllMemories, {});
-  const memories = isPbBackend() ? pbMemories : convexMemories;
+  const memories = usePbMemoriesList();
 
-  const pbUpdateProfile = usePbUpdateProfile();
-  const convexUpdateProfile = useMutation(api.ai.updateProfile);
-  const updateProfile = isPbBackend() ? pbUpdateProfile : convexUpdateProfile;
+  const updateProfile = usePbUpdateProfile();
 
-  const pbUpdateMemory = usePbMemoryUpdate();
-  const convexUpdateMemory = useMutation(api.ai.updateMemoryText);
-  const updateMemory = isPbBackend() ? pbUpdateMemory : convexUpdateMemory;
+  const updateMemory = usePbMemoryUpdate();
 
-  const pbDeleteMemory = usePbMemoryDelete();
-  const convexDeleteMemory = useMutation(api.ai.deleteMemory);
-  const deleteMemory = isPbBackend() ? pbDeleteMemory : convexDeleteMemory;
+  const deleteMemory = usePbMemoryDelete();
 
-  const pbAddMemory = usePbMemoryCreate();
-  const convexAddMemory = useMutation(api.ai.saveMemory);
-  const addMemory = isPbBackend() ? pbAddMemory : convexAddMemory;
+  const addMemory = usePbMemoryCreate();
 
-  const pbUpdatePreferences = usePbUpdatePreferences();
-  const convexUpdatePreferences = useMutation(api.ai.updatePreferences);
-  const updatePreferences = isPbBackend() ? pbUpdatePreferences : convexUpdatePreferences;
+  const updatePreferences = usePbUpdatePreferences();
 
-  const pbAddSubscription = usePbAddSubscription();
-  const convexAddSubscription = useMutation(api.push.addSubscription);
-  const addSubscription = isPbBackend() ? pbAddSubscription : convexAddSubscription;
-
-  const pbRemoveSubscription = usePbRemoveSubscription();
-  const convexRemoveSubscription = useMutation(api.push.removeSubscription);
-  const removeSubscription = isPbBackend() ? pbRemoveSubscription : convexRemoveSubscription;
-  const publicKey = useQuery(api.push.getPublicKey, {});
-  const { signOut } = useAuthActions();
+  const addSubscription = usePbAddSubscription();
+  const removeSubscription = usePbRemoveSubscription();
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
   const router = useRouter();
 
   useEffect(() => {
-    if (isPbBackend() && !pbAuth.isLoading && !pbAuth.user) {
+    if (!pbAuth.isLoading && !pbAuth.user) {
       router.push("/");
     }
   }, [pbAuth.isLoading, pbAuth.user, router]);
@@ -133,37 +105,38 @@ export default function SettingsPage() {
     "profile",
   );
   const [isSaving, setIsSaving] = useState(false);
-  const [editingMemoryId, setEditingMemoryId] = useState<Id<"memories"> | null>(
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(
     null,
   );
   const [editMemoryText, setEditMemoryText] = useState("");
   const [newMemoryText, setNewMemoryText] = useState("");
   const [pushEnabled, setPushEnabled] = useState(false);
-  const [prevProfileId, setPrevProfileId] = useState<Id<"userProfile"> | null>(
+  const [prevProfileId, setPrevProfileId] = useState<string | null>(
     null,
   );
 
   // Sync state during render when profile loads/changes
-  if (profile && profile._id !== prevProfileId) {
-    setPrevProfileId(profile._id);
+  if (profile && (profile as any)._id !== prevProfileId) {
+    setPrevProfileId((profile as any)._id);
     setName(profile.name || "");
     setBio(profile.bio || "");
-    if (profile.preferences?.provider) {
-      setProvider(profile.preferences.provider as AIProvider);
+    const prefs = profile.preferences as Record<string, unknown> | undefined;
+    if (prefs?.provider) {
+      setProvider(prefs.provider as AIProvider);
     }
-    if (profile.preferences?.customConfigs) {
-      setCustomConfigs(profile.preferences.customConfigs);
+    if (prefs?.customConfigs) {
+      setCustomConfigs(prefs.customConfigs as Record<string, { apiKey?: string; baseUrl?: string }>);
     }
-    if (profile.preferences?.taskModels) {
-      setTaskModels(profile.preferences.taskModels as Record<string, string>);
+    if (prefs?.taskModels) {
+      setTaskModels(prefs.taskModels as Record<string, string>);
     }
-    if (profile.preferences?.searchProvider) {
+    if (prefs?.searchProvider) {
       setSearchProvider(
-        profile.preferences.searchProvider as "tavily" | "serper",
+        prefs.searchProvider as "tavily" | "serper",
       );
     }
-    if (profile.preferences?.pushEnabled !== undefined) {
-      setPushEnabled(!!profile.preferences.pushEnabled);
+    if (prefs?.pushEnabled !== undefined) {
+      setPushEnabled(!!prefs.pushEnabled);
     }
   }
 
@@ -258,7 +231,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdateMemory = async (id: Id<"memories">) => {
+  const handleUpdateMemory = async (id: string) => {
     await updateMemory({ id, text: editMemoryText });
     setEditingMemoryId(null);
   };
@@ -358,7 +331,7 @@ export default function SettingsPage() {
               </button>
 
               <button
-                onClick={() => isPbBackend() ? pbAuth.signOut() : signOut()}
+                onClick={() => pbAuth.signOut()}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#f87171] hover:bg-red-500/10 hover:border-red-500/20 transition-all font-black uppercase tracking-widest text-[9px] group"
               >
                 <LogOut className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -1018,7 +991,7 @@ export default function SettingsPage() {
                           </p>
                         </div>
                       )}
-                      {memories?.map((memory: Doc<"memories">) => (
+                      {memories?.map((memory: any) => (
                         <div
                           key={memory._id}
                           className="group p-2.5 rounded-lg bg-[#0f0e0c] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all"
@@ -1097,7 +1070,7 @@ export default function SettingsPage() {
       {/* Mobile Sticky Bar */}
       <div className="fixed bottom-0 left-0 right-0 p-2 bg-[#0f0e0c]/90 backdrop-blur-2xl border-t border-[#2a2723] z-100 md:hidden flex gap-2">
         <button
-          onClick={() => isPbBackend() ? pbAuth.signOut() : signOut()}
+          onClick={() => pbAuth.signOut()}
           className="p-2.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-red-400"
         >
           <LogOut className="w-4 h-4" />

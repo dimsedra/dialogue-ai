@@ -1,6 +1,6 @@
 import { getPbClient } from "../client";
 import { defineQuery } from "../use-query";
-import type { PbTasks, PbHabits, PbHabitLogs, PbEvents, PbReflections, PbCardState } from "../_generated/dataModel";
+import type { PbId, PbTasks, PbHabits, PbHabitLogs, PbEvents, PbReflections, PbCardState } from "../_generated/dataModel";
 
 export type DashboardTimeArgs = {
   timezone?: string;
@@ -8,49 +8,47 @@ export type DashboardTimeArgs = {
   userId?: string;
 } | undefined;
 
-import type { Id } from "../../../convex/_generated/dataModel";
-
 export type ProactiveState =
   | {
       type: "attention_needed";
       priority: "overdue_task";
-      taskId: Id<"tasks">;
+      taskId: PbId<"tasks">;
       taskTitle: string;
       overdueByDays: number;
     }
   | {
       type: "attention_needed";
       priority: "unchecked_habit";
-      habitId: Id<"habits">;
+      habitId: PbId<"habits">;
       habitName: string;
       streak: number;
     }
   | {
       type: "attention_needed";
       priority: "pending_reflection";
-      reflectionId: Id<"reflections">;
+      reflectionId: PbId<"reflections">;
       periodLabel: string;
     }
   | {
       type: "attention_needed";
       priority: "oldest_task";
-      taskId: Id<"tasks">;
+      taskId: PbId<"tasks">;
       taskTitle: string;
       ageInDays: number;
     }
   | {
       type: "reflection_ready";
-      reflectionId: Id<"reflections">;
+      reflectionId: PbId<"reflections">;
       periodLabel: string;
     }
   | {
       type: "task_triage";
       count: number;
-      taskIds: Id<"tasks">[];
+      taskIds: PbId<"tasks">[];
     }
   | {
       type: "habit_check";
-      habitId: Id<"habits">;
+      habitId: PbId<"habits">;
       habitName: string;
       streak: number;
       dateString: string;
@@ -59,12 +57,12 @@ export type ProactiveState =
       type: "morning_brief";
       taskCount: number;
       eventCount: number;
-      highlightTaskId?: Id<"tasks">;
+      highlightTaskId?: PbId<"tasks">;
       highlightTaskTitle?: string;
     }
   | {
       type: "event_prep";
-      eventId: Id<"events">;
+      eventId: PbId<"events">;
       eventTitle: string;
       startTime: number;
       notes?: string;
@@ -72,7 +70,7 @@ export type ProactiveState =
     }
   | {
       type: "evening_log";
-      unloggedHabitIds: Id<"habits">[];
+      unloggedHabitIds: PbId<"habits">[];
       unloggedHabitNames: string[];
     }
   | {
@@ -320,7 +318,7 @@ const buildAttentionNeededState = async (
     return {
       type: "attention_needed",
       priority: "overdue_task",
-      taskId: tier1Overdue.id as unknown as Id<"tasks">,
+      taskId: tier1Overdue.id as unknown as PbId<"tasks">,
       taskTitle: tier1Overdue.text,
       overdueByDays: daysSince(tier1Overdue.dueDate, now),
     };
@@ -347,7 +345,7 @@ const buildAttentionNeededState = async (
       return {
         type: "attention_needed",
         priority: "unchecked_habit",
-        habitId: tier2Habit.id as unknown as Id<"habits">,
+        habitId: tier2Habit.id as unknown as PbId<"habits">,
         habitName: tier2Habit.name,
         streak: tier2Habit.currentStreak,
       };
@@ -358,7 +356,7 @@ const buildAttentionNeededState = async (
     return {
       type: "attention_needed",
       priority: "pending_reflection",
-      reflectionId: pendingReflection.id as unknown as Id<"reflections">,
+      reflectionId: pendingReflection.id as unknown as PbId<"reflections">,
       periodLabel: pendingReflection.periodLabel,
     };
   }
@@ -371,7 +369,7 @@ const buildAttentionNeededState = async (
     return {
       type: "attention_needed",
       priority: "oldest_task",
-      taskId: tier4Oldest.id as unknown as Id<"tasks">,
+      taskId: tier4Oldest.id as unknown as PbId<"tasks">,
       taskTitle: tier4Oldest.text,
       ageInDays: daysSince(tier4Oldest.createdAt, now),
     };
@@ -452,7 +450,7 @@ async function getReflectionReadyImpl(
 
   return {
     type: "reflection_ready",
-    reflectionId: pending.id as unknown as Id<"reflections">,
+    reflectionId: pending.id as unknown as PbId<"reflections">,
     periodLabel: pending.periodLabel,
   };
 }
@@ -478,7 +476,7 @@ async function getTaskTriageImpl(
   return {
     type: "task_triage",
     count: overdue.length,
-    taskIds: overdue.slice(0, 5).map((t) => t.id as unknown as Id<"tasks">),
+    taskIds: overdue.slice(0, 5).map((t) => t.id as unknown as PbId<"tasks">),
   };
 }
 
@@ -522,7 +520,7 @@ async function getMorningBriefImpl(
     type: "morning_brief",
     taskCount: todayTasks.length,
     eventCount: todayEvents.length,
-    highlightTaskId: highlightedTask?.id as unknown as Id<"tasks"> | undefined,
+    highlightTaskId: highlightedTask?.id as unknown as PbId<"tasks"> | undefined,
     highlightTaskTitle: highlightedTask?.text,
   };
 }
@@ -557,7 +555,7 @@ async function getEventPrepImpl(
   const next = upcoming[0];
   return {
     type: "event_prep",
-    eventId: next.id as unknown as Id<"events">,
+    eventId: next.id as unknown as PbId<"events">,
     eventTitle: next.title,
     startTime: next.startTime,
     notes: next.notes,
@@ -603,7 +601,7 @@ async function getHabitCheckImpl(
 
   return {
     type: "habit_check",
-    habitId: pending.id as unknown as Id<"habits">,
+    habitId: pending.id as unknown as PbId<"habits">,
     habitName: pending.name,
     streak: pending.currentStreak,
     dateString: todayDateString,
@@ -648,7 +646,7 @@ async function getEveningLogImpl(
 
   return {
     type: "evening_log",
-    unloggedHabitIds: unlogged.map((h) => h.id as unknown as Id<"habits">),
+    unloggedHabitIds: unlogged.map((h) => h.id as unknown as PbId<"habits">),
     unloggedHabitNames: unlogged.map((h) => h.name),
   };
 }

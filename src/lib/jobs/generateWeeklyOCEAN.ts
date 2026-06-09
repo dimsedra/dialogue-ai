@@ -1,5 +1,5 @@
 import type PocketBase from "pocketbase";
-import { decrypt } from "../../../convex/encryption";
+import { decrypt } from "../encryption";
 import { compileWeeklyData } from "./compileWeeklyData";
 
 export interface GenerateWeeklyOCEANArgs {
@@ -61,7 +61,7 @@ export async function generateWeeklyOCEAN(
   }
 
   const { runSimpleTask, getTaskProviderAndModel } = await import(
-    "../../../convex/ai_providers"
+    "../ai-providers"
   );
   const resolved = getTaskProviderAndModel(
     { preferences: { provider, taskModels } },

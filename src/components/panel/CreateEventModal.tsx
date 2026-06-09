@@ -16,13 +16,9 @@ import {
   FolderKanban,
   FileText 
 } from "lucide-react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
-import { isPbBackend, usePbWorkspacesList } from "@/pb-compat";
-
+import { usePbWorkspacesList } from "@/pb-compat";
 interface CreateEventModalProps {
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  activeWorkspaceId: string | undefined;
   isLargeViewport: boolean;
   onSave: (updates: {
     title: string;
@@ -32,7 +28,7 @@ interface CreateEventModalProps {
     eventType: "interval" | "point";
     location?: string;
     recurrence: any;
-    workspaceId?: Id<"workspaces"> | null;
+    workspaceId?: string | null;
     reminderOffset: number | null;
     resources?: any[];
   }) => Promise<void>;
@@ -78,14 +74,10 @@ export function CreateEventModal({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Convex queries & mutations
-  const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, {});
-  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+  // PocketBase queries
+  const workspaces = usePbWorkspacesList();
 
-  const pbGenerateUploadUrl = async () => "";
-  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
-  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
+  const generateUploadUrl = async () => "";
 
   // Pre-select active workspace
   useEffect(() => {
@@ -136,7 +128,7 @@ export function CreateEventModal({
         endTime: eventType === "interval" && finalEndTime ? finalEndTime : undefined,
         eventType,
         recurrence: recurrenceRule,
-        workspaceId: eventWorkspaceId ? (eventWorkspaceId as Id<"workspaces">) : null,
+        workspaceId: eventWorkspaceId || null,
         reminderOffset: finalReminderOffset,
         resources: resources,
       });
@@ -611,3 +603,9 @@ export function CreateEventModal({
     </motion.div>
   );
 }
+
+
+
+
+
+

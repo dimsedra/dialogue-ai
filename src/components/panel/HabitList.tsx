@@ -1,16 +1,12 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Flame, Check, CircleSlash, MessageSquarePlus, PencilLine, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { CreateHabitModal } from "./CreateHabitModal";
 import { EditHabitModal } from "./EditHabitModal";
-import { isPbBackend, usePbHabitsList, usePbHabitLog } from "@/pb-compat";
-
+import { usePbHabitsList, usePbHabitLog } from "@/pb-compat";
 export interface HabitLog {
   dateString: string;
   status: "completed" | "skipped";
@@ -18,10 +14,10 @@ export interface HabitLog {
 }
 
 export interface HabitWithLogs {
-  _id: Id<"habits">;
-  _creationTime: number;
-  userId: Id<"users">;
-  workspaceId?: Id<"workspaces">;
+  _id: string;
+  userId?: string;
+  user?: string;
+  workspace?: string;
   name: string;
   description?: string;
   frequency: "daily" | "custom";
@@ -37,7 +33,7 @@ export interface HabitWithLogs {
 }
 
 interface HabitListProps {
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  activeWorkspaceId: string | undefined;
   isLargeViewport: boolean;
   onReferHabit?: (habit: HabitWithLogs) => void;
 }
@@ -53,17 +49,10 @@ export function HabitList({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
 
-  const pbRawHabits = usePbHabitsList({ workspaceId: activeWorkspaceId });
-  const convexRawHabits = useQuery(api.habits.getHabits, {
-    workspaceId: activeWorkspaceId,
-    todayDateString,
-  });
-  const rawHabits = isPbBackend() ? pbRawHabits : convexRawHabits;
+  const rawHabits = usePbHabitsList({ workspaceId: activeWorkspaceId });
   const habits = rawHabits as HabitWithLogs[] | undefined;
   
-  const pbLogHabit = usePbHabitLog();
-  const convexLogHabit = useMutation(api.habits.logHabit);
-  const logHabit: (args: any) => Promise<any> = isPbBackend() ? pbLogHabit : (args: any) => convexLogHabit(args);
+  const logHabit = usePbHabitLog();
 
   // Modal control states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -115,7 +104,7 @@ export function HabitList({
 
   const userTimezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
-  const handleLog = async (habitId: Id<"habits">, status: "completed" | "skipped") => {
+  const handleLog = async (habitId: string, status: "completed" | "skipped") => {
     const opId = `${habitId}-${status}`;
     setLoggingId(opId);
     try {
@@ -132,7 +121,7 @@ export function HabitList({
     }
   };
 
-  const handleSaveNotes = async (habitId: Id<"habits">, status: "completed" | "skipped") => {
+  const handleSaveNotes = async (habitId: string, status: "completed" | "skipped") => {
     const notes = notesInput[habitId]?.trim();
     if (!notes) return;
     setSavingNotesId(habitId);
@@ -570,3 +559,7 @@ export function HabitList({
     </>
   );
 }
+
+
+
+

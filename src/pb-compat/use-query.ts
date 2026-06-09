@@ -192,9 +192,19 @@ export function argsKey(args: Record<string, unknown> | undefined): string {
   return encodeArgsAsFilter(args);
 }
 
-// =============================================================================
-// useQuery — the reactive read hook.
-// =============================================================================
+export function ensureIdProperties<T>(val: T): T {
+  if (val === null || val === undefined) return val;
+  if (Array.isArray(val)) {
+    return val.map(ensureIdProperties) as unknown as T;
+  }
+  if (typeof val === "object") {
+    const obj = val as any;
+    if ("id" in obj && !obj._id) {
+      return { ...obj, _id: obj.id };
+    }
+  }
+  return val;
+}
 
 /**
  * Reactive read against a PB collection. The query carries the metadata
@@ -272,7 +282,7 @@ export function useQuery<T>(
         }
 
         if (!cancelled) {
-          setData(result);
+          setData(ensureIdProperties(result));
         }
       } catch (e) {
         if (!cancelled) {

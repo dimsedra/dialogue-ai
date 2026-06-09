@@ -19,56 +19,40 @@ export const saveSemanticMemoryTool = createTool({
     // 1. Generate local 384-dimensional embedding
     const truncatedEmbedding = await getLocalEmbedding(input.text);
 
-    const { isPbBackend } = await import('../../pb-compat/env');
     const { getPbClient } = await import('../../lib/pb-server');
-    let memoryId = crypto.randomUUID();
+    const pbClient = getPbClient();
+    const userId = pbClient.authStore.record?.id;
+    let memoryId: string = crypto.randomUUID();
+    
+    if (userId) {
+      const hash = crypto.createHash('sha256').update(input.text).digest('hex');
+      const existing = await pbClient.collection("memories").getList(1, 1, {
+        filter: `user = "${userId}" && hash = "${hash}"`,
+      });
 
-    if (isPbBackend()) {
-      const pbClient = getPbClient();
-      const userId = pbClient.authStore.record?.id;
-      
-      if (userId) {
-        const hash = crypto.createHash('sha256').update(input.text).digest('hex');
-        const existing = await pbClient.collection("memories").getList(1, 1, {
-          filter: `user = "${userId}" && hash = "${hash}"`,
-        });
-
-        let memoryRecord;
-        if (existing.items.length > 0) {
-          memoryRecord = await pbClient.collection("memories").update(existing.items[0].id, {
-            text: input.text,
-            embedding: truncatedEmbedding,
-          });
-        } else {
-          memoryRecord = await pbClient.collection("memories").create({
-            user: userId,
-            text: input.text,
-            embedding: truncatedEmbedding,
-            hash: hash,
-          });
-        }
-        memoryId = memoryRecord.id;
-
-        // 2. Wire MENTIONS_* edges in PocketBase graph_edges collection
-        await wireMentionsEdges(pbClient, memoryId, {
-          taskIds: input.taskIds,
-          eventIds: input.eventIds,
-          habitIds: input.habitIds,
+      let memoryRecord;
+      if (existing.items.length > 0) {
+        memoryRecord = await pbClient.collection("memories").update(existing.items[0].id, {
+          text: input.text,
+          embedding: truncatedEmbedding,
         });
       } else {
-        console.warn("No user ID found in PB store, skipping memory UI save");
+        memoryRecord = await pbClient.collection("memories").create({
+          user: userId,
+          text: input.text,
+          embedding: truncatedEmbedding,
+          hash: hash,
+        });
       }
-    } else {
-      // Convex fallback
-      const convexServerClient = (await import('../../lib/convex-server')).convexServerClient;
-      const { api } = await import('../../../convex/_generated/api');
-      
-      const hash = crypto.createHash('sha256').update(input.text).digest('hex');
-      await convexServerClient.mutation(api.ai.saveMemoryBackendSync, {
-        text: input.text,
-        embedding: truncatedEmbedding,
-        hash
+      memoryId = memoryRecord.id;
+
+      await wireMentionsEdges(pbClient, memoryId, {
+        taskIds: input.taskIds,
+        eventIds: input.eventIds,
+        habitIds: input.habitIds,
       });
+    } else {
+      console.warn("No user ID found in PB store, skipping memory UI save");
     }
 
     return {

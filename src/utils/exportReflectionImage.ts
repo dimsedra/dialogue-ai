@@ -1,5 +1,3 @@
-import { Doc } from "../../convex/_generated/dataModel";
-
 const DEFAULT_WIDTH = 1080;
 const DEFAULT_HEIGHT = 1920;
 
@@ -33,7 +31,7 @@ export interface ExportOptions {
 }
 
 export async function exportReflectionAsImage(
-  reflection: Doc<"reflections">,
+  reflection: any,
   options: ExportOptions = {},
 ): Promise<void> {
   const width = options.width ?? DEFAULT_WIDTH;
@@ -92,7 +90,7 @@ function triggerDownload(blob: Blob, filename: string): void {
 }
 
 function buildReflectionSvg(
-  r: Doc<"reflections">,
+  r: any,
   width: number,
   height: number,
 ): string {
@@ -335,7 +333,7 @@ function renderFooter(w: number, h: number): string {
   `;
 }
 
-function pickHeroStat(r: Doc<"reflections">): {
+function pickHeroStat(r: any): {
   value: number;
   label: string;
   color: string;

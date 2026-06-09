@@ -24,7 +24,7 @@
 //     Next.js process has it; the browser does not (per Phase 6 Q1=c).
 
 import type PocketBase from "pocketbase";
-import { decrypt } from "../../../convex/encryption";
+import { decrypt } from "../encryption";
 
 export interface GenerateSessionTitleArgs {
   userId: string;
@@ -126,7 +126,7 @@ export async function generateSessionTitle(
 
   // 4. Resolve provider + modelId via the same helper the Convex action uses.
   const { runSimpleTask, getTaskProviderAndModel } = await import(
-    "../../../convex/ai_providers"
+    "../ai-providers"
   );
   const resolved = getTaskProviderAndModel(
     { preferences: { provider, taskModels } },

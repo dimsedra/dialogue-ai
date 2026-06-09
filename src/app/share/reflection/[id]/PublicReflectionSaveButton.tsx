@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { Doc } from "../../../../../convex/_generated/dataModel";
 import { exportReflectionAsImage } from "@/utils/exportReflectionImage";
 
 interface Props {
-  reflection: Doc<"reflections">;
+  reflection: any;
 }
 
 export function PublicReflectionSaveButton({ reflection }: Props) {

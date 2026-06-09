@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { LayoutDashboard, Plus, Settings, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Id } from "../../../convex/_generated/dataModel";
-import { Doc } from "../../../convex/_generated/dataModel";
+import { PbWorkspaces } from "@/pb-compat";
 
 interface WorkspaceRailProps {
-  workspaces: Doc<"workspaces">[] | undefined;
-  activeWorkspaceId: Id<"workspaces"> | undefined;
+  workspaces: PbWorkspaces[] | undefined;
+  activeWorkspaceId: string | undefined;
   showHistory: boolean;
-  onSelectWorkspace: (id: Id<"workspaces"> | undefined) => void;
+  onSelectWorkspace: (id: string | undefined) => void;
   onOpenCreateModal: () => void;
   onShowHistory: () => void;
 }

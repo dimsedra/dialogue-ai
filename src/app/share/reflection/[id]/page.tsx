@@ -1,14 +1,16 @@
-import { fetchQuery } from "convex/nextjs";
-import { api } from "../../../../../convex/_generated/api";
-import { Doc, Id } from "../../../../../convex/_generated/dataModel";
+"use client";
+
 import { Sparkles, Quote, Tag, Hash } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { PublicReflectionSaveButton } from "./PublicReflectionSaveButton";
 import { ScrollEnabler } from "./ScrollEnabler";
+import { usePbPublicReflection } from "@/pb-compat";
+import type { PbReflections } from "@/pb-compat/_generated/dataModel";
 
 const COLORS = {
   gold: "#d4a373",
@@ -27,24 +29,10 @@ const COLORS = {
   orange: "#f97316",
 };
 
-export const dynamic = "force-dynamic";
-
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default async function PublicReflectionPage({ params }: PageProps) {
-  const { id } = await params;
-
-  let reflection: Doc<"reflections"> | null = null;
-  try {
-    reflection = await fetchQuery(api.reflections.getPublicReflection, {
-      id: id as Id<"reflections">,
-    });
-  } catch (err) {
-    console.error("Public reflection fetch failed:", err);
-    reflection = null;
-  }
+export default function PublicReflectionPage() {
+  const params = useParams();
+  const id = params.id as string;
+  const reflection = usePbPublicReflection(id);
 
   if (!reflection) {
     return (
@@ -141,7 +129,7 @@ function PageHeader({ type, periodLabel }: { type: string; periodLabel: string }
   );
 }
 
-function HeroSection({ reflection }: { reflection: Doc<"reflections"> }) {
+function HeroSection({ reflection }: { reflection: PbReflections }) {
   const stats = reflection.stats;
   const candidates: Array<{ key: string; value: number; label: string; suffix?: string }> = [
     { key: "tasks", value: stats.tasksCompleted, label: "Tasks Closed" },
@@ -252,7 +240,7 @@ function HeroSection({ reflection }: { reflection: Doc<"reflections"> }) {
   );
 }
 
-function StatsSection({ reflection }: { reflection: Doc<"reflections"> }) {
+function StatsSection({ reflection }: { reflection: PbReflections }) {
   const s = reflection.stats;
   const items: Array<{
     label: string;
@@ -365,7 +353,7 @@ function StatsSection({ reflection }: { reflection: Doc<"reflections"> }) {
   );
 }
 
-function FocusSection({ reflection }: { reflection: Doc<"reflections"> }) {
+function FocusSection({ reflection }: { reflection: PbReflections }) {
   const categories = reflection.stats.topCategories ?? [];
   const totalTasks = Math.max(reflection.stats.tasksCompleted, 1);
   if (categories.length === 0) {
@@ -461,7 +449,7 @@ function FocusSection({ reflection }: { reflection: Doc<"reflections"> }) {
   );
 }
 
-function NarrativeSection({ reflection }: { reflection: Doc<"reflections"> }) {
+function NarrativeSection({ reflection }: { reflection: PbReflections }) {
   return (
     <section className="space-y-5 sm:space-y-6">
       <div>

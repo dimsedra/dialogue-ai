@@ -15,19 +15,12 @@ export const retrieveGraphContextTool = createTool({
     // 1. Generate local 384-dimensional embedding for the search query
     const truncatedEmbedding = await getLocalEmbedding(input.query);
 
-    const { isPbBackend } = await import('../../pb-compat/env');
-    let results: any[] = [];
-
-    if (isPbBackend()) {
-      const { getPbClient } = await import('../../lib/pb-server');
-      const pb = getPbClient();
-      results = await retrieveGraphContext(pb, truncatedEmbedding, {
-        limit: input.limit,
-        threshold: input.threshold,
-      });
-    } else {
-      console.warn("retrieveGraphContext called in Convex mode, returning empty results");
-    }
+    const { getPbClient } = await import('../../lib/pb-server');
+    const pb = getPbClient();
+    const results = await retrieveGraphContext(pb, truncatedEmbedding, {
+      limit: input.limit,
+      threshold: input.threshold,
+    });
 
     return {
       _interceptedForRead: true, // We execute silently and return to LLM

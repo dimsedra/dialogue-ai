@@ -1,41 +1,18 @@
 import { useAuth } from "../auth";
 import { useQuery } from "../use-query";
 import { eventsListQuery, eventsGetQuery, eventsSearchHistoryQuery } from "../descriptors/events";
-import type { Doc } from "../../../convex/_generated/dataModel";
 import type { PbEvents } from "../_generated/dataModel";
 
-export function mapEvent(pb: PbEvents): Doc<"events"> {
-  return {
-    _id: pb.id as unknown as Doc<"events">["_id"],
-    _creationTime: pb.createdAt,
-    userId: pb.user as unknown as Doc<"events">["userId"],
-    title: pb.title,
-    description: pb.description,
-    startTime: pb.startTime,
-    endTime: pb.endTime,
-    eventType: pb.eventType,
-    location: pb.location,
-    notes: pb.notes,
-    outcome: pb.outcome,
-    statusHook: pb.statusHook,
-    cancelled: pb.cancelled,
-    contextUpdatedAt: pb.contextUpdatedAt,
-    workspaceId: pb.workspace as unknown as Doc<"events">["workspaceId"],
-    recurrence: pb.recurrence as unknown as Doc<"events">["recurrence"],
-    createdAt: pb.createdAt,
-    seriesId: pb.series as unknown as Doc<"events">["seriesId"],
-    resources: pb.resources as unknown as Doc<"events">["resources"],
-    reminderOffset: pb.reminderOffset,
-    scheduledNotificationId: pb.scheduledNotificationId as unknown as Doc<"events">["scheduledNotificationId"],
-  } as unknown as Doc<"events">;
+export function mapEvent(pb: PbEvents): PbEvents {
+  return pb;
 }
 
 export function expandRecurringEvents(
-  events: Doc<"events">[],
+  events: PbEvents[],
   windowStart: number,
   windowEnd: number,
-): Doc<"events">[] {
-  const expanded: Doc<"events">[] = [];
+): PbEvents[] {
+  const expanded: PbEvents[] = [];
   for (const event of events) {
     if (!event.recurrence) {
       expanded.push(event);
@@ -113,7 +90,7 @@ export function expandRecurringEvents(
   return expanded;
 }
 
-export function usePbEventsList(args?: { workspaceId?: string }): Doc<"events">[] | undefined {
+export function usePbEventsList(args?: { workspaceId?: string }): PbEvents[] | undefined {
   const { user } = useAuth();
   const events = useQuery(
     eventsListQuery,
@@ -127,7 +104,7 @@ export function usePbEventsList(args?: { workspaceId?: string }): Doc<"events">[
   return expandRecurringEvents(mapped, windowStart, windowEnd);
 }
 
-export function usePbEvent(id: string | undefined): Doc<"events"> | null | undefined {
+export function usePbEvent(id: string | undefined): PbEvents | null | undefined {
   const { user } = useAuth();
   const event = useQuery(
     eventsGetQuery,
@@ -143,7 +120,7 @@ export function usePbEventsSearchHistory(args?: {
   startTime?: number;
   endTime?: number;
   limit?: number;
-}): Doc<"events">[] | undefined {
+}): PbEvents[] | undefined {
   const { user } = useAuth();
   const events = useQuery(
     eventsSearchHistoryQuery,

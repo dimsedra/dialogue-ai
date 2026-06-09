@@ -1,9 +1,8 @@
 import { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Image, X, Upload, Link, Eye, EyeOff, Brush, Trash2, Sparkles, Check, RotateCcw } from "lucide-react";
-import { useQuery, useMutation } from "convex/react";
-import { isPbBackend, usePbUserImagesList, usePbImageSave, usePbImageDelete } from "@/pb-compat";
-import { api } from "../../../convex/_generated/api";
+import { usePbUserImagesList, usePbImageSave, usePbImageDelete } from "@/pb-compat";
 import { PageStyleSettings, COLOR_DEFAULTS } from "../../utils/color";
 
 interface PageCustomizerProps {
@@ -19,17 +18,9 @@ export function PageCustomizer({ isOpen, onClose, settings, onUpdate, pageName =
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
-  const convexSaveImage = useMutation(api.images.save);
-  const pbSaveImage = usePbImageSave();
-
-  const convexDeleteImage = useMutation(api.images.remove);
-  const pbDeleteImage = usePbImageDelete();
-  const deleteImage = isPbBackend() ? pbDeleteImage : (args: any) => convexDeleteImage(args);
-
-  const pbUserImages = usePbUserImagesList();
-  const convexUserImages = useQuery(api.images.list);
-  const userImages = isPbBackend() ? pbUserImages : convexUserImages;
+  const saveImage = usePbImageSave();
+  const deleteImage = usePbImageDelete();
+  const userImages = usePbUserImagesList();
 
   const handleRemove = () => {
     onUpdate({
@@ -58,22 +49,8 @@ export function PageCustomizer({ isOpen, onClose, settings, onUpdate, pageName =
 
     setIsUploading(true);
     try {
-      if (isPbBackend()) {
-        const { storageId, url } = await pbSaveImage({ file });
-        onUpdate({ storageId, url });
-      } else {
-        const postUrl = await generateUploadUrl();
-        const result = await fetch(postUrl, {
-          method: "POST",
-          headers: { "Content-Type": file.type },
-          body: file,
-        });
-        const { storageId } = await result.json();
-        const convexSite = (process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL || "").replace(".cloud", ".site");
-        const url = `${convexSite}/api/storage?id=${storageId}`;
-        await convexSaveImage({ storageId: storageId as any, fileName: file.name, fileType: file.type });
-        onUpdate({ storageId, url });
-      }
+      const { storageId, url } = await saveImage({ file });
+      onUpdate({ storageId, url });
     } catch (err) {
       console.error("Upload failed:", err);
     } finally {
@@ -81,7 +58,9 @@ export function PageCustomizer({ isOpen, onClose, settings, onUpdate, pageName =
     }
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -495,6 +474,7 @@ export function PageCustomizer({ isOpen, onClose, settings, onUpdate, pageName =
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

@@ -1,7 +1,5 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getConvexClient } from '../../lib/convex-server';
-import { api } from '../../../convex/_generated/api';
 
 export const addTaskTool = createTool({
   id: 'addTask',
@@ -21,61 +19,44 @@ export const addTaskTool = createTool({
     text: z.string(),
   }),
   execute: async (input) => {
-    const client = getConvexClient();
-    const { isPbBackend } = await import('../../pb-compat/env');
-    if (isPbBackend()) {
-      const { getPbClient } = await import('../../lib/pb-server');
-      const pb = getPbClient();
-      const user = pb.authStore.record?.id;
-      if (!user) throw new Error("Unauthorized");
-      
-      const dueDateMs = input.dueDate ? new Date(input.dueDate).getTime() : undefined;
-      const record = await pb.collection("tasks").create({
-        user,
-        text: input.text,
-        dueDate: dueDateMs,
-        dueDateStr: input.dueDate ? input.dueDate.split('T')[0] : undefined,
-        reminderOffset: input.reminderOffset,
-        priority: input.priority,
-        category: input.category,
-        notes: input.notes,
-        progress: input.progress,
-        statusHook: input.statusHook,
-        completed: false,
-        createdAt: Date.now(),
-      });
-
-      if (dueDateMs && input.reminderOffset !== undefined && input.reminderOffset >= 0) {
-        const triggerAt = Math.max(Date.now(), dueDateMs - input.reminderOffset * 60 * 1000);
-        await pb.collection("scheduled_notifications").create({
-          user,
-          kind: "task_remind",
-          targetId: record.id,
-          triggerAt,
-          delivered: false,
-          createdAt: Date.now(),
-        });
-      }
-
-      // Ingest task notes semantically
-      if (input.notes) {
-        const { ingestTaskNotes } = await import('../../lib/graph/ingest');
-        await ingestTaskNotes(pb, record.id, input.notes);
-      }
-
-      return { taskId: record.id, text: input.text };
-    }
-
-    const taskId = await client.mutation(api.tasks.add, {
+    const { getPbClient } = await import('../../lib/pb-server');
+    const pb = getPbClient();
+    const user = pb.authStore.record?.id;
+    if (!user) throw new Error("Unauthorized");
+    
+    const dueDateMs = input.dueDate ? new Date(input.dueDate).getTime() : undefined;
+    const record = await pb.collection("tasks").create({
+      user,
       text: input.text,
-      dueDate: input.dueDate ? new Date(input.dueDate).getTime() : undefined,
+      dueDate: dueDateMs,
       dueDateStr: input.dueDate ? input.dueDate.split('T')[0] : undefined,
+      reminderOffset: input.reminderOffset,
       priority: input.priority,
       category: input.category,
       notes: input.notes,
       progress: input.progress,
       statusHook: input.statusHook,
+      completed: false,
+      createdAt: Date.now(),
     });
-    return { taskId: taskId as string, text: input.text };
+
+    if (dueDateMs && input.reminderOffset !== undefined && input.reminderOffset >= 0) {
+      const triggerAt = Math.max(Date.now(), dueDateMs - input.reminderOffset * 60 * 1000);
+      await pb.collection("scheduled_notifications").create({
+        user,
+        kind: "task_remind",
+        targetId: record.id,
+        triggerAt,
+        delivered: false,
+        createdAt: Date.now(),
+      });
+    }
+
+    if (input.notes) {
+      const { ingestTaskNotes } = await import('../../lib/graph/ingest');
+      await ingestTaskNotes(pb, record.id, input.notes);
+    }
+
+    return { taskId: record.id, text: input.text };
   }
 });

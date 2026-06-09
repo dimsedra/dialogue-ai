@@ -35,7 +35,7 @@
 import { useAuth } from "../auth";
 import { useQuery } from "../use-query";
 import { userProfileGetQuery } from "../descriptors/userProfile";
-import type { Doc } from "../../../convex/_generated/dataModel";
+import type { PbUserProfile } from "../_generated/dataModel";
 
 /**
  * Read the current user's profile via PB and return it in the
@@ -60,7 +60,7 @@ import type { Doc } from "../../../convex/_generated/dataModel";
  * new required field, the cast will silently omit it (TypeScript
  * can't catch this) — keep the test suite in sync with schema changes.
  */
-export function usePbProfile(): Doc<"userProfile"> | undefined {
+export function usePbProfile(): PbUserProfile | undefined {
   const { user } = useAuth();
   // When no user is signed in, pass undefined. The descriptor's
   // buildFilter returns the no-match filter ("1 = 2"), so the query
@@ -73,13 +73,13 @@ export function usePbProfile(): Doc<"userProfile"> | undefined {
   );
   if (!pbProfile) return undefined;
   return {
-    _id: pbProfile.id as unknown as Doc<"userProfile">["_id"],
+    _id: pbProfile.id as unknown as PbUserProfile["id"],
     _creationTime: pbProfile.created
       ? new Date(pbProfile.created).getTime()
       : 0,
-    userId: pbProfile.user as unknown as Doc<"userProfile">["userId"],
+    userId: pbProfile.user as unknown as PbUserProfile["user"],
     name: pbProfile.name,
     bio: pbProfile.bio,
     preferences: pbProfile.preferences,
-  } as unknown as Doc<"userProfile">;
+  } as unknown as PbUserProfile;
 }

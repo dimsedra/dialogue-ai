@@ -1,11 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Send, X, PlusCircle, ChevronsUpDown, File as FileIcon, Calendar, CheckCircle2, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Id } from "../../../convex/_generated/dataModel";
 import { Scope } from "./types";
 
 interface ChatInputProps {
-  activeSessionId: Id<"chatSessions"> | null;
+  activeSessionId: string | null;
   isLargeViewport: boolean;
   keyboardOffset: number;
   activeScope: Scope | null;

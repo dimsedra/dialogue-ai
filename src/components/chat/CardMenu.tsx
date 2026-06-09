@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useMutation } from "convex/react";
-import { isPbBackend, usePbDismissCard, usePbSnoozeCard, usePbMuteCardType } from "@/pb-compat";
+import { usePbDismissCard, usePbSnoozeCard, usePbMuteCardType, PbId } from "@/pb-compat";
 import { motion, AnimatePresence } from "framer-motion";
 import { MoreHorizontal, Clock, Moon, Sunrise, BellOff, X, ChevronLeft } from "lucide-react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
 
 type CardType =
   | "attention_needed"
@@ -84,17 +81,9 @@ export function CardMenu({
   const [view, setView] = useState<"closed" | "actions">("closed");
   const [confirming, setConfirming] = useState<ConfirmationState>(null);
   const [busy, setBusy] = useState(false);
-  const convexDismissCard = useMutation(api.dashboard.dismissCard);
-  const pbDismissCard = usePbDismissCard();
-  const dismissCard = isPbBackend() ? pbDismissCard : (args: any) => convexDismissCard(args);
-
-  const convexSnoozeCard = useMutation(api.dashboard.snoozeCard);
-  const pbSnoozeCard = usePbSnoozeCard();
-  const snoozeCard = isPbBackend() ? pbSnoozeCard : (args: any) => convexSnoozeCard(args);
-
-  const convexMuteCardType = useMutation(api.dashboard.muteCardType);
-  const pbMuteCardType = usePbMuteCardType();
-  const muteCardType = isPbBackend() ? pbMuteCardType : (args: any) => convexMuteCardType(args);
+  const dismissCard = usePbDismissCard();
+  const snoozeCard = usePbSnoozeCard();
+  const muteCardType = usePbMuteCardType();
 
   useEffect(() => {
     if (!confirming) return;
@@ -107,7 +96,7 @@ export function CardMenu({
     try {
       await snoozeCard({
         cardType,
-        cardId: cardId as Id<"reflections"> | Id<"habits"> | undefined,
+        cardId: cardId as PbId<"reflections"> | string | undefined,
         duration,
       });
       setConfirming({ kind: "snoozed", until: duration });
@@ -139,7 +128,7 @@ export function CardMenu({
     try {
       await dismissCard({
         cardType,
-        cardId: cardId as Id<"reflections"> | Id<"habits"> | undefined,
+        cardId: cardId as PbId<"reflections"> | string | undefined,
       });
       setConfirming({ kind: "dismissed" });
       onConfirmation?.({ kind: "dismissed" });
@@ -316,3 +305,4 @@ export function CardMenu({
     </div>
   );
 }
+
