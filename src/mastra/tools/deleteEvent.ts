@@ -13,6 +13,14 @@ export const deleteEventTool = createTool({
   outputSchema: z.object({ success: z.boolean(), eventId: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
+    const { isPbBackend } = await import('../../pb-compat');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      await pb.collection("events").delete(input.eventId);
+      return { success: true, eventId: input.eventId };
+    }
+
     await client.mutation(api.events.remove, {
       id: input.eventId as Id<"events">,
     });

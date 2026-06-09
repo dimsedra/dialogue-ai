@@ -35,6 +35,25 @@ export const updateEventTool = createTool({
       until: input.recurrence.until ? new Date(input.recurrence.until).getTime() : undefined,
     } : undefined;
 
+    const { isPbBackend } = await import('../../pb-compat');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      await pb.collection("events").update(input.eventId, {
+        title: input.title,
+        startTime: input.startTime ? new Date(input.startTime).getTime() : undefined,
+        endTime: input.endTime ? new Date(input.endTime).getTime() : undefined,
+        eventType: input.eventType as "interval" | "point",
+        location: input.location,
+        notes: input.notes,
+        outcome: input.outcome,
+        statusHook: input.statusHook,
+        cancelled: input.cancelled,
+        recurrence: recurrence ?? undefined,
+      });
+      return { success: true, eventId: input.eventId };
+    }
+
     await client.mutation(api.events.update, {
       id: input.eventId as Id<"events">,
       title: input.title,

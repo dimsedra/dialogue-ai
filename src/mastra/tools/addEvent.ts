@@ -35,6 +35,30 @@ export const addEventTool = createTool({
       until: input.recurrence.until ? new Date(input.recurrence.until).getTime() : undefined,
     } : undefined;
 
+    const { isPbBackend } = await import('../../pb-compat');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+
+      const record = await pb.collection("events").create({
+        user,
+        title: input.title,
+        description: input.description,
+        startTime: startMs,
+        endTime: endMs,
+        eventType: input.eventType as "interval" | "point",
+        location: input.location,
+        notes: input.notes,
+        outcome: input.outcome,
+        statusHook: input.statusHook,
+        recurrence: recurrence ?? undefined,
+        createdAt: Date.now(),
+      });
+      return { eventId: record.id as string, title: input.title };
+    }
+
     const eventId = await client.mutation(api.events.add, {
       title: input.title,
       description: input.description,

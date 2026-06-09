@@ -21,6 +21,29 @@ export const addTaskTool = createTool({
   }),
   execute: async (input) => {
     const client = getConvexClient();
+    const { isPbBackend } = await import('../../pb-compat');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      
+      const record = await pb.collection("tasks").create({
+        user,
+        text: input.text,
+        dueDate: input.dueDate ? new Date(input.dueDate).getTime() : undefined,
+        dueDateStr: input.dueDate ? input.dueDate.split('T')[0] : undefined,
+        priority: input.priority,
+        category: input.category,
+        notes: input.notes,
+        progress: input.progress,
+        statusHook: input.statusHook,
+        completed: false,
+        createdAt: Date.now(),
+      });
+      return { taskId: record.id, text: input.text };
+    }
+
     const taskId = await client.mutation(api.tasks.add, {
       text: input.text,
       dueDate: input.dueDate ? new Date(input.dueDate).getTime() : undefined,
