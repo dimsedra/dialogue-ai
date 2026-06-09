@@ -36,7 +36,7 @@ export const addEventTool = createTool({
       until: input.recurrence.until ? new Date(input.recurrence.until).getTime() : undefined,
     } : undefined;
 
-    const { isPbBackend } = await import('../../pb-compat');
+    const { isPbBackend } = await import('../../pb-compat/env');
     if (isPbBackend()) {
       const { getPbClient } = await import('../../lib/pb-server');
       const pb = getPbClient();
@@ -69,6 +69,12 @@ export const addEventTool = createTool({
           delivered: false,
           createdAt: Date.now(),
         });
+      }
+
+      // Ingest event notes semantically
+      if (input.notes || input.outcome) {
+        const { ingestEventNotes } = await import('../../lib/graph/ingest');
+        await ingestEventNotes(pb, record.id, input.notes, input.outcome);
       }
 
       return { eventId: record.id as string, title: input.title };

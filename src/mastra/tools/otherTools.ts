@@ -13,14 +13,33 @@ export const searchWebTool = createTool({
     let apiKey: string | null = process.env.TAVILY_API_KEY || process.env.NEXT_PUBLIC_TAVILY_API_KEY || null;
 
     try {
-      const client = getConvexClient();
-      const searchConfig = await client.query(api.ai.getSearchConfig);
-      if (searchConfig?.apiKey) {
-        apiKey = searchConfig.apiKey;
-        searchProvider = (searchConfig.searchProvider as 'tavily' | 'serper') || 'tavily';
+      const { isPbBackend } = await import('../../pb-compat/env');
+      if (isPbBackend()) {
+        const { getPbClient } = await import('../../lib/pb-server');
+        const pb = getPbClient();
+        const userId = pb.authStore.record?.id;
+        if (userId) {
+          try {
+            const profile = await pb.collection('users').getOne(userId);
+            const prefs = profile.preferences as any;
+            if (prefs?.searchApiKey) {
+              apiKey = prefs.searchApiKey;
+              searchProvider = (prefs.searchProvider as 'tavily' | 'serper') || 'tavily';
+            }
+          } catch (e) {
+            console.error("Could not fetch search config from PB:", e);
+          }
+        }
+      } else {
+        const client = getConvexClient();
+        const searchConfig = await client.query(api.ai.getSearchConfig);
+        if (searchConfig?.apiKey) {
+          apiKey = searchConfig.apiKey;
+          searchProvider = (searchConfig.searchProvider as 'tavily' | 'serper') || 'tavily';
+        }
       }
     } catch (e) {
-      console.error("Could not fetch search config from Convex:", e);
+      console.error("Could not fetch search config:", e);
     }
 
     if (!apiKey) {
@@ -85,6 +104,42 @@ export const searchHistoricalEntitiesTool = createTool({
     limit: z.number().optional()
   }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      
+      const results: any = {};
+      
+      if (input.type === 'tasks' || input.type === 'all') {
+        const filters = [`user = "${user}"`];
+        if (input.startTime) filters.push(`dueDate >= ${input.startTime}`);
+        if (input.endTime) filters.push(`dueDate <= ${input.endTime}`);
+        if (input.query) filters.push(`text ~ "${input.query.replace(/"/g, '\\"')}"`);
+        const tasks = await pb.collection("tasks").getList(1, input.limit || 50, {
+          filter: filters.join(' && '),
+          sort: '-dueDate'
+        });
+        results.tasks = tasks.items;
+      }
+      
+      if (input.type === 'events' || input.type === 'all') {
+        const filters = [`user = "${user}"`];
+        if (input.startTime) filters.push(`startTime >= ${input.startTime}`);
+        if (input.endTime) filters.push(`startTime <= ${input.endTime}`);
+        if (input.query) filters.push(`title ~ "${input.query.replace(/"/g, '\\"')}"`);
+        const events = await pb.collection("events").getList(1, input.limit || 50, {
+          filter: filters.join(' && '),
+          sort: '-startTime'
+        });
+        results.events = events.items;
+      }
+      
+      return results;
+    }
+
     const client = getConvexClient();
     if (input.type === 'tasks' || input.type === 'all') {
       const tasks = await client.query(api.tasks.searchHistory, {
@@ -122,6 +177,31 @@ export const batchAddTasksTool = createTool({
   }),
   outputSchema: z.object({ taskIds: z.array(z.string()), count: z.number() }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      
+      const taskIds = [];
+      for (const t of input.tasks) {
+        const record = await pb.collection("tasks").create({
+          user,
+          text: t.text,
+          priority: t.priority || "medium",
+          category: t.category,
+          dueDate: t.dueDate ? new Date(t.dueDate).getTime() : undefined,
+          dueDateStr: t.dueDate ? t.dueDate.split('T')[0] : undefined,
+          notes: t.notes,
+          completed: false,
+          createdAt: Date.now()
+        });
+        taskIds.push(record.id);
+      }
+      return { taskIds, count: taskIds.length };
+    }
+
     const client = getConvexClient();
     const taskIds = await client.mutation(api.tasks.batchAdd, {
       tasks: input.tasks.map(t => ({
@@ -142,6 +222,20 @@ export const getTaskNotesTool = createTool({
   description: 'Retrieves the full chronological notes/journal for a specific task.',
   inputSchema: z.object({ taskId: z.string() }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      try {
+        const record = await pb.collection("tasks").getOne(input.taskId);
+        return { notes: record.notes || 'No notes found.', task: record };
+      } catch (err) {
+        return { notes: 'No notes found.', task: null };
+      }
+    }
+
     const client = getConvexClient();
     const task = await client.query(api.tasks.get, { id: input.taskId as Id<"tasks"> });
     return { notes: task?.notes || 'No notes found.', task };
@@ -200,6 +294,20 @@ export const getTaskResourcesTool = createTool({
   description: 'Retrieves the linked resources (URLs and files) for a specific task.',
   inputSchema: z.object({ taskId: z.string() }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      try {
+        const record = await pb.collection("tasks").getOne(input.taskId);
+        return { resources: record.resources || [] };
+      } catch {
+        return { resources: [] };
+      }
+    }
+
     const client = getConvexClient();
     const task = await client.query(api.tasks.get, { id: input.taskId as Id<"tasks"> });
     return { resources: task?.resources || [] };
@@ -211,6 +319,20 @@ export const getEventResourcesTool = createTool({
   description: 'Retrieves the linked resources (URLs and files) for a specific event.',
   inputSchema: z.object({ eventId: z.string() }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      try {
+        const record = await pb.collection("events").getOne(input.eventId);
+        return { resources: record.resources || [] };
+      } catch {
+        return { resources: [] };
+      }
+    }
+
     const client = getConvexClient();
     const event = await client.query(api.events.get, { id: input.eventId as Id<"events"> });
     return { resources: event?.resources || [] };
@@ -222,6 +344,16 @@ export const listWorkspacesTool = createTool({
   description: 'Lists all workspaces the user has created.',
   inputSchema: z.object({}),
   execute: async () => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      const records = await pb.collection("workspaces").getFullList({ sort: '-createdAt' });
+      return { workspaces: records };
+    }
+
     const client = getConvexClient();
     const workspaces = await client.query(api.workspaces.list, {});
     return { workspaces };
@@ -239,6 +371,25 @@ export const createHabitTool = createTool({
   }),
   outputSchema: z.object({ habitId: z.string(), name: z.string() }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      
+      const record = await pb.collection("habits").create({
+        user,
+        name: input.name,
+        description: input.description,
+        frequency: input.frequency,
+        daysOfWeek: input.daysOfWeek || [],
+        archived: false,
+        createdAt: Date.now(),
+      });
+      return { habitId: record.id, name: input.name };
+    }
+
     const client = getConvexClient();
     const habitId = await client.mutation(api.habits.createHabit, {
       name: input.name,
@@ -261,6 +412,30 @@ export const logHabitTool = createTool({
   }),
   outputSchema: z.object({ success: z.boolean(), logId: z.string() }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      
+      const record = await pb.collection("habit_logs").create({
+        user,
+        habit: input.habitId,
+        dateString: input.dateString,
+        status: input.status,
+        notes: input.notes,
+        createdAt: Date.now(),
+      });
+
+      if (input.notes) {
+        const { ingestHabitLogNotes } = await import('../../lib/graph/ingest');
+        await ingestHabitLogNotes(pb, record.id, input.habitId, input.notes);
+      }
+
+      return { success: true, logId: record.id };
+    }
+
     const client = getConvexClient();
     const logId = await client.mutation(api.habits.logHabit, {
       habitId: input.habitId as Id<"habits">,
@@ -280,6 +455,35 @@ export const getHabitConsistencyTool = createTool({
     periodEndDate: z.string()
   }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      
+      const habits = await pb.collection("habits").getFullList({
+        filter: `user = "${user}" && archived = false`,
+      });
+      const logs = await pb.collection("habit_logs").getFullList({
+        filter: `user = "${user}" && dateString >= "${input.periodStartDate}" && dateString <= "${input.periodEndDate}"`,
+      });
+      
+      return {
+        habits: habits.map((h: any) => ({
+          id: h.id,
+          name: h.name,
+          frequency: h.frequency,
+          daysOfWeek: h.daysOfWeek || [],
+          logs: logs.filter((l: any) => l.habit === h.id).map((l: any) => ({
+            dateString: l.dateString,
+            status: l.status,
+            notes: l.notes,
+          })),
+        })),
+      };
+    }
+
     const client = getConvexClient();
     const result = await client.query(api.habits.getHabitConsistency, {
       periodStartDate: input.periodStartDate,
@@ -294,6 +498,20 @@ export const listUnreadNotificationsTool = createTool({
   description: 'Retrieves a list of unread notifications and alerts for the active user.',
   inputSchema: z.object({}),
   execute: async () => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      
+      const records = await pb.collection("scheduled_notifications").getList(1, 50, {
+        filter: `user = "${user}" && delivered = false`,
+        sort: 'triggerAt',
+      });
+      return { notifications: records.items };
+    }
+
     const client = getConvexClient();
     const notifications = await client.query(api.notifications.listUnread, {});
     return { notifications };
@@ -310,7 +528,7 @@ export const createCustomReminderTool = createTool({
   outputSchema: z.object({ success: z.boolean(), scheduledFor: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
-    const { isPbBackend } = await import('../../pb-compat');
+    const { isPbBackend } = await import('../../pb-compat/env');
     
     if (isPbBackend()) {
       const { getPbClient } = await import('../../lib/pb-server');

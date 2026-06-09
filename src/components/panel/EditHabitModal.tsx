@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { HabitWithLogs } from "./HabitList";
+import { isPbBackend, usePbHabitUpdate, usePbHabitDelete, usePbWorkspacesList } from "@/pb-compat";
 
 interface EditHabitModalProps {
   habit: HabitWithLogs;
@@ -28,9 +29,17 @@ export function EditHabitModal({
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   // Convex Queries and Mutations
-  const workspaces = useQuery(api.workspaces.list, {});
-  const updateHabitMutation = useMutation(api.habits.updateHabit);
-  const deleteHabitMutation = useMutation(api.habits.deleteHabit);
+  const pbWorkspaces = usePbWorkspacesList();
+  const convexWorkspaces = useQuery(api.workspaces.list, {});
+  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+
+  const pbUpdateHabit = usePbHabitUpdate();
+  const convexUpdateHabit = useMutation(api.habits.updateHabit);
+  const updateHabitMutation: (args: any) => Promise<any> = isPbBackend() ? pbUpdateHabit : (args: any) => convexUpdateHabit(args);
+
+  const pbDeleteHabit = usePbHabitDelete();
+  const convexDeleteHabit = useMutation(api.habits.deleteHabit);
+  const deleteHabitMutation: (args: any) => Promise<any> = isPbBackend() ? pbDeleteHabit : (args: any) => convexDeleteHabit(args);
 
   useEffect(() => {
     if (habit) {

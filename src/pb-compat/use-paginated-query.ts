@@ -135,6 +135,7 @@ export function usePaginatedQuery<
       const result = await pb.collection(collection).getList(1, pageSize, {
         sort: "-id",
         filter: filterString || undefined,
+        requestKey: null,
       });
       const items = result.items as unknown as TResult[];
       return {
@@ -150,6 +151,13 @@ export function usePaginatedQuery<
   useEffect(() => {
     // Skip path: nothing to load, nothing to subscribe to.
     if (isSkip) return;
+
+    // Immediately reset to prevent stale results from a previous
+    // args set (e.g. previous session) from lingering during the
+    // async fetch below.
+    setResults([]);
+    setStatus("LoadingFirstPage");
+    lastIdRef.current = null;
 
     const pb = getPbClient();
     let cancelled = false;

@@ -26,6 +26,8 @@ import {
   usePbUpdatePreferences,
   usePbHabitCreate,
   usePbHabitLog,
+  usePbMessagesPaginated,
+  usePaginatedQuery as usePbPaginatedQuery,
 } from "@/pb-compat";
 import { api as pbApi } from "@/pb-compat/api";
 import { useChat } from "@ai-sdk/react";
@@ -157,64 +159,35 @@ export function Chat({
   onShowTasksAction,
 }: ChatProps) {
   const pbWorkspaces = usePbWorkspacesList();
-  const convexWorkspaces = useQuery(api.workspaces.list, {});
+  const convexWorkspaces = useQuery(api.workspaces.list, isPbBackend() ? "skip" : {});
   const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
 
   const pbSessions = usePbSessionsList({ workspaceId: activeWorkspaceId });
-  const convexSessions = useQuery(api.messages.listSessions, {
-    workspaceId: activeWorkspaceId,
-  });
+  const convexSessions = useQuery(
+    api.messages.listSessions,
+    isPbBackend() ? "skip" : { workspaceId: activeWorkspaceId }
+  );
   const sessions = isPbBackend() ? pbSessions : convexSessions;
 
   // All sessions across every workspace — used only by the Dashboard landing view
   const pbAllSessions = usePbSessionsList({ allWorkspaces: true });
-  const convexAllSessions = useQuery(api.messages.listSessions, {
-    allWorkspaces: true,
-  });
+  const convexAllSessions = useQuery(
+    api.messages.listSessions,
+    isPbBackend() ? "skip" : { allWorkspaces: true }
+  );
   const allSessions = isPbBackend() ? pbAllSessions : convexAllSessions;
 
-  const messagesPaginated = usePaginatedQuery(
-    api.messages.listPaginated,
-    activeSessionId ? { sessionId: activeSessionId } : "skip",
-    { initialNumItems: 50 },
-  );
-  // B.7.5: sort by `timestamp` desc then reverse for chronological
-  // (oldest first) display. The Convex `listPaginated` already returns
-  // -timestamp order (so this is a no-op there), but the PB path's
-  // `usePaginatedQuery` returns -id order — and PB ids are random
-  // 15-char strings, NOT time-prefixed, so the previous implicit
-  // reliance on backend order would break chronological display on
-  // PB. Sorting by `timestamp` explicitly normalizes both backends.
-  const messages = useMemo(() => {
-    if (!activeSessionId) return undefined;
-    if (messagesPaginated.status === "LoadingFirstPage") return undefined;
-    const sorted = [...messagesPaginated.results].sort(
-      (a, b) => b.timestamp - a.timestamp,
-    );
-    return sorted.reverse();
-  }, [messagesPaginated.results, messagesPaginated.status, activeSessionId]);
-  const loadOlderMessages = useCallback(() => {
-    if (messagesPaginated.status === "CanLoadMore") {
-      void messagesPaginated.loadMore(50);
-    }
-  }, [messagesPaginated]);
   // B.7.3: read profile from PB when the flag is on, from Convex
   // otherwise. Both hooks run unconditionally (Rules of Hooks); the
   // unused result is discarded at the ternary below. In production
   // with the flag off, the entire PB branch is DCE'd at build time.
   const pbProfile = usePbProfile();
-  const convexProfile = useQuery(api.ai.getProfile, {});
+  const convexProfile = useQuery(api.ai.getProfile, isPbBackend() ? "skip" : {});
   const profile = isPbBackend() ? pbProfile : convexProfile;
 
   const pbPersonas = usePbPersonasList();
-  const convexPersonas = useQuery(api.personas.list);
+  const convexPersonas = useQuery(api.personas.list, isPbBackend() ? "skip" : "skip");
   const personas = isPbBackend() ? pbPersonas : convexPersonas;
-
-  const [localScopes, setLocalScopes] = useState<Record<string, Scope>>({});
-
-  useEffect(() => {
-    setLocalScopes({});
-  }, [activeSessionId]);
 
   const activeSession = sessions?.find((s) => s._id === activeSessionId);
   const activePersona =
@@ -336,7 +309,6 @@ export function Chat({
   const logHabit = isPbBackend() ? pbLogHabit : (args: any) => convexLogHabit(args);
 
   const convex = useConvex();
-  const idMapRef = useRef<Map<string, string>>(new Map());
 
   const [provider, setProvider] = useState<AIProvider>(() => {
     if (typeof window !== "undefined") {
@@ -432,7 +404,411 @@ export function Chat({
     return customConfigs?.[provider] || {};
   }, [profile?.preferences?.customConfigs, provider]);
 
-  const authToken = useAuthToken();
+  const pendingInitialMessageRef = useRef<{ sessionId: string; text: string } | null>(null);
+  const activeSyncRef = useRef<(() => void) | null>(null);
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [confirmDeleteSession, setConfirmDeleteSession] = useState<{
+    id: Id<"chatSessions">;
+    title: string;
+  } | null>(null);
+  const [openReflectionId, setOpenReflectionId] = useState<Id<"reflections"> | null>(null);
+
+  useEffect(() => {
+    if (
+      activeWorkspaceId &&
+      sessions &&
+      sessions.length > 0 &&
+      !activeSessionId
+    ) {
+      setActiveSessionIdAction(sessions[0]._id);
+    }
+  }, [sessions, activeSessionId, setActiveSessionIdAction, activeWorkspaceId]);
+
+  // OCEAN Heartbeat: Automatically trigger background OCEAN digest generation if pending
+  useEffect(() => {
+    if (profile?.userId) {
+      // Fire and forget
+      fetch('/api/cron/ocean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile.userId })
+      }).catch(err => console.error("OCEAN heartbeat failed", err));
+    }
+  }, [profile?.userId]);
+
+  // ---- Sync handler (used by both the sidebar button and TaskPanel) ----
+  const handleSync = async () => {
+    if (activeSessionId && activeSyncRef.current) {
+      await activeSyncRef.current();
+      return;
+    }
+
+    const syncText = "Sync my workspace.";
+    const id = await createSession({
+      title: `Sync - ${new Date().toLocaleDateString()}`,
+      workspaceId: activeWorkspaceId,
+    });
+    
+    pendingInitialMessageRef.current = { sessionId: id, text: syncText };
+    setActiveSessionIdAction(id);
+  };
+
+  // Expose handleSync to parent via ref (placed after declaration)
+  useEffect(() => {
+    if (onSyncRef) onSyncRef.current = handleSync;
+  });
+
+
+  const handleAddWorkspace = async (name: string) => {
+    const colors = ["#d4a373", "#8b5cf6", "#ec4899", "#10b981", "#3b82f6"];
+    const index = (workspaces?.length || 0) % colors.length;
+
+    await createWorkspace({
+      name,
+      icon: "Briefcase",
+      color: colors[index],
+    });
+
+    setIsCreatingWorkspace(false);
+  };
+
+  const currentWorkspace = workspaces?.find(
+    (w: Doc<"workspaces">) => w._id === activeWorkspaceId,
+  );
+
+  const handleDeleteChat = async (
+    id: Id<"chatSessions">,
+    e: React.MouseEvent,
+  ) => {
+    e.stopPropagation();
+    const session = sessions?.find((s: Doc<"chatSessions">) => s._id === id);
+    if (session) {
+      setConfirmDeleteSession({
+        id,
+        title: session.title || "Untitled Session",
+      });
+    }
+  };
+
+  const executeDeleteChat = async (id: Id<"chatSessions">) => {
+    await deleteSession({ id });
+    if (activeSessionId === id) {
+      setActiveSessionIdAction(null);
+    }
+    setConfirmDeleteSession(null);
+  };
+
+  const handleNewChat = async (
+    workspaceOverride?: Id<"workspaces"> | null,
+    agentPersonaId?: Id<"agentPersonas">,
+    initialMessage?: string,
+  ) => {
+    const wsId = workspaceOverride === null ? undefined : workspaceOverride || activeWorkspaceId;
+    const title = initialMessage
+      ? initialMessage.length > 30
+        ? initialMessage.substring(0, 30) + "..."
+        : initialMessage
+      : `Chat ${new Date().toLocaleTimeString()}`;
+
+    const id = await createSession({
+      title,
+      workspaceId: wsId,
+      agentPersonaId: agentPersonaId === "default_dialogue" ? undefined : agentPersonaId,
+    });
+    if (wsId !== activeWorkspaceId && wsId) {
+      setActiveWorkspaceIdAction(wsId);
+    }
+
+    if (initialMessage) {
+      pendingInitialMessageRef.current = { sessionId: id, text: initialMessage };
+    }
+
+    setActiveSessionIdAction(id);
+    if (!isLargeViewport) {
+      setShowHistoryAction(false);
+    }
+  };
+
+  // When selecting a session from the Dashboard, switch to its workspace if needed
+  const handleDashboardSelectSession = useCallback(
+    (id: Id<"chatSessions">) => {
+      const session = allSessions?.find(
+        (s: Doc<"chatSessions">) => s._id === id,
+      );
+      if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
+        setActiveWorkspaceIdAction(session.workspaceId);
+      }
+      setActiveSessionIdAction(id);
+      if (!isLargeViewport) {
+        setShowHistoryAction(false);
+      }
+    },
+    [
+      allSessions,
+      activeWorkspaceId,
+      setActiveWorkspaceIdAction,
+      setActiveSessionIdAction,
+      isLargeViewport,
+      setShowHistoryAction,
+    ],
+  );
+
+  return (
+    <div className="flex-1 flex overflow-hidden h-full relative">
+      {/* Workspace Rail (The Focus) - Hidden on Mobile */}
+      <WorkspaceRail
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        showHistory={showHistory}
+        onSelectWorkspace={(id) => setActiveWorkspaceIdAction(id)}
+        onOpenCreateModal={() => setIsCreatingWorkspace(true)}
+        onShowHistory={() => setShowHistoryAction(true)}
+      />
+
+      {/* Sessions Sidebar */}
+      <SessionSidebar
+        sessions={sessions}
+        workspaces={workspaces}
+        activeSessionId={activeSessionId}
+        activeWorkspaceId={activeWorkspaceId}
+        showHistory={showHistory}
+        isLargeViewport={isLargeViewport}
+        onSelectSession={(id) => setActiveSessionIdAction(id)}
+        onSelectWorkspaceSession={(wsId, sessionId) =>
+          setActiveWorkspaceIdAction(wsId, sessionId)
+        }
+        onNewChat={handleNewChat}
+        onDeleteChat={handleDeleteChat}
+        onSelectWorkspace={(id) => setActiveWorkspaceIdAction(id)}
+        onOpenCreateWorkspace={() => setIsCreatingWorkspace(true)}
+        onCloseHistory={() => setShowHistoryAction(false)}
+      />
+
+      {/* Main Content Area */}
+      <motion.div
+        layout
+        className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
+      >
+        {!activeWorkspaceId && !activeSessionId ? (
+          <Dashboard
+            workspaces={workspaces}
+            sessions={allSessions}
+            profile={profile}
+            onNewChat={handleNewChat}
+            onSelectSession={handleDashboardSelectSession}
+            onShowHistory={() => setShowHistoryAction(true)}
+            onShowTasks={onShowTasksAction}
+            onOpenReflection={setOpenReflectionId}
+          />
+        ) : (
+          <ActiveChat
+            key={activeSessionId || "no-session"}
+            activeSessionId={activeSessionId}
+            activeWorkspaceId={activeWorkspaceId}
+            workspaces={workspaces}
+            sessions={sessions}
+            profile={profile}
+            activePersona={activePersona}
+            provider={provider}
+            getActiveModelName={getActiveModelName}
+            getActiveConfig={getActiveConfig}
+            isLargeViewport={isLargeViewport}
+            keyboardOffset={keyboardOffset}
+            activeScope={activeScope}
+            setActiveScopeAction={setActiveScopeAction}
+            onShowTasksAction={onShowTasksAction}
+            setShowHistoryAction={setShowHistoryAction}
+            onChatInputResizeAction={onChatInputResizeAction}
+            signOut={() => signOut()}
+            handleProviderChange={handleProviderChange}
+            sendMessage={sendMessage}
+            generateUploadUrl={generateUploadUrl}
+            addTask={addTask}
+            updateTask={updateTask}
+            addEvent={addEvent}
+            updateEvent={updateEvent}
+            updateOccurrence={updateOccurrence}
+            deleteEvent={deleteEvent}
+            completeTask={completeTask}
+            deleteTask={deleteTask}
+            updateUserBio={updateUserBio}
+            deleteSemanticMemory={deleteSemanticMemory}
+            updatePreferences={updatePreferences}
+            createHabit={createHabit}
+            logHabit={logHabit}
+            triggerAutoTitle={triggerAutoTitle}
+            pendingInitialMessageRef={pendingInitialMessageRef}
+            activeSyncRef={activeSyncRef}
+          />
+        )}
+      </motion.div>
+
+      {/* Global Workspace Creation Modal */}
+      <CreateWorkspaceModal
+        isOpen={isCreatingWorkspace}
+        onClose={() => setIsCreatingWorkspace(false)}
+        onSubmit={handleAddWorkspace}
+        isLargeViewport={isLargeViewport}
+      />
+      {/* Confirmation Modal for Session Deletion */}
+      <DeleteSessionModal
+        session={confirmDeleteSession}
+        onConfirm={(id) => executeDeleteChat(id)}
+        onCancel={() => setConfirmDeleteSession(null)}
+        isLargeViewport={isLargeViewport}
+      />
+      <ReflectionWrappedModal
+        reflectionId={openReflectionId}
+        onClose={() => setOpenReflectionId(null)}
+        onExportImage={async (id) => {
+          let data: any;
+          if (isPbBackend()) {
+            try {
+              const pb = (await import("@/pb-compat/client")).getPbClient();
+              const rec = await pb.collection("reflections").getOne(id);
+              data = {
+                ...rec,
+                _id: rec.id,
+                userId: rec.user,
+                workspaceId: rec.workspace,
+              };
+            } catch (e) {
+              console.error("Failed to fetch reflection from PB for export:", e);
+            }
+          } else {
+            data = await convex.query(api.reflections.getReflection, { id });
+          }
+          if (data) await exportReflectionAsImage(data);
+        }}
+      />
+    </div>
+  );
+}
+
+interface ActiveChatProps {
+  activeSessionId: Id<"chatSessions"> | null;
+  activeWorkspaceId: Id<"workspaces"> | undefined;
+  workspaces: Doc<"workspaces">[] | undefined;
+  sessions: Doc<"chatSessions">[] | undefined;
+  profile: any;
+  activePersona: any;
+  provider: AIProvider;
+  getActiveModelName: string;
+  getActiveConfig: any;
+  isLargeViewport: boolean;
+  keyboardOffset: number;
+  activeScope: Scope | null;
+  setActiveScopeAction: (scope: Scope | null) => void;
+  onShowTasksAction?: () => void;
+  setShowHistoryAction: (show: boolean) => void;
+  onChatInputResizeAction?: (offset: number) => void;
+  signOut: () => void;
+  handleProviderChange: (p: AIProvider) => void;
+  sendMessage: any;
+  generateUploadUrl: any;
+  addTask: any;
+  updateTask: any;
+  addEvent: any;
+  updateEvent: any;
+  updateOccurrence: any;
+  deleteEvent: any;
+  completeTask: any;
+  deleteTask: any;
+  updateUserBio: any;
+  deleteSemanticMemory: any;
+  updatePreferences: any;
+  createHabit: any;
+  logHabit: any;
+  triggerAutoTitle: any;
+  pendingInitialMessageRef: React.MutableRefObject<{ sessionId: string; text: string } | null>;
+  activeSyncRef: React.MutableRefObject<(() => void) | null>;
+}
+
+function ActiveChat({
+  activeSessionId,
+  activeWorkspaceId,
+  workspaces,
+  sessions,
+  profile,
+  activePersona,
+  provider,
+  getActiveModelName,
+  getActiveConfig,
+  isLargeViewport,
+  keyboardOffset,
+  activeScope,
+  setActiveScopeAction,
+  onShowTasksAction,
+  setShowHistoryAction,
+  onChatInputResizeAction,
+  signOut,
+  handleProviderChange,
+  sendMessage,
+  generateUploadUrl,
+  addTask,
+  updateTask,
+  addEvent,
+  updateEvent,
+  updateOccurrence,
+  deleteEvent,
+  completeTask,
+  deleteTask,
+  updateUserBio,
+  deleteSemanticMemory,
+  updatePreferences,
+  createHabit,
+  logHabit,
+  triggerAutoTitle,
+  pendingInitialMessageRef,
+  activeSyncRef,
+}: ActiveChatProps) {
+  const convex = useConvex();
+  const idMapRef = useRef<Map<string, string>>(new Map());
+  const [localScopes, setLocalScopes] = useState<Record<string, Scope>>({});
+  const [isTyping, setIsTyping] = useState(false);
+
+  // Clear local scopes when activeSessionId changes
+  useEffect(() => {
+    setLocalScopes({});
+  }, [activeSessionId]);
+
+  const pbMessagesPaginated = usePbPaginatedQuery(
+    usePbMessagesPaginated,
+    (isPbBackend() && activeSessionId) ? { sessionId: activeSessionId } : "skip",
+    { initialNumItems: 50 },
+  );
+  const convexMessagesPaginated = usePaginatedQuery(
+    api.messages.listPaginated,
+    (!isPbBackend() && activeSessionId) ? { sessionId: activeSessionId } : "skip",
+    { initialNumItems: 50 },
+  );
+  const messagesPaginated = isPbBackend() ? pbMessagesPaginated : convexMessagesPaginated;
+
+  const messages = useMemo(() => {
+    if (!activeSessionId) return undefined;
+    if (messagesPaginated.status === "LoadingFirstPage") return undefined;
+    const sorted = [...messagesPaginated.results].sort(
+      (a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0),
+    );
+    return sorted.reverse().map((msg: any) => ({
+      ...msg,
+      _id: msg._id || msg.id,
+      _creationTime: msg._creationTime || msg.createdAt,
+      sessionId: msg.sessionId || msg.session,
+    }));
+  }, [messagesPaginated.results, messagesPaginated.status, activeSessionId]);
+
+  const loadOlderMessages = useCallback(() => {
+    if (messagesPaginated.status === "CanLoadMore") {
+      void messagesPaginated.loadMore(50);
+    }
+  }, [messagesPaginated]);
+
+  const isSyncing = !!(activeSessionId && messages === undefined);
+  const convexAuthToken = useAuthToken();
+  const authToken = isPbBackend() ? getPbClient().authStore.token : convexAuthToken;
+
+  const pendingScopeRef = useRef<Scope | null | undefined>(undefined);
 
   const { messages: aiMessages, setMessages, sendMessage: sendVercelMessage, status } = useChat({
     transport: new DefaultChatTransport({ 
@@ -461,6 +837,11 @@ export function Chat({
           ? message.parts.filter(p => p.type === 'text').map(p => (p as any).text).join('') 
           : (message as any).content || '';
           
+        // Skip intermediate tool execution steps that have no text content yet
+        if (!textContent) {
+          return;
+        }
+
         const reasoningParts = message.parts ? message.parts.filter(p => p.type === 'reasoning') : [];
         const reasoning = reasoningParts.length > 0
           ? reasoningParts.map(p => (p as any).reasoning || (p as any).text).join('\n[---DIALOGUE_REASONING_SPLIT---]\n')
@@ -476,7 +857,7 @@ export function Chat({
 
         const convexId = await sendMessage({
           sessionId: activeSessionId,
-          text: textContent,
+          text: textContent || "(tool execution)",
           author: "AI",
           reasoning,
           toolCalls,
@@ -494,20 +875,12 @@ export function Chat({
 
   const isLoading = status === 'submitted' || status === 'streaming';
 
-  const lastSyncedSessionIdRef = useRef<string | null>(null);
-  // Holds the initial message that needs to be sent to the AI after a new
-  // session is created. We store it as a ref so that the useEffect below can
-  // read the latest value without stale-closure issues.
-  const pendingInitialMessageRef = useRef<{ sessionId: string; text: string } | null>(null);
-  const pendingScopeRef = useRef<Scope | null | undefined>(undefined);
-
   // Vercel AI SDK vs Convex Sync (Hybrid Approach)
   useEffect(() => {
     if (messages && !isLoading) {
-      const isSessionSwitch = activeSessionId !== lastSyncedSessionIdRef.current;
       const hasConvexCaughtUp = messages.length > aiMessages.length;
 
-      if (isSessionSwitch || hasConvexCaughtUp || aiMessages.length === 0) {
+      if (hasConvexCaughtUp || aiMessages.length === 0) {
         const mappedHistory = messages.map(m => {
           const parts: any[] = [];
           if (m.reasoning) {
@@ -526,6 +899,13 @@ export function Chat({
             parts,
             toolCalls: m.toolCalls,
             toolCall: m.toolCall,
+            toolInvocations: m.toolCalls?.map((tc: any, index: number) => ({
+              toolCallId: tc.id || `${m._id}-tool-${index}`,
+              toolName: tc.name,
+              args: tc.args,
+              result: tc.result,
+              state: tc.result !== undefined ? "result" : "call",
+            })),
             attachments: isPbBackend() && Array.isArray(m.attachments)
               ? m.attachments.map((att: any) => {
                   if (typeof att === "string") {
@@ -550,117 +930,11 @@ export function Chat({
           };
         });
         setMessages(mappedHistory);
-        lastSyncedSessionIdRef.current = activeSessionId || null;
       }
     }
   }, [messages, isLoading, setMessages, aiMessages.length, activeSessionId]);
 
-  // Fire the AI call for new-chat initial messages once the activeSessionId
-  // has actually settled in the useChat transport URL.
-  useEffect(() => {
-    const pending = pendingInitialMessageRef.current;
-    if (!pending || pending.sessionId !== activeSessionId || isLoading) return;
-    pendingInitialMessageRef.current = null;
-
-    const trigger = async () => {
-      setIsTyping(true);
-      try {
-        await sendVercelMessage({ text: pending.text });
-      } catch (err) {
-        console.error("Failed to trigger AI for initial message:", err);
-      } finally {
-        setIsTyping(false);
-      }
-    };
-    trigger();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId]);
-
-  // Build a scope lookup from Convex messages so newly-sent messages
-  // immediately show their scope pin (before Convex query catches up).
-  const scopeByContent = useMemo(() => {
-    if (!messages) return new Map<string, Scope>();
-    const map = new Map<string, Scope>();
-    for (const cm of messages) {
-      if (cm.scope && cm.author === "User") {
-        map.set(cm.text, cm.scope);
-      }
-    }
-    return map;
-  }, [messages]);
-
-  const displayMessages = useMemo(() => {
-    if (!activeSessionId) return undefined;
-    if (messagesPaginated.status === "LoadingFirstPage") return undefined;
-    
-    return aiMessages.map((m) => {
-      const textParts = m.parts ? m.parts.filter(p => p.type === 'text') : [];
-      const reasoningParts = m.parts ? m.parts.filter(p => p.type === 'reasoning') : [];
-      
-      const text = textParts.length > 0 
-        ? textParts.map(p => (p as any).text).join('') 
-        : (m as any).content || '';
-        
-      const reasoning = reasoningParts.length > 0
-        ? reasoningParts.map(p => (p as any).reasoning || (p as any).text).join('\n\n')
-        : (m as any).reasoning || undefined;
-
-        return {
-          _id: m.id,
-          author: m.role === "user" ? "User" : "AI",
-          text,
-          reasoning,
-          parts: m.parts,
-          toolCalls: (m as any).toolCalls || ((m as any).toolInvocations ? (m as any).toolInvocations.map((ti: any) => ({
-            name: ti.toolName,
-            args: ti.args,
-            result: ti.result,
-          })) : undefined),
-          toolCall: (m as any).toolCall,
-          attachments: (m as any).attachments,
-          storageId: (m as any).storageId,
-          fileName: (m as any).fileName,
-          fileType: (m as any).fileType,
-          scope: (m as any).scope || localScopes[text] || scopeByContent.get(text),
-          timestamp: Date.now(),
-          sessionId: (m as any).sessionId || activeSessionId,
-        };
-    });
-  }, [aiMessages, activeSessionId, messagesPaginated.status, scopeByContent, localScopes]);
-
-  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [confirmDeleteSession, setConfirmDeleteSession] = useState<{
-    id: Id<"chatSessions">;
-    title: string;
-  } | null>(null);
-  const [openReflectionId, setOpenReflectionId] = useState<Id<"reflections"> | null>(null);
-  const [isTyping, setIsTyping] = useState(false);
-  const isSyncing = !!(activeSessionId && messages === undefined);
-
-  useEffect(() => {
-    if (
-      activeWorkspaceId &&
-      sessions &&
-      sessions.length > 0 &&
-      !activeSessionId
-    ) {
-      setActiveSessionIdAction(sessions[0]._id);
-    }
-  }, [sessions, activeSessionId, setActiveSessionIdAction, activeWorkspaceId]);
-
-  // OCEAN Heartbeat: Automatically trigger background OCEAN digest generation if pending
-  useEffect(() => {
-    if (profile?.userId) {
-      // Fire and forget
-      fetch('/api/cron/ocean', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: profile.userId })
-      }).catch(err => console.error("OCEAN heartbeat failed", err));
-    }
-  }, [profile?.userId]);
-
-  // ---- Shared helper: run LM Studio logic for a given session + text ----
+  // Run LM Studio logic
   const runLocalLLMForSession = useCallback(
     async (
       sessionId: Id<"chatSessions">,
@@ -777,45 +1051,39 @@ export function Chat({
                 enrichedArgs.oldValues = oldTask
                   ? {
                       text: oldTask.text,
+                      completed: oldTask.completed,
                       priority: oldTask.priority,
                       category: oldTask.category,
+                      notes: oldTask.notes,
+                      progress: oldTask.progress,
+                      statusHook: oldTask.statusHook,
                       dueDate: oldTask.dueDate,
-                      completed: oldTask.completed,
+                      dueDateStr: oldTask.dueDateStr,
                     }
                   : undefined;
               }
+            } else if (name === "deleteTask") {
+              const oldTask = isPbBackend()
+                ? await pbApi.tasks.get({ id: args.taskId as string })
+                : await convex.query(api.tasks.get, {
+                    id: args.taskId as Id<"tasks">,
+                  });
+              await deleteTask({ id: args.taskId as Id<"tasks"> });
+              enrichedArgs.titleHint = oldTask?.text;
             } else if (name === "addEvent" || name === "updateEvent") {
               if (name === "addEvent") {
-                const startTime = parseLocal(args.startTime as string);
-                const endTime = args.endTime
-                  ? parseLocal(args.endTime as string)
-                  : undefined;
-                const eventType =
-                  (args.eventType as "interval" | "point") ||
-                  (args.endTime ? "interval" : "point");
-                const recurrenceInput = toRecurrenceInput(args.recurrence);
-                const recurrence = recurrenceInput
-                  ? {
-                      frequency: recurrenceInput.frequency,
-                      interval: recurrenceInput.interval,
-                      daysOfWeek: recurrenceInput.daysOfWeek,
-                      until: recurrenceInput.until
-                        ? parseLocal(recurrenceInput.until)
-                        : undefined,
-                    }
-                  : undefined;
-
                 await addEvent({
-                  title: (args.title as string) || "Untitled Event",
+                  title: (args.title as string) || "New Event",
+                  startTime: args.startTime
+                    ? parseLocal(args.startTime as string)
+                    : Date.now(),
+                  endTime: args.endTime
+                    ? parseLocal(args.endTime as string)
+                    : Date.now() + 3600000,
                   location: args.location as string | undefined,
-                  description: args.description as string | undefined,
                   notes: args.notes as string | undefined,
-                  outcome: args.outcome as string | undefined,
-                  statusHook: args.statusHook as string | undefined,
-                  startTime,
-                  endTime,
-                  eventType,
-                  recurrence,
+                  eventType: args.eventType as "interval" | "point" | undefined,
+                  recurrence: toRecurrenceInput(args.recurrence),
                   workspaceId: promptCtx.workspaceId ?? undefined,
                 });
               } else {
@@ -829,7 +1097,7 @@ export function Chat({
                 if (args.location) updates.location = args.location as string;
                 if (args.notes) updates.notes = args.notes as string;
                 if (args.outcome) updates.outcome = args.outcome as string;
-                if (args.statusHook)
+                if (args.statusHook !== undefined)
                   updates.statusHook = args.statusHook as string;
                 if (args.startTime)
                   updates.startTime = parseLocal(args.startTime as string);
@@ -839,16 +1107,16 @@ export function Chat({
                   updates.eventType = args.eventType as "interval" | "point";
                 if (args.cancelled !== undefined)
                   updates.cancelled = args.cancelled as boolean;
-                const recurrenceInput = toRecurrenceInput(args.recurrence);
-                if (recurrenceInput) {
-                  updates.recurrence = {
-                    frequency: recurrenceInput.frequency,
-                    interval: recurrenceInput.interval,
-                    daysOfWeek: recurrenceInput.daysOfWeek,
-                    until: recurrenceInput.until
-                      ? parseLocal(recurrenceInput.until)
-                      : undefined,
-                  };
+                if (args.recurrence) {
+                  const ri = toRecurrenceInput(args.recurrence);
+                  if (ri) {
+                    updates.recurrence = {
+                      frequency: ri.frequency,
+                      interval: ri.interval,
+                      daysOfWeek: ri.daysOfWeek,
+                      until: ri.until ? parseLocal(ri.until) : undefined,
+                    };
+                  }
                 }
 
                 await updateEvent({
@@ -864,128 +1132,159 @@ export function Chat({
                       startTime: oldEvent.startTime,
                       endTime: oldEvent.endTime,
                       location: oldEvent.location,
+                      notes: oldEvent.notes,
+                      eventType: oldEvent.eventType,
+                      recurrence: oldEvent.recurrence,
+                      outcome: oldEvent.outcome,
+                      statusHook: oldEvent.statusHook,
+                      cancelled: oldEvent.cancelled,
                     }
                   : undefined;
               }
-            } else if (name === "deleteEvent") {
-              const event = isPbBackend()
+            } else if (name === "updateEventOccurrence") {
+              const oldEvent = isPbBackend()
                 ? await pbApi.events.get({ id: args.eventId as string })
                 : await convex.query(api.events.get, {
                     id: args.eventId as Id<"events">,
                   });
-              await deleteEvent({ id: args.eventId as Id<"events"> });
-              enrichedArgs.titleHint = event?.title;
-            } else if (name === "updateEventOccurrence") {
-              const oldEvent = isPbBackend()
-                ? await pbApi.events.get({ id: args.seriesId as string })
-                : await convex.query(api.events.get, {
-                    id: args.seriesId as Id<"events">,
-                  });
               await updateOccurrence({
-                seriesId: args.seriesId as Id<"events">,
-                originalStartTime: parseLocal(args.originalStartTime as string),
+                id: args.eventId as Id<"events">,
+                occurrenceId: args.occurrenceId as string,
                 startTime: args.startTime
                   ? parseLocal(args.startTime as string)
                   : undefined,
                 endTime: args.endTime
                   ? parseLocal(args.endTime as string)
                   : undefined,
-                eventType: args.eventType
-                  ? (args.eventType as "interval" | "point")
-                  : undefined,
-                title: args.title as string | undefined,
-                location: args.location as string | undefined,
-                cancelled:
-                  args.cancelled !== undefined
-                    ? (args.cancelled as boolean)
-                    : undefined,
+                cancelled: args.cancelled as boolean | undefined,
+                notes: args.notes as string | undefined,
+                outcome: args.outcome as string | undefined,
+                statusHook: args.statusHook as string | undefined,
               });
-              enrichedArgs.titleHint =
-                (args.title as string | undefined) ?? oldEvent?.title;
-            } else if (name === "completeTask") {
-              const task = isPbBackend()
-                ? await pbApi.tasks.get({ id: args.taskId as string })
-                : await convex.query(api.tasks.get, {
-                    id: args.taskId as Id<"tasks">,
+              enrichedArgs.titleHint = oldEvent?.title;
+            } else if (name === "deleteEvent") {
+              const oldEvent = isPbBackend()
+                ? await pbApi.events.get({ id: args.eventId as string })
+                : await convex.query(api.events.get, {
+                    id: args.eventId as Id<"events">,
                   });
-              await completeTask({ id: args.taskId as Id<"tasks"> });
-              enrichedArgs.titleHint = task?.text;
-            } else if (name === "deleteTask") {
-              const task = isPbBackend()
-                ? await pbApi.tasks.get({ id: args.taskId as string })
-                : await convex.query(api.tasks.get, {
-                    id: args.taskId as Id<"tasks">,
-                  });
-              await deleteTask({ id: args.taskId as Id<"tasks"> });
-              enrichedArgs.titleHint = task?.text;
+              await deleteEvent({ id: args.eventId as Id<"events"> });
+              enrichedArgs.titleHint = oldEvent?.title;
             } else if (name === "updateUserBio") {
-              await updateUserBio({ bio: args.bio as string });
-              enrichedArgs.oldBio = profile?.bio;
+              await updateUserBio({
+                bio: args.bio as string,
+              });
+            } else if (name === "saveSemanticMemory") {
+              // Handled by background cron in Mastra agent (silent)
             } else if (name === "deleteSemanticMemory") {
               await deleteSemanticMemory({
-                id: args.memoryId as Id<"memories">,
+                memoryId: args.memoryId as Id<"memories">,
               });
-            } else if (name === "searchHistoricalEntities") {
-              const histArgs = args as {
-                type: "tasks" | "events" | "all";
-                query?: string;
-                startTime?: number;
-                endTime?: number;
-                limit?: number;
-              };
+            } else if (name === "retrieveGraphContext") {
+              // Read-only tool
+            } else if (name === "getRelevantTasks") {
+              const limit =
+                args.limit !== undefined ? Number(args.limit) : 10;
+              const statusHook = args.statusHook as string | undefined;
 
-              let results: unknown[] = [];
-              const limit = histArgs.limit ?? 20;
+              const tasks = isPbBackend()
+                ? await pbApi.tasks.list({
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                    statusHook,
+                  } as any)
+                : await convex.query(api.tasks.list, {
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                    statusHook,
+                  } as any);
 
-              if (histArgs.type === "tasks" || histArgs.type === "all") {
-                const tasks = isPbBackend()
-                  ? await pbApi.tasks.searchHistory({
-                      query: histArgs.query,
-                      startTime: histArgs.startTime,
-                      endTime: histArgs.endTime,
-                      limit,
-                    })
-                  : await convex.query(api.tasks.searchHistory, {
-                      query: histArgs.query,
-                      startTime: histArgs.startTime,
-                      endTime: histArgs.endTime,
-                      limit,
-                    });
+              enrichedArgs.tasks = tasks.slice(0, limit);
+              enrichedArgs.count = tasks.length;
+            } else if (name === "getRelevantEvents") {
+              const limit =
+                args.limit !== undefined ? Number(args.limit) : 10;
+              const statusHook = args.statusHook as string | undefined;
+
+              const events = isPbBackend()
+                ? await pbApi.events.list({
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                    statusHook,
+                  } as any)
+                : await convex.query(api.events.list, {
+                    workspaceId: promptCtx.workspaceId ?? undefined,
+                    statusHook,
+                  } as any);
+
+              enrichedArgs.events = events.slice(0, limit);
+              enrichedArgs.count = events.length;
+            } else if (name === "searchTasksAndEvents") {
+              const limit =
+                args.limit !== undefined ? Number(args.limit) : 10;
+              const queryStr = args.query as string;
+
+              let results: any[] = [];
+              if (isPbBackend()) {
+                const tasks = await pbApi.tasks.list({
+                  workspaceId: promptCtx.workspaceId ?? undefined,
+                });
+                const events = await pbApi.events.list({
+                  workspaceId: promptCtx.workspaceId ?? undefined,
+                });
+                const q = queryStr.toLowerCase();
+                const filteredTasks = tasks.filter((t: any) =>
+                  t.text.toLowerCase().includes(q),
+                );
+                const filteredEvents = events.filter((e: any) =>
+                  e.title.toLowerCase().includes(q),
+                );
                 results = results.concat(
-                  tasks.map((t: any) => ({
-                    type: "task" as const,
-                    id: t._id ?? t.id,
-                    text: t.text,
-                    completedAt: t.completedAt,
-                    category: t.category,
-                    priority: t.priority,
+                  filteredTasks.map((t: any) => ({
+                    type: "task",
+                    id: t.id,
+                    title: t.text,
+                    completed: t.completed,
                   })),
                 );
-              }
-
-              if (histArgs.type === "events" || histArgs.type === "all") {
-                const events = isPbBackend()
-                  ? await pbApi.events.searchHistory({
-                      query: histArgs.query,
-                      startTime: histArgs.startTime,
-                      endTime: histArgs.endTime,
-                      limit,
-                    })
-                  : await convex.query(api.events.searchHistory, {
-                      query: histArgs.query,
-                      startTime: histArgs.startTime,
-                      endTime: histArgs.endTime,
-                      limit,
-                    });
                 results = results.concat(
-                  events.map((e: any) => ({
+                  filteredEvents.map((e: any) => ({
                     type: "event",
-                    id: e._id ?? e.id,
+                    id: e.id,
                     title: e.title,
                     startTime: e.startTime,
                     location: e.location,
                   })),
                 );
+              } else {
+                const tasks = await convex.query((api.tasks as any).search, {
+                  workspaceId: promptCtx.workspaceId ?? undefined,
+                  query: queryStr,
+                  limit,
+                });
+                results = results.concat(
+                  tasks.map((t: any) => ({
+                    type: "task",
+                    id: t._id ?? t.id,
+                    title: t.text,
+                    completed: t.completed,
+                  })),
+                );
+                if (results.length < limit) {
+                  const events = await convex.query(
+                    (api.events as any).search,
+                    {
+                      workspaceId: promptCtx.workspaceId ?? undefined,
+                      query: queryStr,
+                      limit,
+                    });
+                  results = results.concat(
+                    events.map((e: any) => ({
+                      type: "event",
+                      id: e._id ?? e.id,
+                      title: e.title,
+                      startTime: e.startTime,
+                      location: e.location,
+                    })),
+                  );
+                }
               }
 
               results = results.slice(0, limit);
@@ -1169,56 +1468,131 @@ export function Chat({
     ],
   );
 
-  // ---- Sync handler (used by both the sidebar button and TaskPanel) ----
-  const handleSync = async () => {
-    const syncText = "Sync my workspace.";
-    let sessionId = activeSessionId;
-
-    if (!sessionId) {
-      sessionId = await createSession({
-        title: `Sync - ${new Date().toLocaleDateString()}`,
-        workspaceId: activeWorkspaceId,
-      });
-      setActiveSessionIdAction(sessionId);
-    }
-
-    await sendMessage({
-      sessionId,
-      text: syncText,
-      author: "User",
-      brief: true,
-      timezoneOffset: new Date().getTimezoneOffset(),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      provider,
-    });
-
-    setIsTyping(true);
-
-    if (provider === "lmstudio") {
-      try {
-        await runLocalLLMForSession(sessionId as Id<"chatSessions">, syncText, {
-          brief: true,
-        });
-      } finally {
-        setIsTyping(false);
-      }
-    } else {
-      try {
-        await sendVercelMessage({
-          text: syncText,
-        });
-      } finally {
-        setIsTyping(false);
-      }
-    }
-  };
-
-  // Expose handleSync to parent via ref (placed after declaration)
+  // Set the sync callback
   useEffect(() => {
-    if (onSyncRef) onSyncRef.current = handleSync;
-  });
+    if (activeSyncRef) {
+      activeSyncRef.current = async () => {
+        const syncText = "Sync my workspace.";
+        await sendMessage({
+          sessionId: activeSessionId,
+          text: syncText,
+          author: "User",
+          brief: true,
+          timezoneOffset: new Date().getTimezoneOffset(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          provider,
+        });
 
-  // ---- Send handler: receives (text, files, scope) from ChatInput, handles upload + message + LLM ----
+        setIsTyping(true);
+
+        if (provider === "lmstudio") {
+          try {
+            await runLocalLLMForSession(activeSessionId as Id<"chatSessions">, syncText, {
+              brief: true,
+            });
+          } finally {
+            setIsTyping(false);
+          }
+        } else {
+          try {
+            await sendVercelMessage({
+              text: syncText,
+            });
+          } finally {
+            setIsTyping(false);
+          }
+        }
+      };
+    }
+    return () => {
+      if (activeSyncRef) activeSyncRef.current = null;
+    };
+  }, [activeSessionId, provider, sendMessage, runLocalLLMForSession, sendVercelMessage, activeSyncRef]);
+
+  // Fire the AI call for new-chat initial messages once the activeSessionId has settled
+  useEffect(() => {
+    const pending = pendingInitialMessageRef.current;
+    if (!pending || pending.sessionId !== activeSessionId || isLoading) return;
+    pendingInitialMessageRef.current = null;
+
+    const trigger = async () => {
+      setIsTyping(true);
+      try {
+        await sendMessage({
+          sessionId: activeSessionId,
+          text: pending.text,
+          author: "User",
+          timezoneOffset: new Date().getTimezoneOffset(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          provider,
+        });
+
+        if (provider === "lmstudio") {
+          await runLocalLLMForSession(activeSessionId as Id<"chatSessions">, pending.text);
+        } else {
+          await sendVercelMessage({ text: pending.text });
+        }
+      } catch (err) {
+        console.error("Failed to trigger AI for initial message:", err);
+      } finally {
+        setIsTyping(false);
+      }
+    };
+    trigger();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId]);
+
+  // Build a scope lookup from messages
+  const scopeByContent = useMemo(() => {
+    if (!messages) return new Map<string, Scope>();
+    const map = new Map<string, Scope>();
+    for (const cm of messages) {
+      if (cm.scope && cm.author === "User") {
+        map.set(cm.text, cm.scope);
+      }
+    }
+    return map;
+  }, [messages]);
+
+  const displayMessages = useMemo(() => {
+    if (!activeSessionId) return undefined;
+    if (messagesPaginated.status === "LoadingFirstPage") return undefined;
+    
+    return aiMessages.map((m) => {
+      const textParts = m.parts ? m.parts.filter(p => p.type === 'text') : [];
+      const reasoningParts = m.parts ? m.parts.filter(p => p.type === 'reasoning') : [];
+      
+      const text = textParts.length > 0 
+        ? textParts.map(p => (p as any).text).join('') 
+        : (m as any).content || '';
+        
+      const reasoning = reasoningParts.length > 0
+        ? reasoningParts.map(p => (p as any).reasoning || (p as any).text).join('\n\n')
+        : (m as any).reasoning || undefined;
+
+      return {
+        _id: m.id,
+        author: m.role === "user" ? "User" : "AI",
+        text,
+        reasoning,
+        parts: m.parts,
+        toolCalls: (m as any).toolCalls || ((m as any).toolInvocations ? (m as any).toolInvocations.map((ti: any) => ({
+          name: ti.toolName,
+          args: ti.args,
+          result: ti.result,
+        })) : undefined),
+        toolCall: (m as any).toolCall,
+        attachments: (m as any).attachments,
+        storageId: (m as any).storageId,
+        fileName: (m as any).fileName,
+        fileType: (m as any).fileType,
+        scope: (m as any).scope || localScopes[text] || scopeByContent.get(text),
+        timestamp: Date.now(),
+        sessionId: (m as any).sessionId || activeSessionId,
+      };
+    });
+  }, [aiMessages, activeSessionId, messagesPaginated.status, scopeByContent, localScopes]);
+
   const handleSend = useCallback(
     async (userText: string, files: File[], scope?: Scope | null) => {
       if (!activeSessionId) return;
@@ -1252,7 +1626,7 @@ export function Chat({
 
         setIsTyping(true);
 
-        // Start Vercel AI SDK stream immediately to set isLoading=true, preventing Convex sync flicker
+        // Start Vercel AI SDK stream immediately to set isLoading=true
         let aiPromise;
         if (provider === "lmstudio") {
           aiPromise = runLocalLLMForSession(activeSessionId, userText, { scope });
@@ -1298,272 +1672,64 @@ export function Chat({
       generateUploadUrl,
       runLocalLLMForSession,
       sendMessage,
+      sendVercelMessage,
     ],
   );
-
-  const handleNewChat = async (
-    workspaceOverride?: Id<"workspaces"> | null,
-    agentPersonaId?: Id<"agentPersonas">,
-    initialMessage?: string,
-  ) => {
-    const wsId =
-      workspaceOverride === null
-        ? undefined
-        : workspaceOverride || activeWorkspaceId;
-    const title = initialMessage
-      ? initialMessage.length > 30
-        ? initialMessage.substring(0, 30) + "..."
-        : initialMessage
-      : `Chat ${new Date().toLocaleTimeString()}`;
-
-    const id = await createSession({
-      title,
-      workspaceId: wsId,
-      agentPersonaId:
-        agentPersonaId === "default_dialogue" ? undefined : agentPersonaId,
-    });
-    if (wsId !== activeWorkspaceId && wsId) {
-      setActiveWorkspaceIdAction(wsId);
-    }
-    setActiveSessionIdAction(id);
-    if (!isLargeViewport) {
-      setShowHistoryAction(false);
-    }
-
-    if (initialMessage) {
-      // Store the pending message BEFORE setting activeSessionId so the useEffect
-      // can read it when it fires after the state update is flushed.
-      if (provider !== "lmstudio") {
-        pendingInitialMessageRef.current = { sessionId: id, text: initialMessage };
-      }
-
-      try {
-        await sendMessage({
-          sessionId: id,
-          text: initialMessage,
-          author: "User",
-          timezoneOffset: new Date().getTimezoneOffset(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          provider,
-        });
-
-        if (provider === "lmstudio") {
-          setIsTyping(true);
-          try {
-            await runLocalLLMForSession(id, initialMessage);
-          } finally {
-            setIsTyping(false);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to send initial message:", err);
-        setIsTyping(false);
-      }
-    }
-  };
-
-  const handleAddWorkspace = async (name: string) => {
-    const colors = ["#d4a373", "#8b5cf6", "#ec4899", "#10b981", "#3b82f6"];
-    const index = (workspaces?.length || 0) % colors.length;
-
-    await createWorkspace({
-      name,
-      icon: "Briefcase",
-      color: colors[index],
-    });
-
-    setIsCreatingWorkspace(false);
-  };
-
-  const currentWorkspace = workspaces?.find(
-    (w: Doc<"workspaces">) => w._id === activeWorkspaceId,
-  );
-
-  const handleDeleteChat = async (
-    id: Id<"chatSessions">,
-    e: React.MouseEvent,
-  ) => {
-    e.stopPropagation();
-    const session = sessions?.find((s: Doc<"chatSessions">) => s._id === id);
-    if (session) {
-      setConfirmDeleteSession({
-        id,
-        title: session.title || "Untitled Session",
-      });
-    }
-  };
-
-  const executeDeleteChat = async (id: Id<"chatSessions">) => {
-    await deleteSession({ id });
-    if (activeSessionId === id) {
-      setActiveSessionIdAction(null);
-    }
-    setConfirmDeleteSession(null);
-  };
 
   const handleTypingDone = useCallback(() => {
     setIsTyping(false);
   }, []);
 
-  // When selecting a session from the Dashboard, switch to its workspace if needed
-  const handleDashboardSelectSession = useCallback(
-    (id: Id<"chatSessions">) => {
-      const session = allSessions?.find(
-        (s: Doc<"chatSessions">) => s._id === id,
-      );
-      if (session?.workspaceId && session.workspaceId !== activeWorkspaceId) {
-        setActiveWorkspaceIdAction(session.workspaceId);
-      }
-      setActiveSessionIdAction(id);
-      if (!isLargeViewport) {
-        setShowHistoryAction(false);
-      }
-    },
-    [
-      allSessions,
-      activeWorkspaceId,
-      setActiveWorkspaceIdAction,
-      setActiveSessionIdAction,
-      isLargeViewport,
-      setShowHistoryAction,
-    ],
+  const currentWorkspace = workspaces?.find(
+    (w: Doc<"workspaces">) => w._id === activeWorkspaceId,
   );
 
   return (
-    <div className="flex-1 flex overflow-hidden h-full relative">
-      {/* Workspace Rail (The Focus) - Hidden on Mobile */}
-      <WorkspaceRail
-        workspaces={workspaces}
-        activeWorkspaceId={activeWorkspaceId}
-        showHistory={showHistory}
-        onSelectWorkspace={(id) => setActiveWorkspaceIdAction(id)}
-        onOpenCreateModal={() => setIsCreatingWorkspace(true)}
-        onShowHistory={() => setShowHistoryAction(true)}
-      />
-
-      {/* Sessions Sidebar */}
-      <SessionSidebar
-        sessions={sessions}
-        workspaces={workspaces}
-        activeSessionId={activeSessionId}
-        activeWorkspaceId={activeWorkspaceId}
-        showHistory={showHistory}
-        isLargeViewport={isLargeViewport}
-        onSelectSession={(id) => setActiveSessionIdAction(id)}
-        onSelectWorkspaceSession={(wsId, sessionId) =>
-          setActiveWorkspaceIdAction(wsId, sessionId)
+    <>
+      <ChatHeader
+        activeSessionTitle={
+          activeSessionId
+            ? sessions?.find(
+                (s: Doc<"chatSessions">) => s._id === activeSessionId,
+              )?.title
+            : undefined
         }
-        onNewChat={handleNewChat}
-        onDeleteChat={handleDeleteChat}
-        onSelectWorkspace={(id) => setActiveWorkspaceIdAction(id)}
-        onOpenCreateWorkspace={() => setIsCreatingWorkspace(true)}
-        onCloseHistory={() => setShowHistoryAction(false)}
-      />
-
-      {/* Main Content Area */}
-      <motion.div
-        layout
-        className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
-      >
-        {!activeWorkspaceId && !activeSessionId ? (
-          <Dashboard
-            workspaces={workspaces}
-            sessions={allSessions}
-            profile={profile}
-            onNewChat={handleNewChat}
-            onSelectSession={handleDashboardSelectSession}
-            onShowHistory={() => setShowHistoryAction(true)}
-            onShowTasks={onShowTasksAction}
-            onOpenReflection={setOpenReflectionId}
-          />
-        ) : (
-          <>
-            <ChatHeader
-              activeSessionTitle={
-                activeSessionId
-                  ? sessions?.find(
-                      (s: Doc<"chatSessions">) => s._id === activeSessionId,
-                    )?.title
-                  : undefined
-              }
-              currentWorkspace={currentWorkspace}
-              activeWorkspaceId={activeWorkspaceId}
-              workspaces={workspaces}
-              messageCount={messages?.length || 0}
-              provider={provider}
-              activeModelName={getActiveModelName}
-              isLargeViewport={isLargeViewport}
-              onProviderChange={handleProviderChange}
-              onSignOut={() => signOut()}
-              onShowHistory={() => setShowHistoryAction(true)}
-              onShowTasks={onShowTasksAction}
-            />
-
-            <MessageStream
-              messages={displayMessages as any}
-              activeSessionId={activeSessionId}
-              isTyping={isTyping}
-              isSyncing={isSyncing}
-              isLargeViewport={isLargeViewport}
-              keyboardOffset={keyboardOffset}
-              onTypingDone={handleTypingDone}
-              agentName={activePersona?.name}
-              onLoadOlder={loadOlderMessages}
-              canLoadOlder={messagesPaginated.status === "CanLoadMore"}
-              isLoadingOlder={messagesPaginated.status === "LoadingMore"}
-            />
-
-            <ChatInput
-              activeSessionId={activeSessionId}
-              isLargeViewport={isLargeViewport}
-              keyboardOffset={keyboardOffset}
-              activeScope={activeScope}
-              setActiveScope={setActiveScopeAction}
-              onSend={handleSend}
-              onChatInputResize={onChatInputResizeAction}
-            />
-          </>
-        )}
-      </motion.div>
-
-      {/* Global Workspace Creation Modal */}
-      <CreateWorkspaceModal
-        isOpen={isCreatingWorkspace}
-        onClose={() => setIsCreatingWorkspace(false)}
-        onSubmit={handleAddWorkspace}
+        currentWorkspace={currentWorkspace}
+        activeWorkspaceId={activeWorkspaceId}
+        workspaces={workspaces}
+        messageCount={messages?.length || 0}
+        provider={provider}
+        activeModelName={getActiveModelName}
         isLargeViewport={isLargeViewport}
+        onProviderChange={handleProviderChange}
+        onSignOut={signOut}
+        onShowHistory={() => setShowHistoryAction(true)}
+        onShowTasks={onShowTasksAction}
       />
-      {/* Confirmation Modal for Session Deletion */}
-      <DeleteSessionModal
-        session={confirmDeleteSession}
-        onConfirm={(id) => executeDeleteChat(id)}
-        onCancel={() => setConfirmDeleteSession(null)}
+
+      <MessageStream
+        messages={displayMessages as any}
+        activeSessionId={activeSessionId}
+        isTyping={isTyping}
+        isSyncing={isSyncing}
         isLargeViewport={isLargeViewport}
+        keyboardOffset={keyboardOffset}
+        onTypingDone={handleTypingDone}
+        agentName={activePersona?.name}
+        onLoadOlder={loadOlderMessages}
+        canLoadOlder={messagesPaginated.status === "CanLoadMore"}
+        isLoadingOlder={messagesPaginated.status === "LoadingMore"}
       />
-      <ReflectionWrappedModal
-        reflectionId={openReflectionId}
-        onClose={() => setOpenReflectionId(null)}
-        onExportImage={async (id) => {
-          let data: any;
-          if (isPbBackend()) {
-            try {
-              const pb = (await import("@/pb-compat/client")).getPbClient();
-              const rec = await pb.collection("reflections").getOne(id);
-              data = {
-                ...rec,
-                _id: rec.id,
-                userId: rec.user,
-                workspaceId: rec.workspace,
-              };
-            } catch (e) {
-              console.error("Failed to fetch reflection from PB for export:", e);
-            }
-          } else {
-            data = await convex.query(api.reflections.getReflection, { id });
-          }
-          if (data) await exportReflectionAsImage(data);
-        }}
+
+      <ChatInput
+        activeSessionId={activeSessionId}
+        isLargeViewport={isLargeViewport}
+        keyboardOffset={keyboardOffset}
+        activeScope={activeScope}
+        setActiveScope={setActiveScopeAction}
+        onSend={handleSend}
+        onChatInputResize={onChatInputResizeAction}
       />
-    </div>
+    </>
   );
 }

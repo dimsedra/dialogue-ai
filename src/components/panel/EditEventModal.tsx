@@ -22,6 +22,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { ConfirmEditRecurringData, EventDoc, EventUpdateData } from "./types";
+import { isPbBackend, usePbEventUpdate, usePbWorkspacesList } from "@/pb-compat";
 
 interface EditEventModalProps {
   editingData: { id: Id<"events">; event: EventDoc; timestamp: number };
@@ -70,9 +71,17 @@ export function EditEventModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Convex queries & mutations
-  const workspaces = useQuery(api.workspaces.list, {});
-  const updateEventMutation = useMutation(api.events.update);
-  const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
+  const pbWorkspaces = usePbWorkspacesList();
+  const convexWorkspaces = useQuery(api.workspaces.list, {});
+  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+
+  const pbUpdateEvent = usePbEventUpdate();
+  const convexUpdateEvent = useMutation(api.events.update);
+  const updateEventMutation: (args: any) => Promise<any> = isPbBackend() ? pbUpdateEvent : (args: any) => convexUpdateEvent(args);
+
+  const pbGenerateUploadUrl = async () => "";
+  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
+  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
 
   useEffect(() => {
     if (event) {

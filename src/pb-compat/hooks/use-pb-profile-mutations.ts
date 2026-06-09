@@ -11,26 +11,35 @@ async function getOrCreateProfile(userId: string, name: string) {
   if (list.items[0]) {
     return list.items[0];
   }
-  const created = await pb.collection("user_profile").create({
-    user: userId,
-    name,
-    preferences: { theme: "system", sound: true },
-    createdAt: Date.now(),
-  });
-  return created;
+  try {
+    const created = await pb.collection("user_profile").create({
+      user: userId,
+      name,
+      bio: "No bio yet.",
+      preferences: { theme: "system", sound: true },
+    });
+    return created;
+  } catch (e: any) {
+    console.error("PB Create Error:", e.response?.data || e);
+    throw e;
+  }
 }
 
 export function usePbUpdateProfile() {
   const { user } = useAuth();
   const mutate = useMutation<PbUserProfile>({ collection: "user_profile", kind: "update" });
-  return async (args: { name?: string; bio?: string }) => {
+  return async (args: { name?: string; bio?: string; preferences?: any }) => {
     if (!user) throw new Error("Unauthorized");
     const email = (user as any).email;
     const name = email ? email.split("@")[0] : "User";
     const profile = await getOrCreateProfile(user.id, name);
     const patch: Record<string, any> = {};
-    if (args.name !== undefined) patch.name = args.name;
-    if (args.bio !== undefined) patch.bio = args.bio;
+    if (args.name !== undefined) patch.name = args.name || "User";
+    if (args.bio !== undefined) patch.bio = args.bio || "No bio yet.";
+    if (args.preferences !== undefined) {
+      const currentPrefs = (profile.preferences as any) || {};
+      patch.preferences = { ...currentPrefs, ...args.preferences };
+    }
     const record = await mutate({ id: profile.id, record: patch });
     return record;
   };

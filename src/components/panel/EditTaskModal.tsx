@@ -23,6 +23,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { TaskDoc } from "./types";
+import { isPbBackend, usePbTaskUpdate, usePbWorkspacesList } from "@/pb-compat";
 
 interface EditTaskModalProps {
   task: TaskDoc;
@@ -73,9 +74,17 @@ export function EditTaskModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Convex Queries and Mutations
-  const workspaces = useQuery(api.workspaces.list, {});
-  const updateTaskMutation = useMutation(api.tasks.updateTask);
-  const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
+  const pbWorkspaces = usePbWorkspacesList();
+  const convexWorkspaces = useQuery(api.workspaces.list, {});
+  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+
+  const pbUpdateTask = usePbTaskUpdate();
+  const convexUpdateTask = useMutation(api.tasks.updateTask);
+  const updateTaskMutation: (args: any) => Promise<any> = isPbBackend() ? pbUpdateTask : (args: any) => convexUpdateTask(args);
+
+  const pbGenerateUploadUrl = async () => "";
+  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
+  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
 
   useEffect(() => {
     if (task) {

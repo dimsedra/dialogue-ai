@@ -23,7 +23,7 @@ export function usePbEventCreate() {
     if (!user) throw new Error("Unauthorized");
     const record = await mutate({
       user: user.id as any,
-      title: args.title,
+      title: args.title || "Untitled Event",
       description: args.description || undefined,
       location: args.location || undefined,
       startTime: args.startTime,
@@ -38,6 +38,17 @@ export function usePbEventCreate() {
       cancelled: false,
       createdAt: Date.now(),
     } as any);
+
+    if (args.notes || args.outcome) {
+      const pb = getPbClient();
+      const token = pb.authStore.token || null;
+      import("../use-action").then(({ executePbAction }) => {
+        executePbAction({ name: "ingestNotes" }, { targetId: record.id, targetType: "Event" }, { token }).catch(err => {
+          console.error("Failed to trigger event notes ingestion:", err);
+        });
+      });
+    }
+
     return record.id;
   };
 }
@@ -63,7 +74,7 @@ export function usePbEventUpdate() {
   }) => {
     if (!user) throw new Error("Unauthorized");
     const patch: Record<string, any> = {};
-    if (args.title !== undefined) patch.title = args.title;
+    if (args.title !== undefined) patch.title = args.title || "Untitled Event";
     if (args.description !== undefined) patch.description = args.description;
     if (args.location !== undefined) patch.location = args.location;
     if (args.startTime !== undefined) patch.startTime = args.startTime;
@@ -78,6 +89,17 @@ export function usePbEventUpdate() {
     if (args.statusHook !== undefined) patch.statusHook = args.statusHook === null ? "" : args.statusHook;
 
     const record = await mutate({ id: args.eventId, record: patch });
+
+    if (args.notes !== undefined || args.outcome !== undefined) {
+      const pb = getPbClient();
+      const token = pb.authStore.token || null;
+      import("../use-action").then(({ executePbAction }) => {
+        executePbAction({ name: "ingestNotes" }, { targetId: record.id, targetType: "Event" }, { token }).catch(err => {
+          console.error("Failed to trigger event notes update ingestion:", err);
+        });
+      });
+    }
+
     return record;
   };
 }
@@ -88,6 +110,14 @@ export function usePbEventDelete() {
   return async (args: { id: string }) => {
     if (!user) throw new Error("Unauthorized");
     await mutate({ id: args.id });
+
+    const pb = getPbClient();
+    const token = pb.authStore.token || null;
+    import("../use-action").then(({ executePbAction }) => {
+      executePbAction({ name: "ingestNotes" }, { targetId: args.id, targetType: "Event" }, { token }).catch(err => {
+        console.error("Failed to trigger event notes delete ingestion:", err);
+      });
+    });
   };
 }
 

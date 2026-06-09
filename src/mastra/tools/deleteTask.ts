@@ -12,6 +12,16 @@ export const deleteTaskTool = createTool({
   }),
   outputSchema: z.object({ success: z.boolean(), taskId: z.string() }),
   execute: async (input) => {
+    const { isPbBackend } = await import('../../pb-compat/env');
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const { deleteSourceMemories } = await import('../../lib/graph/ingest');
+      const pb = getPbClient();
+      await deleteSourceMemories(pb, input.taskId, 'Task');
+      await pb.collection("tasks").delete(input.taskId);
+      return { success: true, taskId: input.taskId };
+    }
+
     const client = getConvexClient();
     await client.mutation(api.tasks.deleteTask, {
       id: input.taskId as Id<"tasks">,

@@ -104,7 +104,7 @@ export function usePbHabitCreate() {
     if (!user) throw new Error("Unauthorized");
     const record = await mutate({
       user: user.id as any,
-      name: args.name,
+      name: args.name || "Untitled Habit",
       description: args.description || undefined,
       frequency: args.frequency,
       frequencyConfig: args.frequencyConfig,
@@ -117,7 +117,33 @@ export function usePbHabitCreate() {
     return record.id;
   };
 }
-
+export function usePbHabitUpdate() {
+  const { user } = useAuth();
+  const mutate = useMutation<PbHabits>({ collection: "habits", kind: "update" });
+  return async (args: {
+    id: string;
+    name?: string;
+    description?: string;
+    frequency?: "daily" | "custom";
+    frequencyConfig?: { daysOfWeek?: number[] };
+    workspaceId?: string | null;
+    archived?: boolean;
+  }) => {
+    if (!user) throw new Error("Unauthorized");
+    const record: any = {};
+    if (args.name !== undefined) record.name = args.name || "Untitled Habit";
+    if (args.description !== undefined) record.description = args.description;
+    if (args.frequency !== undefined) record.frequency = args.frequency;
+    if (args.frequencyConfig !== undefined) record.frequencyConfig = args.frequencyConfig;
+    if (args.workspaceId !== undefined) record.workspace = args.workspaceId || "";
+    if (args.archived !== undefined) record.archived = args.archived;
+    
+    return await mutate({
+      id: args.id,
+      record,
+    });
+  };
+}
 export function usePbHabitLog() {
   const { user } = useAuth();
   const createLog = useMutation<PbHabitLogs>({ collection: "habit_logs", kind: "create" });
@@ -240,6 +266,16 @@ export function usePbHabitLog() {
         lastLoggedAt: Date.now(),
       },
     });
+
+    if (args.notes) {
+      const pb = getPbClient();
+      const token = pb.authStore.token || null;
+      import("../use-action").then(({ executePbAction }) => {
+        executePbAction({ name: "ingestNotes" }, { targetId: logId, targetType: "HabitLog" }, { token }).catch(err => {
+          console.error("Failed to trigger habit log notes ingestion:", err);
+        });
+      });
+    }
 
     return logId;
   };

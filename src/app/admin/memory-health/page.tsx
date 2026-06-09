@@ -1,4 +1,4 @@
-import { getGraphConnection } from "@/lib/graph/ladybug";
+import { getPbAdmin } from "@/lib/pb-server-admin";
 import { getMemoryHealth, type MemoryHealth } from "@/lib/graph/health";
 import Link from "next/link";
 import { ArrowLeft, Brain, Link2, AlertTriangle } from "lucide-react";
@@ -8,11 +8,11 @@ export const dynamic = "force-dynamic";
 
 async function loadHealth(): Promise<MemoryHealth | { error: string }> {
   try {
-    const conn = await getGraphConnection();
-    return await getMemoryHealth(conn);
+    const pb = await getPbAdmin();
+    return await getMemoryHealth(pb);
   } catch (err) {
     console.error("[admin/memory-health] failed to load:", err);
-    return { error: "Failed to read memory graph. Is the Node runtime healthy?" };
+    return { error: "Failed to read memory graph. Is the PocketBase server running?" };
   }
 }
 
@@ -73,7 +73,7 @@ export default async function MemoryHealthPage() {
       </div>
 
       <p className="text-sm text-zinc-400 mb-6">
-        Live snapshot of the local LadybugDB memory graph. Use this to spot
+        Live snapshot of the local PocketBase memory graph. Use this to spot
         memories that should have mentioned a task / event / habit but ended
         up with no edges (silent no-op on stale IDs).
       </p>

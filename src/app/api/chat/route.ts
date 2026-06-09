@@ -4,9 +4,10 @@ import { Mastra } from '@mastra/core/mastra';
 import { createDialogueAgent } from '@/mastra/agents/dialogueAgent';
 import { ConvexHttpClient } from 'convex/browser';
 import { requestContext } from '@/lib/convex-server';
-import { isPbBackend } from '@/pb-compat';
+import { isPbBackend } from '@/pb-compat/env';
 import PocketBase from 'pocketbase';
 import { pbRequestContext } from '@/lib/pb-server';
+import { verifyPbToken } from '@/lib/pb-actions/auth';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL!;
 
@@ -40,7 +41,12 @@ export async function POST(req: Request) {
     if (isPb) {
       pbClient = new PocketBase(process.env.NEXT_PUBLIC_PB_URL || "http://127.0.0.1:8090");
       if (authToken) {
-        pbClient.authStore.save(authToken, null);
+        const verifiedUser = await verifyPbToken(authToken);
+        if (verifiedUser) {
+          pbClient.authStore.save(authToken, verifiedUser as any);
+        } else {
+          pbClient.authStore.save(authToken, null);
+        }
       }
     }
 

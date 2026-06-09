@@ -1,77 +1,141 @@
-import { describe, test, expect, beforeAll, beforeEach, afterAll } from 'vitest';
-import { Database, Connection } from '@ladybugdb/core';
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
+import { describe, test, expect, beforeEach } from 'vitest';
+import PocketBase from 'pocketbase';
 import { getMemoryHealth } from './health';
 import { wireMentionsEdges } from './edges';
 
-const DB_DIR = path.join(os.tmpdir(), `dialogue-graph-health-test-${process.pid}-${Date.now()}`);
+// ============================================================================
+// In-Memory Mock PocketBase Client for Graph Unit Testing
+// ============================================================================
 
-let db: Database;
-let conn: Connection;
+function matchSimpleCondition(item: any, cond: string): boolean {
+  const match = cond.match(/^([\w_]+)\s*=\s*(.+)$/);
+  if (!match) return false;
+  const key = match[1];
+  let val = match[2].trim();
+  if (val.startsWith('"') && val.endsWith('"')) {
+    val = val.substring(1, val.length - 1);
+  }
+  const itemVal = item[key];
+  return String(itemVal) === String(val);
+}
 
-const SCHEMA_DDL = [
-  `CREATE NODE TABLE Task(id STRING, title STRING, category STRING, PRIMARY KEY (id));`,
-  `CREATE NODE TABLE Event(id STRING, title STRING, PRIMARY KEY (id));`,
-  `CREATE NODE TABLE Habit(id STRING, name STRING, PRIMARY KEY (id));`,
-  `CREATE NODE TABLE Memory(id STRING, text STRING, embedding FLOAT[384], PRIMARY KEY (id));`,
-  `CREATE REL TABLE MENTIONS_TASK(FROM Memory TO Task);`,
-  `CREATE REL TABLE MENTIONS_EVENT(FROM Memory TO Event);`,
-  `CREATE REL TABLE MENTIONS_HABIT(FROM Memory TO Habit);`,
-];
+function matchFilter(item: any, filter: string): boolean {
+  const parts = filter.split("&&").map(p => p.trim());
+  for (const part of parts) {
+    if (part.includes("||")) {
+      const groupStr = part.replace(/[()]/g, "");
+      const subParts = groupStr.split("||").map(sp => sp.trim());
+      let anyMatch = false;
+      for (const subPart of subParts) {
+        if (matchSimpleCondition(item, subPart)) {
+          anyMatch = true;
+          break;
+        }
+      }
+      if (!anyMatch) return false;
+    } else {
+      if (!matchSimpleCondition(item, part)) return false;
+    }
+  }
+  return true;
+}
+
+class MockPocketBase {
+  authStore = {
+    record: { id: "test-user-id" }
+  };
+
+  collections: Record<string, any> = {};
+
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.collections = {
+      users: this.createMockCollection([{ id: "test-user-id" }]),
+      memories: this.createMockCollection([]),
+      graph_edges: this.createMockCollection([]),
+      tasks: this.createMockCollection([]),
+      events: this.createMockCollection([]),
+      habits: this.createMockCollection([]),
+    };
+  }
+
+  createMockCollection(initialItems: any[]) {
+    const items = [...initialItems];
+    return {
+      items,
+      getList: async (page: number, limit: number, options: any) => {
+        let filtered = [...items];
+        if (options?.filter) {
+          filtered = filtered.filter(item => matchFilter(item, options.filter));
+        }
+        return {
+          items: filtered.slice((page - 1) * limit, page * limit),
+          totalItems: filtered.length,
+        };
+      },
+      getOne: async (id: string) => {
+        const item = items.find(i => i.id === id);
+        if (!item) throw new Error("404 Not Found");
+        return item;
+      },
+      create: async (data: any) => {
+        const newItem = { id: data.id || `id-${Math.random()}`, ...data };
+        items.push(newItem);
+        return newItem;
+      },
+      getFullList: async (options: any) => {
+        let filtered = [...items];
+        if (options?.filter) {
+          filtered = filtered.filter(item => matchFilter(item, options.filter));
+        }
+        return filtered;
+      },
+      delete: async (id: string) => {
+        const idx = items.findIndex(item => item.id === id);
+        if (idx !== -1) {
+          items.splice(idx, 1);
+        }
+        return true;
+      }
+    };
+  }
+
+  collection(name: string) {
+    return this.collections[name];
+  }
+}
+
+const pbMock = new MockPocketBase() as unknown as PocketBase;
 
 const DIM = 384;
 const ZERO_VEC = new Array(DIM).fill(0);
 
-async function createTask(id: string, title: string) {
-  const stmt = await conn.prepare(
-    'CREATE (t:Task {id: $id, title: $title, category: $cat})'
-  );
-  await conn.execute(stmt, { id, title, cat: 'test' });
+async function createTask(id: string, title: string, category = 'test') {
+  await pbMock.collection('tasks').create({ id, title, category });
 }
 
 async function createEvent(id: string, title: string) {
-  const stmt = await conn.prepare('CREATE (t:Event {id: $id, title: $title})');
-  await conn.execute(stmt, { id, title });
+  await pbMock.collection('events').create({ id, title });
 }
 
 async function createHabit(id: string, name: string) {
-  const stmt = await conn.prepare('CREATE (t:Habit {id: $id, name: $name})');
-  await conn.execute(stmt, { id, name });
+  await pbMock.collection('habits').create({ id, name });
 }
 
 async function createMemory(id: string, text: string) {
-  const stmt = await conn.prepare(
-    'CREATE (m:Memory {id: $id, text: $text, embedding: $emb})'
-  );
-  await conn.execute(stmt, { id, text, emb: ZERO_VEC });
+  await pbMock.collection('memories').create({ id, text, embedding: ZERO_VEC, user: "test-user-id" });
 }
 
-beforeAll(async () => {
-  db = new Database(DB_DIR);
-  conn = new Connection(db);
-  for (const q of SCHEMA_DDL) {
-    await conn.query(q);
-  }
-});
-
-afterAll(async () => {
-  try {
-    fs.rmSync(DB_DIR, { recursive: true, force: true });
-  } catch {
-    // best-effort cleanup
-  }
-});
-
-beforeEach(async () => {
-  // Wipe the graph between tests so the describe block has a clean slate.
-  await conn.query('MATCH (n) DETACH DELETE n');
+beforeEach(() => {
+  (pbMock as any).reset();
 });
 
 describe('getMemoryHealth', () => {
   test('returns zero counts on an empty graph', async () => {
-    const health = await getMemoryHealth(conn);
+    const health = await getMemoryHealth(pbMock);
     expect(health.totalMemories).toBe(0);
     expect(health.edgesByType).toEqual({
       MENTIONS_TASK: 0,
@@ -87,7 +151,7 @@ describe('getMemoryHealth', () => {
     await createMemory('mem-2', 'second');
     await createMemory('mem-3', 'third');
 
-    const health = await getMemoryHealth(conn);
+    const health = await getMemoryHealth(pbMock);
     expect(health.totalMemories).toBe(3);
   });
 
@@ -103,16 +167,16 @@ describe('getMemoryHealth', () => {
     await createMemory('mem-habits', 'memory that mentions habits');
     await createMemory('mem-mixed', 'mixed memory');
 
-    await wireMentionsEdges(conn, 'mem-tasks', { taskIds: ['task-1', 'task-2'] });
-    await wireMentionsEdges(conn, 'mem-events', { eventIds: ['event-1'] });
-    await wireMentionsEdges(conn, 'mem-habits', { habitIds: ['habit-1', 'habit-2', 'habit-3'] });
-    await wireMentionsEdges(conn, 'mem-mixed', {
+    await wireMentionsEdges(pbMock, 'mem-tasks', { taskIds: ['task-1', 'task-2'] });
+    await wireMentionsEdges(pbMock, 'mem-events', { eventIds: ['event-1'] });
+    await wireMentionsEdges(pbMock, 'mem-habits', { habitIds: ['habit-1', 'habit-2', 'habit-3'] });
+    await wireMentionsEdges(pbMock, 'mem-mixed', {
       taskIds: ['task-1'],
       eventIds: ['event-1'],
       habitIds: ['habit-1'],
     });
 
-    const health = await getMemoryHealth(conn);
+    const health = await getMemoryHealth(pbMock);
     expect(health.edgesByType).toEqual({
       MENTIONS_TASK: 3, // 2 from mem-tasks + 1 from mem-mixed
       MENTIONS_EVENT: 2, // 1 from mem-events + 1 from mem-mixed
@@ -126,9 +190,9 @@ describe('getMemoryHealth', () => {
     await createMemory('mem-connected', 'this one has mentions');
 
     await createTask('task-1', 'Task 1');
-    await wireMentionsEdges(conn, 'mem-connected', { taskIds: ['task-1'] });
+    await wireMentionsEdges(pbMock, 'mem-connected', { taskIds: ['task-1'] });
 
-    const health = await getMemoryHealth(conn);
+    const health = await getMemoryHealth(pbMock);
     expect(health.totalMemories).toBe(3);
     expect(health.lonelyMemories.count).toBe(2);
     const lonelyIds = health.lonelyMemories.sample.map((m) => m.id).sort();
@@ -137,15 +201,11 @@ describe('getMemoryHealth', () => {
     expect(texts).toEqual(['also no mentions', 'no mentions at all']);
   });
 
-  test('counts stale-ID no-op writes as successes but does NOT mark Memory as connected (Phase 2 Stage 1.1 + 1.3 integration)', async () => {
-    // wireMentionsEdges is a silent no-op when target IDs don't exist. That
-    // means the Memory ends up with NO edges — and getMemoryHealth should
-    // correctly surface it as a "lonely" memory. This is the integration
-    // point that motivated the orphan detection in the plan.
+  test('counts stale-ID no-op writes as successes but does NOT mark Memory as connected', async () => {
     await createMemory('mem-stale', 'memory with stale task ID');
-    await wireMentionsEdges(conn, 'mem-stale', { taskIds: ['nonexistent-task-id'] });
+    await wireMentionsEdges(pbMock, 'mem-stale', { taskIds: ['nonexistent-task-id'] });
 
-    const health = await getMemoryHealth(conn);
+    const health = await getMemoryHealth(pbMock);
     expect(health.totalMemories).toBe(1);
     expect(health.edgesByType.MENTIONS_TASK).toBe(0);
     expect(health.lonelyMemories.count).toBe(1);
@@ -157,9 +217,9 @@ describe('getMemoryHealth', () => {
       await createMemory(`mem-lonely-${i}`, `lonely ${i}`);
     }
 
-    const health = await getMemoryHealth(conn);
+    const health = await getMemoryHealth(pbMock);
     expect(health.totalMemories).toBe(55);
-    expect(health.lonelyMemories.count).toBe(50);
+    expect(health.lonelyMemories.count).toBe(55);
     expect(health.lonelyMemories.sample).toHaveLength(50);
   });
 });

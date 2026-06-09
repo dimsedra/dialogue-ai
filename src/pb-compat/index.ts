@@ -58,6 +58,7 @@ export { usePbTasksList, usePbTask, usePbTasksSearchHistory } from "./hooks/use-
 export { usePbEventsList, usePbEvent, usePbEventsSearchHistory } from "./hooks/use-pb-events";
 export { usePbHabitsList, usePbHabit, usePbHabitConsistency } from "./hooks/use-pb-habits";
 export { usePbMemoriesList } from "./hooks/use-pb-memories";
+export { usePbMessagesPaginated } from "./hooks/use-pb-messages";
 export { usePbUserImagesList } from "./hooks/use-pb-images";
 export { usePbReflection, usePbPublicReflection } from "./hooks/use-pb-reflections";
 
@@ -67,7 +68,7 @@ export { usePbPersonaCreate, usePbPersonaUpdate, usePbPersonaDelete } from "./ho
 export { usePbSessionCreate, usePbSessionDelete, usePbSessionRename, usePbSessionTogglePin } from "./hooks/use-pb-session-mutations";
 export { usePbTaskCreate, usePbTaskUpdate, usePbTaskToggleCompleted, usePbTaskDelete, usePbTasksRollOver } from "./hooks/use-pb-task-mutations";
 export { usePbEventCreate, usePbEventUpdate, usePbEventDelete, usePbEventCancelOccurrence, usePbEventUpdateOccurrence, usePbEventScheduleFocusBlock } from "./hooks/use-pb-event-mutations";
-export { usePbHabitCreate, usePbHabitLog, usePbHabitArchive, usePbHabitDelete } from "./hooks/use-pb-habit-mutations";
+export { usePbHabitCreate, usePbHabitUpdate, usePbHabitLog, usePbHabitArchive, usePbHabitDelete } from "./hooks/use-pb-habit-mutations";
 export { usePbDismissCard, usePbSnoozeCard, usePbMuteCardType, usePbMarkCardShown } from "./hooks/use-pb-dashboard-mutations";
 export { usePbUpdateProfile, usePbUpdatePreferences, usePbAddSubscription, usePbRemoveSubscription } from "./hooks/use-pb-profile-mutations";
 export { usePbMemoryCreate, usePbMemoryUpdate, usePbMemoryDelete } from "./hooks/use-pb-memory-mutations";
@@ -129,29 +130,4 @@ export {
   buildPageFilter,
 } from "./pagination";
 
-// =============================================================================
-// Feature-flag check. Single source of truth for "is the PB backend active".
-//
-// Phase 1: always returns false. Phase 2 enables the flag for the feature-flag
-// rollout (Phase 3 per migration plan §5).
-// =============================================================================
-
-export function isPbBackend(): boolean {
-  // PocketBase is now the default backend.
-  // Set NEXT_PUBLIC_BACKEND=convex to temporarily opt out.
-  return process.env.NEXT_PUBLIC_BACKEND !== "convex";
-}
-
-// =============================================================================
-// Phase status. Used by tests and the migration doc to verify the surface.
-//
-// Phases 2-5 are done: hooks B.1-B.5a (useAuth, useQuery, useMutation,
-// useAction, usePaginatedQuery) are real; descriptors + dispatcher +
-// 13 mutation hooks + 8 dashboard unified queries are wired behind
-// `isPbBackend()`; chat realtime + dashboard subscriptions + 5.1-5.4
-// fixes are all in. Realtime accepts the documented reconnect gap;
-// USE_SPLIT_PROACTIVE_STATE is forced true in PB mode.
-// =============================================================================
-
-export const PB_COMPAT_PHASE = 5 as const;
-export const PB_COMPAT_STATUS = "done" as const;
+export { isPbBackend, PB_COMPAT_PHASE, PB_COMPAT_STATUS } from "./env";

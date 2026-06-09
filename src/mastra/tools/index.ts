@@ -11,3 +11,5 @@ export * from './deleteSemanticMemory';
 export * from './updateUserBio';
 export * from './otherTools';
 export * from './retrieveGraphContext';
+export * from './appendTaskNotes';
+export * from './appendEventNotes';

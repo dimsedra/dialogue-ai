@@ -9,6 +9,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SignInForm } from "@/components/auth/SignInForm";
 import { Scope } from "@/components/chat/types";
 import { usePushSync } from "@/hooks/usePushSync";
+import { isPbBackend } from "@/pb-compat";
+import { useAuth } from "@/pb-compat/auth";
 
 export default function Home() {
   usePushSync();
@@ -166,12 +168,30 @@ export default function Home() {
     }
   }, [isLargeViewport, handleSetShowTasks]);
 
+  const pbAuth = useAuth();
+  
+  // Use PB Auth state when in PB mode, otherwise fallback to Convex Auth state
+  // We can't use Convex's <Authenticated> component directly without wrapping it conditionally
+  // So we'll conditionally render the SignInForm or the main app based on the active backend's auth state.
+  
+  if (isPbBackend()) {
+    if (pbAuth.isLoading) {
+      return <div className="min-h-screen bg-[#0f0e0c] flex items-center justify-center">Loading...</div>;
+    }
+    
+    if (!pbAuth.user) {
+      return <SignInForm />;
+    }
+  }
+
   return (
     <>
-      <Unauthenticated>
-        <SignInForm />
-      </Unauthenticated>
-      <Authenticated>
+      {!isPbBackend() && (
+        <Unauthenticated>
+          <SignInForm />
+        </Unauthenticated>
+      )}
+      {isPbBackend() ? (
         <main
           style={{ height: initialHeight ? `${initialHeight}px` : "100svh" }}
           className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]"
@@ -261,7 +281,99 @@ export default function Home() {
             </div>
           </motion.div>
         </main>
-      </Authenticated>
+      ) : (
+        <Authenticated>
+          <main
+            style={{ height: initialHeight ? `${initialHeight}px` : "100svh" }}
+            className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]"
+          >
+            {/* Backdrops for Mobile Overlay */}
+            <AnimatePresence>
+              {(showHistory || showTasks) && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0 }}
+                  onClick={() => {
+                    setShowHistory(false);
+                    setShowTasks(false);
+                  }}
+                  className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Main Content Area */}
+            <motion.div
+              layout
+              className="flex-1 flex h-full overflow-hidden relative"
+            >
+              <Chat
+                activeSessionId={activeSessionId}
+                setActiveSessionIdAction={setActiveSessionId}
+                activeWorkspaceId={activeWorkspaceId}
+                setActiveWorkspaceIdAction={handleWorkspaceChange}
+                activeScope={activeScope}
+                setActiveScopeAction={setActiveScope}
+                showHistory={showHistory}
+                setShowHistoryAction={handleSetShowHistory}
+                onSyncRef={syncRef}
+                isLargeViewport={isLargeViewport}
+                keyboardOffset={keyboardOffset}
+                onChatInputResizeAction={setChatInputOffset}
+                onShowTasksAction={
+                  showTasks ? undefined : () => handleSetShowTasks(true)
+                }
+              />
+            </motion.div>
+
+            {/* Task Panel (Collapsible / Overlay) */}
+            <motion.div
+              initial={false}
+              animate={{
+                width: isLargeViewport
+                  ? showTasks
+                    ? 320
+                    : 0
+                  : showTasks
+                    ? "min(320px, 85vw)"
+                    : 0,
+                opacity: isLargeViewport
+                  ? showTasks
+                    ? 1
+                    : 0
+                  : showTasks
+                    ? 1
+                    : 0,
+                x: isLargeViewport ? 0 : showTasks ? 0 : "100%",
+              }}
+              transition={
+                isLargeViewport
+                  ? { type: "spring", damping: 30, stiffness: 250 }
+                  : { duration: 0 }
+              }
+              className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 overflow-hidden z-40 ${
+                isLargeViewport
+                  ? "relative border-l"
+                  : "absolute right-0 shadow-[-20px_0_40px_rgba(0,0,0,0.5)]"
+              }`}
+            >
+              <div className="w-full h-full">
+                <TaskPanel
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSync={handleSyncFromPanel}
+                  onClose={() => handleSetShowTasks(false)}
+                  onRefer={(scope) => {
+                    setActiveScope(scope);
+                    if (!isLargeViewport) setShowTasks(false);
+                  }}
+                />
+              </div>
+            </motion.div>
+          </main>
+        </Authenticated>
+      )}
     </>
   );
 }

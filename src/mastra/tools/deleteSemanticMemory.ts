@@ -1,6 +1,5 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getGraphConnection } from '../../lib/graph/ladybug';
 
 export const deleteSemanticMemoryTool = createTool({
   id: 'deleteSemanticMemory',
@@ -9,9 +8,20 @@ export const deleteSemanticMemoryTool = createTool({
     memoryId: z.string(),
   }),
   execute: async (input) => {
-    const conn = await getGraphConnection();
-    const stmt = await conn.prepare("MATCH (m:Memory {id: $id}) DETACH DELETE m");
-    await conn.execute(stmt, { id: input.memoryId });
+    const { isPbBackend } = await import('../../pb-compat/env');
+    
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      await pb.collection("memories").delete(input.memoryId);
+    } else {
+      const { convexServerClient } = await import('../../lib/convex-server');
+      const { api } = await import('../../../convex/_generated/api');
+      // Convex fallback
+      await convexServerClient.mutation(api.ai.deleteMemoryBackendSync as any, {
+        id: input.memoryId
+      });
+    }
 
     return {
       _interceptedForConsent: true,

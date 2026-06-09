@@ -2,11 +2,14 @@
 
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
+import { isPbBackend } from "@/pb-compat";
+import { useAuth } from "@/pb-compat/auth";
 import { Bot, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function SignInForm() {
-  const { signIn } = useAuthActions();
+  const { signIn: convexSignIn } = useAuthActions();
+  const { signIn: pbSignIn, signUp: pbSignUp } = useAuth();
   const [step, setStep] = useState<"signIn" | "signUp">("signIn");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,10 +20,22 @@ export function SignInForm() {
     setError(null);
     const formData = new FormData(event.currentTarget);
     try {
-      await signIn("password", formData);
-    } catch (e) {
+      if (isPbBackend()) {
+        const email = formData.get("email") as string;
+        const password = formData.get("password") as string;
+        if (step === "signIn") {
+          await pbSignIn(email, password);
+        } else {
+          await pbSignUp(email, password, password);
+        }
+      } else {
+        await convexSignIn("password", formData);
+      }
+    } catch (e: any) {
       console.error(e);
-      setError("Invalid email or password. Please try again.");
+      // Try to parse PB error message if available
+      const errMsg = e?.response?.message || "Invalid email or password. Please try again.";
+      setError(isPbBackend() ? errMsg : "Invalid email or password. Please try again.");
       setLoading(false);
     }
   }

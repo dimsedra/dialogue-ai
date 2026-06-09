@@ -244,7 +244,7 @@ export function useQuery<T>(
             result = undefined;
           } else {
             try {
-              result = (await collection.getOne(idValue)) as T;
+              result = (await collection.getOne(idValue, { requestKey: null })) as T;
             } catch (e: unknown) {
               // 404 → undefined (not an error). Everything else logs and
               // also returns undefined (the future `{ data, error }` shape
@@ -262,11 +262,12 @@ export function useQuery<T>(
         } else if (descriptor.kind === "list") {
           const list = await collection.getList(1, descriptor.limit ?? 100, {
             filter,
+            requestKey: null,
           });
           result = list.items as unknown as T;
         } else {
           // "first" — list with perPage=1, take the head.
-          const list = await collection.getList(1, 1, { filter });
+          const list = await collection.getList(1, 1, { filter, requestKey: null });
           result = (list.items[0] as T) ?? undefined;
         }
 

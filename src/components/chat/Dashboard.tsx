@@ -219,9 +219,9 @@ export function Dashboard({
 
   const resolvedBgUrl = useConvexQuery(
     api.messages.getStorageUrl,
-    bgSettings.storageId
-      ? { storageId: bgSettings.storageId as Id<"_storage"> }
-      : "skip",
+    isPbBackend() || !bgSettings.storageId
+      ? "skip"
+      : { storageId: bgSettings.storageId as Id<"_storage"> },
   );
   const bgUrl = resolvedBgUrl ?? bgSettings.url;
 

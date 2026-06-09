@@ -22,7 +22,7 @@ export const addTaskTool = createTool({
   }),
   execute: async (input) => {
     const client = getConvexClient();
-    const { isPbBackend } = await import('../../pb-compat');
+    const { isPbBackend } = await import('../../pb-compat/env');
     if (isPbBackend()) {
       const { getPbClient } = await import('../../lib/pb-server');
       const pb = getPbClient();
@@ -55,6 +55,12 @@ export const addTaskTool = createTool({
           delivered: false,
           createdAt: Date.now(),
         });
+      }
+
+      // Ingest task notes semantically
+      if (input.notes) {
+        const { ingestTaskNotes } = await import('../../lib/graph/ingest');
+        await ingestTaskNotes(pb, record.id, input.notes);
       }
 
       return { taskId: record.id, text: input.text };

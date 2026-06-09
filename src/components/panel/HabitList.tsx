@@ -9,6 +9,7 @@ import { Flame, Check, CircleSlash, MessageSquarePlus, PencilLine, Plus } from "
 import { format } from "date-fns";
 import { CreateHabitModal } from "./CreateHabitModal";
 import { EditHabitModal } from "./EditHabitModal";
+import { isPbBackend, usePbHabitsList, usePbHabitLog } from "@/pb-compat";
 
 export interface HabitLog {
   dateString: string;
@@ -52,12 +53,17 @@ export function HabitList({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   });
 
-  const rawHabits = useQuery(api.habits.getHabits, {
+  const pbRawHabits = usePbHabitsList({ workspaceId: activeWorkspaceId });
+  const convexRawHabits = useQuery(api.habits.getHabits, {
     workspaceId: activeWorkspaceId,
     todayDateString,
   });
+  const rawHabits = isPbBackend() ? pbRawHabits : convexRawHabits;
   const habits = rawHabits as HabitWithLogs[] | undefined;
-  const logHabit = useMutation(api.habits.logHabit);
+  
+  const pbLogHabit = usePbHabitLog();
+  const convexLogHabit = useMutation(api.habits.logHabit);
+  const logHabit: (args: any) => Promise<any> = isPbBackend() ? pbLogHabit : (args: any) => convexLogHabit(args);
 
   // Modal control states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);

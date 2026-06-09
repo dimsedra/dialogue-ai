@@ -27,6 +27,6 @@ export function usePbUserImagesList() {
     fileName: record.fileName,
     fileType: record.fileType,
     createdAt: record.createdAt,
-    url: pb.files.getUrl(record, record.storageId),
+    url: pb.files.getURL(record, record.storageId),
   }));
 }

@@ -18,6 +18,7 @@ import {
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { isPbBackend, usePbWorkspacesList } from "@/pb-compat";
 
 interface CreateTaskModalProps {
   activeWorkspaceId: Id<"workspaces"> | undefined;
@@ -59,8 +60,13 @@ export function CreateTaskModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Convex Queries and Mutations
-  const workspaces = useQuery(api.workspaces.list, {});
-  const generateUploadUrl = useMutation(api.messages.generateUploadUrl);
+  const pbWorkspaces = usePbWorkspacesList();
+  const convexWorkspaces = useQuery(api.workspaces.list, {});
+  const workspaces = isPbBackend() ? pbWorkspaces : convexWorkspaces;
+
+  const pbGenerateUploadUrl = async () => "";
+  const convexGenerateUploadUrl = useMutation(api.messages.generateUploadUrl);
+  const generateUploadUrl = isPbBackend() ? pbGenerateUploadUrl : () => convexGenerateUploadUrl();
 
   // Pre-select active workspace
   useEffect(() => {

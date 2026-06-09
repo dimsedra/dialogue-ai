@@ -65,3 +65,9 @@ scratch/
 
 # Tauri dev artefacts (background-run logs and pid files)
 /.tauri-dev.*
+
+# PocketBase data (local database, user files, generated types)
+/pb_data/
+
+# PocketBase test database
+/test-db

@@ -3,6 +3,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { isPbBackend, usePbProfile, usePbMemoriesList, usePbUpdateProfile, usePbUpdatePreferences, usePbAddSubscription, usePbRemoveSubscription, usePbMemoryCreate, usePbMemoryUpdate, usePbMemoryDelete } from "@/pb-compat";
+import { useAuth } from "@/pb-compat/auth";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import {
   ArrowLeft,
@@ -26,6 +27,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -58,6 +60,9 @@ export default function SettingsPage() {
   const pbProfile = usePbProfile();
   const convexProfile = useQuery(api.ai.getProfile, {});
   const profile = isPbBackend() ? pbProfile : convexProfile;
+
+  const pbAuth = useAuth();
+  // ... rest of the hooks ...
 
   const pbMemories = usePbMemoriesList();
   const convexMemories = useQuery(api.ai.getAllMemories, {});
@@ -92,6 +97,13 @@ export default function SettingsPage() {
   const removeSubscription = isPbBackend() ? pbRemoveSubscription : convexRemoveSubscription;
   const publicKey = useQuery(api.push.getPublicKey, {});
   const { signOut } = useAuthActions();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isPbBackend() && !pbAuth.isLoading && !pbAuth.user) {
+      router.push("/");
+    }
+  }, [pbAuth.isLoading, pbAuth.user, router]);
 
   useEffect(() => {
     document.documentElement.classList.add("allow-scroll");
@@ -346,7 +358,7 @@ export default function SettingsPage() {
               </button>
 
               <button
-                onClick={() => signOut()}
+                onClick={() => isPbBackend() ? pbAuth.signOut() : signOut()}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#1a1814] border border-[#2a2723] text-[#f87171] hover:bg-red-500/10 hover:border-red-500/20 transition-all font-black uppercase tracking-widest text-[9px] group"
               >
                 <LogOut className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -1085,7 +1097,7 @@ export default function SettingsPage() {
       {/* Mobile Sticky Bar */}
       <div className="fixed bottom-0 left-0 right-0 p-2 bg-[#0f0e0c]/90 backdrop-blur-2xl border-t border-[#2a2723] z-100 md:hidden flex gap-2">
         <button
-          onClick={() => signOut()}
+          onClick={() => isPbBackend() ? pbAuth.signOut() : signOut()}
           className="p-2.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-red-400"
         >
           <LogOut className="w-4 h-4" />

@@ -8,6 +8,7 @@ import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { HabitWithLogs } from "./HabitList";
+import { isPbBackend, usePbHabitLog } from "@/pb-compat";
 
 interface CalendarViewProps {
   selectedDate: Date | undefined;
@@ -50,7 +51,9 @@ export function CalendarView({
   todayDateString,
   onReferHabit,
 }: CalendarViewProps) {
-  const logHabit = useMutation(api.habits.logHabit);
+  const pbLogHabit = usePbHabitLog();
+  const convexLogHabit = useMutation(api.habits.logHabit);
+  const logHabit: (args: any) => Promise<any> = isPbBackend() ? pbLogHabit : (args: any) => convexLogHabit(args);
   const [loggingId, setLoggingId] = useState<string | null>(null);
 
   const selectedDateStr = useMemo(() => {

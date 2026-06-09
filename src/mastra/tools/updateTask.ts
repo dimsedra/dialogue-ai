@@ -22,7 +22,7 @@ export const updateTaskTool = createTool({
   outputSchema: z.object({ success: z.boolean(), taskId: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
-    const { isPbBackend } = await import('../../pb-compat');
+    const { isPbBackend } = await import('../../pb-compat/env');
     if (isPbBackend()) {
       const { getPbClient } = await import('../../lib/pb-server');
       const pb = getPbClient();
@@ -70,6 +70,12 @@ export const updateTaskTool = createTool({
         }
       } catch (err) {
         console.error("Failed to reschedule task reminder in PB:", err);
+      }
+
+      // Ingest task notes semantically if notes changed/updated
+      if (input.notes !== undefined) {
+        const { ingestTaskNotes } = await import('../../lib/graph/ingest');
+        await ingestTaskNotes(pb, input.taskId, record.notes);
       }
 
       return { success: true, taskId: input.taskId };

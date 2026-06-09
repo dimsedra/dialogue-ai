@@ -13,10 +13,12 @@ export const deleteEventTool = createTool({
   outputSchema: z.object({ success: z.boolean(), eventId: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
-    const { isPbBackend } = await import('../../pb-compat');
+    const { isPbBackend } = await import('../../pb-compat/env');
     if (isPbBackend()) {
       const { getPbClient } = await import('../../lib/pb-server');
+      const { deleteSourceMemories } = await import('../../lib/graph/ingest');
       const pb = getPbClient();
+      await deleteSourceMemories(pb, input.eventId, 'Event');
       await pb.collection("events").delete(input.eventId);
       return { success: true, eventId: input.eventId };
     }

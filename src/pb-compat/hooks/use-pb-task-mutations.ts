@@ -21,7 +21,7 @@ export function usePbTaskCreate() {
     if (!user) throw new Error("Unauthorized");
     const record = await mutate({
       user: user.id as any,
-      text: args.text,
+      text: args.text || "Untitled Task",
       workspace: (args.workspaceId || undefined) as any,
       completed: false,
       dueDate: args.dueDate || undefined,
@@ -34,6 +34,17 @@ export function usePbTaskCreate() {
       reminderOffset: args.reminderOffset || undefined,
       createdAt: Date.now(),
     } as any);
+
+    if (args.notes) {
+      const pb = getPbClient();
+      const token = pb.authStore.token || null;
+      import("../use-action").then(({ executePbAction }) => {
+        executePbAction({ name: "ingestNotes" }, { targetId: record.id, targetType: "Task" }, { token }).catch(err => {
+          console.error("Failed to trigger task notes ingestion:", err);
+        });
+      });
+    }
+
     return record.id;
   };
 }
@@ -56,7 +67,7 @@ export function usePbTaskUpdate() {
   }) => {
     if (!user) throw new Error("Unauthorized");
     const patch: Record<string, any> = {};
-    if (args.text !== undefined) patch.text = args.text;
+    if (args.text !== undefined) patch.text = args.text || "Untitled Task";
     if (args.workspaceId !== undefined) patch.workspace = args.workspaceId === null ? "" : args.workspaceId;
     if (args.dueDate !== undefined) patch.dueDate = args.dueDate === null ? undefined : args.dueDate;
     if (args.dueDateStr !== undefined) patch.dueDateStr = args.dueDateStr === null ? "" : args.dueDateStr;
@@ -68,6 +79,17 @@ export function usePbTaskUpdate() {
     if (args.reminderOffset !== undefined) patch.reminderOffset = args.reminderOffset === null ? undefined : args.reminderOffset;
 
     const record = await mutate({ id: args.taskId, record: patch });
+
+    if (args.notes !== undefined) {
+      const pb = getPbClient();
+      const token = pb.authStore.token || null;
+      import("../use-action").then(({ executePbAction }) => {
+        executePbAction({ name: "ingestNotes" }, { targetId: record.id, targetType: "Task" }, { token }).catch(err => {
+          console.error("Failed to trigger task notes update ingestion:", err);
+        });
+      });
+    }
+
     return record;
   };
 }
@@ -94,6 +116,14 @@ export function usePbTaskDelete() {
   return async (args: { id: string }) => {
     if (!user) throw new Error("Unauthorized");
     await mutate({ id: args.id });
+
+    const pb = getPbClient();
+    const token = pb.authStore.token || null;
+    import("../use-action").then(({ executePbAction }) => {
+      executePbAction({ name: "ingestNotes" }, { targetId: args.id, targetType: "Task" }, { token }).catch(err => {
+        console.error("Failed to trigger task notes delete ingestion:", err);
+      });
+    });
   };
 }
 

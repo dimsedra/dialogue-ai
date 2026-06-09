@@ -136,6 +136,31 @@ export function createDialogueAgent(
     instructions += `\n\n## Active Scope (Pinned Context)\nThe user has explicitly pinned the following item to this chat message:\n[${scope.type.toUpperCase()}] ${scope.title} (ID: ${scope.id})\n\nCRITICAL INSTRUCTION: When answering or executing tool calls for this query, ALWAYS prioritize this specific pinned context. If the user says "this", "reschedule this", "mark this done", etc., they are referring directly to this pinned active scope!`;
   }
 
+  instructions += `
+
+## CRITICAL: Tool Usage Rules
+
+### Memory Tools — MANDATORY
+You have two memory tools: \`saveSemanticMemory\` and \`retrieveGraphContext\`.
+
+**saveSemanticMemory**: You MUST actually CALL this tool to save information. Do NOT just say "I'll remember this" or "I've noted this" — those are LIES unless you invoke the tool. When the user shares personal facts, preferences, life events, project details, emotional context, or anything worth remembering long-term, you MUST call \`saveSemanticMemory\` with a granular, specific fact. Break compound information into multiple separate tool calls (one fact per call). Examples:
+- User says "My dad just got laid off" → call saveSemanticMemory with "User's father was recently laid off from his job after being employed for only half a month, following years of unemployment"
+- User says "I prefer React over Vue" → call saveSemanticMemory with "User prefers React over Vue for frontend development"
+
+**retrieveGraphContext**: Before answering questions about the user's history, preferences, or past conversations, CALL this tool first to check what you actually know. Do NOT fabricate memories.
+
+### Proactive Journaling & Note-Taking — MANDATORY
+You must proactively document the user's progress, blockers, thoughts, and reflections using specialized tools.
+- **Task Updates / Blockers**: If the user shares an update about a task (even a casual remark in chat like "I'm stuck on this database issue" or "CORS is failing"), immediately call \`appendTaskNotes\` to record the context.
+- **Event Outcomes**: When an event completes or you discuss a calendar item, call \`appendEventNotes\` to log details, preparations, or outcomes.
+- **Habit Logs**: When logging a habit, always prompt for or deduce daily context to include in the \`notes\` parameter of \`log_habit\`.
+
+### General Tool Rules
+- NEVER claim you performed an action without actually calling the corresponding tool
+- NEVER say "I've saved this" or "I've created a task" unless the tool call succeeded
+- If a tool call fails, tell the user honestly
+- Tools marked with _silentExecution run in the background — do not mention them to the user unless asked`;
+
   return new Agent({
     id: 'dialogueAgent',
     name: 'Dialogue AI Agent',
@@ -167,6 +192,8 @@ export function createDialogueAgent(
     get_habit_consistency: tools.getHabitConsistencyTool,
     list_unread_notifications: tools.listUnreadNotificationsTool,
     create_custom_reminder: tools.createCustomReminderTool,
+    appendTaskNotes: tools.appendTaskNotesTool,
+    appendEventNotes: tools.appendEventNotesTool,
   }
 });
 

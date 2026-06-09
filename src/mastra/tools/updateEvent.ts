@@ -36,7 +36,7 @@ export const updateEventTool = createTool({
       until: input.recurrence.until ? new Date(input.recurrence.until).getTime() : undefined,
     } : undefined;
 
-    const { isPbBackend } = await import('../../pb-compat');
+    const { isPbBackend } = await import('../../pb-compat/env');
     if (isPbBackend()) {
       const { getPbClient } = await import('../../lib/pb-server');
       const pb = getPbClient();
@@ -80,6 +80,12 @@ export const updateEventTool = createTool({
         }
       } catch (err) {
         console.error("Failed to reschedule event reminder in PB:", err);
+      }
+
+      // Ingest event notes semantically if notes or outcome changed/updated
+      if (input.notes !== undefined || input.outcome !== undefined) {
+        const { ingestEventNotes } = await import('../../lib/graph/ingest');
+        await ingestEventNotes(pb, input.eventId, record.notes, record.outcome);
       }
 
       return { success: true, eventId: input.eventId };

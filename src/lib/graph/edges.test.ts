@@ -1,47 +1,129 @@
-import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { Database, Connection } from '@ladybugdb/core';
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
+import { describe, test, expect, beforeEach } from 'vitest';
+import PocketBase from 'pocketbase';
 import { wireMentionsEdges } from './edges';
 
-const DB_DIR = path.join(os.tmpdir(), `dialogue-graph-edges-test-${process.pid}-${Date.now()}`);
+// ============================================================================
+// In-Memory Mock PocketBase Client for Graph Unit Testing
+// ============================================================================
 
-let db: Database;
-let conn: Connection;
+function matchSimpleCondition(item: any, cond: string): boolean {
+  const match = cond.match(/^([\w_]+)\s*=\s*(.+)$/);
+  if (!match) return false;
+  const key = match[1];
+  let val = match[2].trim();
+  if (val.startsWith('"') && val.endsWith('"')) {
+    val = val.substring(1, val.length - 1);
+  }
+  const itemVal = item[key];
+  return String(itemVal) === String(val);
+}
 
-const SCHEMA_DDL = [
-  `CREATE NODE TABLE Task(id STRING, title STRING, category STRING, PRIMARY KEY (id));`,
-  `CREATE NODE TABLE Event(id STRING, title STRING, PRIMARY KEY (id));`,
-  `CREATE NODE TABLE Habit(id STRING, name STRING, PRIMARY KEY (id));`,
-  `CREATE NODE TABLE Memory(id STRING, text STRING, embedding FLOAT[384], PRIMARY KEY (id));`,
-  `CREATE REL TABLE MENTIONS_TASK(FROM Memory TO Task);`,
-  `CREATE REL TABLE MENTIONS_EVENT(FROM Memory TO Event);`,
-  `CREATE REL TABLE MENTIONS_HABIT(FROM Memory TO Habit);`,
-];
+function matchFilter(item: any, filter: string): boolean {
+  const parts = filter.split("&&").map(p => p.trim());
+  for (const part of parts) {
+    if (part.includes("||")) {
+      const groupStr = part.replace(/[()]/g, "");
+      const subParts = groupStr.split("||").map(sp => sp.trim());
+      let anyMatch = false;
+      for (const subPart of subParts) {
+        if (matchSimpleCondition(item, subPart)) {
+          anyMatch = true;
+          break;
+        }
+      }
+      if (!anyMatch) return false;
+    } else {
+      if (!matchSimpleCondition(item, part)) return false;
+    }
+  }
+  return true;
+}
 
+class MockPocketBase {
+  authStore = {
+    record: { id: "test-user-id" }
+  };
+
+  collections: Record<string, any> = {};
+
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.collections = {
+      users: this.createMockCollection([{ id: "test-user-id" }]),
+      memories: this.createMockCollection([]),
+      graph_edges: this.createMockCollection([]),
+      tasks: this.createMockCollection([]),
+      events: this.createMockCollection([]),
+      habits: this.createMockCollection([]),
+    };
+  }
+
+  createMockCollection(initialItems: any[]) {
+    const items = [...initialItems];
+    return {
+      items,
+      getList: async (page: number, limit: number, options: any) => {
+        let filtered = [...items];
+        if (options?.filter) {
+          filtered = filtered.filter(item => matchFilter(item, options.filter));
+        }
+        return {
+          items: filtered.slice((page - 1) * limit, page * limit),
+          totalItems: filtered.length,
+        };
+      },
+      getOne: async (id: string) => {
+        const item = items.find(i => i.id === id);
+        if (!item) throw new Error("404 Not Found");
+        return item;
+      },
+      create: async (data: any) => {
+        const newItem = { id: data.id || `id-${Math.random()}`, ...data };
+        items.push(newItem);
+        return newItem;
+      },
+      getFullList: async (options: any) => {
+        let filtered = [...items];
+        if (options?.filter) {
+          filtered = filtered.filter(item => matchFilter(item, options.filter));
+        }
+        return filtered;
+      },
+      delete: async (id: string) => {
+        const idx = items.findIndex(item => item.id === id);
+        if (idx !== -1) {
+          items.splice(idx, 1);
+        }
+        return true;
+      }
+    };
+  }
+
+  collection(name: string) {
+    return this.collections[name];
+  }
+}
+
+const pbMock = new MockPocketBase() as unknown as PocketBase;
+
+// Helper helpers to populate our mock DB
 async function createTask(id: string, title: string, category = 'test') {
-  const stmt = await conn.prepare(
-    'CREATE (t:Task {id: $id, title: $title, category: $cat})'
-  );
-  await conn.execute(stmt, { id, title, cat: category });
+  await pbMock.collection('tasks').create({ id, title, category });
 }
 
 async function createEvent(id: string, title: string) {
-  const stmt = await conn.prepare('CREATE (t:Event {id: $id, title: $title})');
-  await conn.execute(stmt, { id, title });
+  await pbMock.collection('events').create({ id, title });
 }
 
 async function createHabit(id: string, name: string) {
-  const stmt = await conn.prepare('CREATE (t:Habit {id: $id, name: $name})');
-  await conn.execute(stmt, { id, name });
+  await pbMock.collection('habits').create({ id, name });
 }
 
 async function createMemory(id: string, text: string) {
-  const stmt = await conn.prepare(
-    'CREATE (m:Memory {id: $id, text: $text, embedding: $emb})'
-  );
-  await conn.execute(stmt, { id, text, emb: Array(384).fill(0.1) });
+  await pbMock.collection('memories').create({ id, text, embedding: Array(384).fill(0.1) });
 }
 
 async function countEdges(
@@ -49,29 +131,14 @@ async function countEdges(
   rel: string,
   targetLabel: string
 ): Promise<number> {
-  const stmt = await conn.prepare(
-    `MATCH (m:Memory {id: $mid})-[r:${rel}]->(t:${targetLabel}) RETURN count(r) AS c`
-  );
-  const result = (await conn.execute(stmt, { mid: memoryId })) as any;
-  const single = Array.isArray(result) ? result[0] : result;
-  const rows = await single.getAll();
-  return Number(rows[0]?.c ?? 0);
+  const list = await pbMock.collection('graph_edges').getFullList({
+    filter: `from_mem = "${memoryId}" && edge_type = "${rel}" && target_type = "${targetLabel}"`,
+  });
+  return list.length;
 }
 
-beforeAll(async () => {
-  db = new Database(DB_DIR);
-  conn = new Connection(db);
-  for (const q of SCHEMA_DDL) {
-    await conn.query(q);
-  }
-});
-
-afterAll(async () => {
-  try {
-    fs.rmSync(DB_DIR, { recursive: true, force: true });
-  } catch {
-    // best-effort cleanup
-  }
+beforeEach(() => {
+  (pbMock as any).reset();
 });
 
 describe('wireMentionsEdges', () => {
@@ -79,7 +146,7 @@ describe('wireMentionsEdges', () => {
     await createTask('task-1', 'Ship the dialogue binary');
     await createMemory('mem-1', 'user is shipping dialogue as a desktop app');
 
-    const result = await wireMentionsEdges(conn, 'mem-1', { taskIds: ['task-1'] });
+    const result = await wireMentionsEdges(pbMock, 'mem-1', { taskIds: ['task-1'] });
     expect(result.attempted).toBe(1);
     expect(result.succeeded).toBe(1);
     expect(result.failed).toBe(0);
@@ -90,7 +157,7 @@ describe('wireMentionsEdges', () => {
     await createEvent('event-1', 'Dentist appointment');
     await createMemory('mem-2', 'user has a dentist appointment coming up');
 
-    const result = await wireMentionsEdges(conn, 'mem-2', { eventIds: ['event-1'] });
+    const result = await wireMentionsEdges(pbMock, 'mem-2', { eventIds: ['event-1'] });
     expect(result.attempted).toBe(1);
     expect(result.succeeded).toBe(1);
     expect(await countEdges('mem-2', 'MENTIONS_EVENT', 'Event')).toBe(1);
@@ -100,7 +167,7 @@ describe('wireMentionsEdges', () => {
     await createHabit('habit-1', 'morning run');
     await createMemory('mem-3', 'user is training for a 5k');
 
-    const result = await wireMentionsEdges(conn, 'mem-3', { habitIds: ['habit-1'] });
+    const result = await wireMentionsEdges(pbMock, 'mem-3', { habitIds: ['habit-1'] });
     expect(result.attempted).toBe(1);
     expect(result.succeeded).toBe(1);
     expect(await countEdges('mem-3', 'MENTIONS_HABIT', 'Habit')).toBe(1);
@@ -112,7 +179,7 @@ describe('wireMentionsEdges', () => {
     await createHabit('habit-2', 'weekly review');
     await createMemory('mem-4', 'user is wrapping up project phoenix');
 
-    const result = await wireMentionsEdges(conn, 'mem-4', {
+    const result = await wireMentionsEdges(pbMock, 'mem-4', {
       taskIds: ['task-2'],
       eventIds: ['event-2'],
       habitIds: ['habit-2'],
@@ -131,7 +198,7 @@ describe('wireMentionsEdges', () => {
     await createTask('task-5', 'Task C');
     await createMemory('mem-5', 'user has multiple active tasks');
 
-    const result = await wireMentionsEdges(conn, 'mem-5', {
+    const result = await wireMentionsEdges(pbMock, 'mem-5', {
       taskIds: ['task-3', 'task-4', 'task-5'],
     });
     expect(result.attempted).toBe(3);
@@ -142,7 +209,7 @@ describe('wireMentionsEdges', () => {
   test('is a no-op when no mentions are provided', async () => {
     await createMemory('mem-6', 'memory text');
 
-    const result = await wireMentionsEdges(conn, 'mem-6', {});
+    const result = await wireMentionsEdges(pbMock, 'mem-6', {});
     expect(result.attempted).toBe(0);
     expect(result.succeeded).toBe(0);
     expect(result.failed).toBe(0);
@@ -151,7 +218,7 @@ describe('wireMentionsEdges', () => {
   test('is a no-op when mention arrays are empty', async () => {
     await createMemory('mem-7', 'memory text');
 
-    const result = await wireMentionsEdges(conn, 'mem-7', {
+    const result = await wireMentionsEdges(pbMock, 'mem-7', {
       taskIds: [],
       eventIds: [],
       habitIds: [],
@@ -165,20 +232,20 @@ describe('wireMentionsEdges', () => {
     await createTask('task-6', 'Idempotent task');
     await createMemory('mem-8', 'memory text');
 
-    const first = await wireMentionsEdges(conn, 'mem-8', { taskIds: ['task-6'] });
+    const first = await wireMentionsEdges(pbMock, 'mem-8', { taskIds: ['task-6'] });
     expect(first.succeeded).toBe(1);
 
-    const second = await wireMentionsEdges(conn, 'mem-8', { taskIds: ['task-6'] });
+    const second = await wireMentionsEdges(pbMock, 'mem-8', { taskIds: ['task-6'] });
     expect(second.attempted).toBe(1);
     expect(second.succeeded).toBe(1);
     expect(second.failed).toBe(0);
     expect(await countEdges('mem-8', 'MENTIONS_TASK', 'Task')).toBe(1);
   });
 
-  test('stale IDs do not throw — they are silent no-ops (MATCH returns 0 rows)', async () => {
+  test('stale IDs do not throw — they are silent no-ops (target check returns 404)', async () => {
     await createMemory('mem-9', 'memory text');
 
-    const result = await wireMentionsEdges(conn, 'mem-9', {
+    const result = await wireMentionsEdges(pbMock, 'mem-9', {
       taskIds: ['nonexistent-task'],
     });
     expect(result.attempted).toBe(1);
@@ -191,7 +258,7 @@ describe('wireMentionsEdges', () => {
     await createTask('task-7', 'Real task');
     await createMemory('mem-10', 'memory text');
 
-    const result = await wireMentionsEdges(conn, 'mem-10', {
+    const result = await wireMentionsEdges(pbMock, 'mem-10', {
       taskIds: ['task-7', 'ghost-task'],
     });
     expect(result.attempted).toBe(2);
