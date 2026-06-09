@@ -1,7 +1,6 @@
 // Dialogue Tauri shell - Phase 0 skeleton spike.
 // Goal: Tauri 2.x opens a window pointing at the running Next.js dev server.
-// No custom Rust commands yet; behaviour comes from `tauri.conf.json` (`devUrl`).
-// Custom commands (PocketBase lifecycle, sidecar Node, etc.) will be added in later phases.
+// Scheduler URLs read APP_URL from env so the port isn't hardcoded.
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -43,8 +42,8 @@ pub fn run() {
 
                 loop {
                     let secret = std::env::var("INTERNAL_CRON_SECRET").unwrap_or_else(|_| "default_local_secret".to_string());
-                    // We assume Next.js is running on 3000 for now. In a bundled app, this would be dynamic.
-                    let url = "http://localhost:3000/api/jobs/scheduler/poll";
+                    let base_url = std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+                    let url = format!("{}/api/jobs/scheduler/poll", base_url);
 
                     match client.get(url).header("Authorization", format!("Bearer {}", secret)).send().await {
                         Ok(resp) => {
@@ -68,7 +67,7 @@ pub fn run() {
                                             }
 
                                             if !fired_ids.is_empty() {
-                                                let mark_url = "http://localhost:3000/api/jobs/scheduler/mark-fired";
+                                                let mark_url = format!("{}/api/jobs/scheduler/mark-fired", base_url);
                                                 let _ = client.post(mark_url)
                                                     .header("Authorization", format!("Bearer {}", secret))
                                                     .json(&serde_json::json!({ "notificationIds": fired_ids }))
