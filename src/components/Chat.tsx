@@ -526,10 +526,24 @@ export function Chat({
             parts,
             toolCalls: m.toolCalls,
             toolCall: m.toolCall,
-            attachments: m.attachments,
+            attachments: isPbBackend() && Array.isArray(m.attachments)
+              ? m.attachments.map((att: any) => {
+                  if (typeof att === "string") {
+                    const pb = getPbClient();
+                    return {
+                      storageId: att,
+                      url: pb.files.getUrl(m, att),
+                      fileName: att,
+                      fileType: att.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? "image/png" : "application/octet-stream"
+                    };
+                  }
+                  return att;
+                })
+              : m.attachments,
             storageId: m.storageId,
             fileName: m.fileName,
             fileType: m.fileType,
+            url: isPbBackend() && m.storageId ? getPbClient().files.getUrl(m, m.storageId) : undefined,
             scope: m.scope,
             reasoning: (m as any).reasoning,
             sessionId: m.sessionId,
@@ -1210,25 +1224,31 @@ export function Chat({
       if (!activeSessionId) return;
 
       try {
-        // Parallel uploads
-        const uploadPromises = files.map(async (file) => {
-          const postUrl = await generateUploadUrl();
-          const result = await fetch(postUrl, {
-            method: "POST",
-            headers: { "Content-Type": file.type },
-            body: file,
+        let uploadedAttachments: any[] = [];
+        
+        if (isPbBackend()) {
+          // PB handles files directly in the mutation
+        } else {
+          // Parallel uploads for Convex
+          const uploadPromises = files.map(async (file) => {
+            const postUrl = await generateUploadUrl();
+            const result = await fetch(postUrl, {
+              method: "POST",
+              headers: { "Content-Type": file.type },
+              body: file,
+            });
+            const { storageId } = await result.json();
+            return {
+              storageId,
+              fileName: file.name,
+              fileType: file.type,
+            };
           });
-          const { storageId } = await result.json();
-          return {
-            storageId,
-            fileName: file.name,
-            fileType: file.type,
-          };
-        });
 
-        const uploadedAttachments = await Promise.all(uploadPromises);
+          uploadedAttachments = await Promise.all(uploadPromises);
+        }
 
-        const textMessageContent = userText || (uploadedAttachments.length > 0 ? `Attached ${uploadedAttachments.length} files` : "");
+        const textMessageContent = userText || (files.length > 0 ? `Attached ${files.length} files` : "");
 
         setIsTyping(true);
 
@@ -1257,7 +1277,8 @@ export function Chat({
               timezoneOffset: new Date().getTimezoneOffset(),
               timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               provider,
-              attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+              attachments: !isPbBackend() && uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+              files: isPbBackend() && files.length > 0 ? files : undefined,
               scope: scope || undefined,
             }),
             aiPromise

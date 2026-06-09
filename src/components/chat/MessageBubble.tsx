@@ -190,6 +190,7 @@ interface MessageBubbleProps {
       storageId: string;
       fileName?: string;
       fileType?: string;
+      url?: string;
     }>;
     storageId?: string;
     fileName?: string;
@@ -264,7 +265,8 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
             allAtts.push({
               storageId: msg.storageId,
               fileName: msg.fileName || "File",
-              fileType: msg.fileType || "application/octet-stream"
+              fileType: msg.fileType || "application/octet-stream",
+              url: (msg as any).url,
             });
           }
           
@@ -272,41 +274,45 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
 
           return (
             <div className="flex flex-wrap gap-2 mb-3">
-              {allAtts.map((att, idx) => (
-                <div key={idx} className="group relative">
-                  {att.fileType?.startsWith("image/") ? (
-                    <div 
-                      onClick={() => window.open(`${(process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL)?.replace(".cloud", ".site")}/api/storage?id=${att.storageId}`, "_blank")}
-                      className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden border border-[#d4a373]/20 shadow-lg bg-black/40 hover:border-[#d4a373]/40 transition-all cursor-pointer"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={`${(process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL)?.replace(".cloud", ".site")}/api/storage?id=${att.storageId}`} 
-                        alt={att.fileName || "Attached image"} 
-                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="p-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20">
-                          <ExternalLink className="w-4 h-4 text-white" />
+              {allAtts.map((att, idx) => {
+                const fileUrl = (att as any).url || `${(process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL)?.replace(".cloud", ".site")}/api/storage?id=${att.storageId}`;
+                
+                return (
+                  <div key={idx} className="group relative">
+                    {att.fileType?.startsWith("image/") ? (
+                      <div 
+                        onClick={() => window.open(fileUrl, "_blank")}
+                        className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl overflow-hidden border border-[#d4a373]/20 shadow-lg bg-black/40 hover:border-[#d4a373]/40 transition-all cursor-pointer"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={fileUrl} 
+                          alt={att.fileName || "Attached image"} 
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div className="p-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20">
+                            <ExternalLink className="w-4 h-4 text-white" />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div 
-                      onClick={() => window.open(`${(process.env.NEXT_PUBLIC_CONVEX_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_URL)?.replace(".cloud", ".site")}/api/storage?id=${att.storageId}`, "_blank")}
-                      className="flex items-center gap-2 p-2 rounded-xl border max-w-50 bg-[#1a1814] border-[#2a2723] hover:border-[#d4a373]/30 transition-all cursor-pointer"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-[#1a1814] flex items-center justify-center border border-[#2a2723] shrink-0">
-                        <FileIcon className="w-4 h-4 text-[#d4a373]" />
-                      </div>
-                      <div className="overflow-hidden">
-                        <p className="text-[11px] font-bold text-[#f2efeb] truncate">{att.fileName || "File"}</p>
+                    ) : (
+                      <div 
+                        onClick={() => window.open(fileUrl, "_blank")}
+                        className="flex items-center gap-2 p-2 rounded-xl border max-w-50 bg-[#1a1814] border-[#2a2723] hover:border-[#d4a373]/30 transition-all cursor-pointer"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-[#1a1814] flex items-center justify-center border border-[#2a2723] shrink-0">
+                          <FileIcon className="w-4 h-4 text-[#d4a373]" />
+                        </div>
+                        <div className="overflow-hidden">
+                          <p className="text-[11px] font-bold text-[#f2efeb] truncate">{att.fileName || "File"}</p>
                         <p className="text-[9px] text-[#a8a29e] uppercase tracking-widest truncate">{att.fileType?.split("/")[1] || "Document"}</p>
                       </div>
                     </div>
                   )}
                 </div>
-              ))}
+              );
+            })}
             </div>
           );
         })()}

@@ -211,8 +211,8 @@ Rough effort estimates. Each phase is independently shippable.
 | 4 — Flip write paths | ✅ Done | 13 mutation hook files + 10 consumer components + parameter adapter wrappers. See `phase-4-write-paths.md`. |
 | 5 — Realtime + dashboard cards | ✅ Done | 6 `useQuery` + 1 `usePaginatedQuery` in Chat + 9 dual-queries in Dashboard. Real-collection stress (5.2, 22/22) + Dashboard mount smoke (5.3, 30/30) + 5.1 guard + 5.4 set-state-in-effect fix + habits migration fix. See `phase-5-realtime.md`. |
 | 6 — Background jobs | 🟡 In progress (6.1.1 done) | Architecture: Next.js API routes, not PB JS hooks (locked 2026-06-07). 5 jobs, not 6 (extractAndSaveMemory is dead code). See § below for sub-steps. |
-| 7 — On-open scheduler | Pending | |
-| 8 — File storage + public share | Pending | |
+| 7 — On-open scheduler | ✅ Done | |
+| 8 — File storage + public share | ✅ Done | |
 | 9 — Tests + e2e + cutover | Pending | |
 
 ### Phase 0: Tauri skeleton (~1-2 weeks) — ✅ DONE
