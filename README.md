@@ -48,48 +48,50 @@ This is not automation. It is collaboration. The agent handles the orchestration
 
 ## Core Features
 
-### Living Chronological Journals
-When you complete a task in a standard app, everything that got you there disappears. The late nights, the blockers, the decisions — gone. Dialogue keeps a running, timestamped ledger attached to every task and event. Every update, struggle, or note is appended in order. The agent reads this history when you return to something, so you never have to re-explain where you left off.
+### Vault-Backed Workspaces
+Every workspace in Dialogue is a folder on your disk. Tasks, events, notes, and memories are all plain Markdown files with YAML frontmatter. The agent works directly from these files — there is no hidden database you cannot see. Share a workspace folder via Dropbox or Syncthing and two instances of Dialogue stay in sync with zero cloud infrastructure.
 
-### Native Habits & Routine Tracking
-Habits are not tasks. They are identities you are building. Dialogue treats them that way — tracking streaks, handling intentional skips (streak freezes), and monitoring consistency over time. The agent notices when a long streak is about to break and mentions it. Logging a habit takes one message. No confirmation cards, no friction.
+### Auditable Memory
+The agent remembers facts about you — your preferences, your projects, your working style — and writes them to `vault/system/memories.md`. You can open this file at any time and see everything the agent knows about you. Delete a line and the agent forgets it. Edit a line and the agent corrects itself instantly. Memories are automatically deduplicated and time-decayed so the most relevant ones surface first.
 
-### Semantic Memory
-The agent remembers facts about you — your preferences, your projects, your working style — and retrieves the ones relevant to your current conversation. You never have to re-introduce yourself. Memories are automatically deduplicated, and you can delete any specific memory if it becomes outdated or incorrect.
+### Dynamic Agent Personas
+Personas are Markdown files in `vault/personas/`. You can edit them directly to change how the agent behaves, or tell the agent to update them. Each persona has a strict character cap — when new preferences are added, the agent consolidates and compresses the prompt rather than stacking bullet points. Workspaces can have their own personas for context-isolated behavior.
 
-### Behavioral Understanding
-Every time you open Dialogue, the agent quietly reviews your recent conversations and activity. It notices patterns — when you tend to be most focused, what kinds of tasks drain you, how you respond under pressure — and uses that understanding to inform how it talks to you and what it prioritizes. This synthesis happens on app open, not on a server schedule. No always-on infrastructure required.
+### Daily Logs & Behavioral Synthesis
+Dialogue replaces abstract personality scoring (OCEAN, etc.) with something simpler: a daily log file at `vault/daily-logs/YYYY-MM-DD.md` that tracks your habits, reflections, and activity. Every few days, the agent synthesizes these logs into a compact startup profile — concrete observations about how you work and what matters to you, not numbers on a psychometric scale. This runs on app open, not on a server schedule. No always-on infrastructure required.
 
-### User Bio
-Your core identity lives in a persistent bio the agent loads at the start of every session. It captures who you are, how you like to communicate, and any standing instructions you have for the agent. Previous versions are saved so you can roll back if an update goes wrong.
+### Self-Improving Playbooks
+When the agent completes a complex multi-step task, it compiles its tool calls, CLI commands, errors, and successful configuration into a reusable Playbook — stored as a Markdown file in `vault/playbooks/`. The next time a similar task appears, the agent retrieves the relevant playbook via vector search and uses it as a template. The more you use Dialogue, the sharper its execution gets — and you can edit or delete any playbook at any time.
 
 ### Periodic Reflections
-At the end of the week, the month, and the year, Dialogue synthesizes your completed tasks, habit consistency, and journal entries into a narrative summary — something closer to a personal retrospective than a dashboard. It celebrates what you accomplished and surfaces patterns worth examining. Think Spotify Wrapped, but for your actual life.
+At the end of the week, the month, and the year, Dialogue synthesizes your completed tasks, habit consistency, and daily logs into a narrative summary — something closer to a personal retrospective than a dashboard. It celebrates what you accomplished and surfaces patterns worth examining. Think Spotify Wrapped, but for your actual life.
 
 ---
 
 ## Supporting Capabilities
 
-* **Custom Agent Personas** — Each workspace can have its own agent personality and instruction set. Your work workspace can be direct and focused. Your personal workspace can be warmer and more reflective. You define the behavior.
+* **Filesystem Vault** — All data lives in `vault/` as plain Markdown files. Tasks, events, notes, memories, personas, playbooks, and daily logs are all readable and editable in any text editor. No proprietary format, no vendor lock-in.
+* **Zero-Cloud Collaboration** — Workspaces are folders. Share `vault/My-Project/` via Dropbox, iCloud, Syncthing, or Git. Two instances of Dialogue can watch the same folder and stay in sync with no central server.
+* **Native File Watcher** — Changes made outside the app (editing a task file in VS Code, dropping a note into a workspace folder) are detected instantly by a background sync engine and reflected in the database cache.
 * **Multimodal Ingestion & Web Research** — Drop a PDF, image, or document into the conversation. The agent reads it and can act on it — scheduling follow-ups from a meeting brief, comparing two reports, answering questions from a manual. Real-time web search is available for anything that needs current information.
 * **Context-Aware Smart Notifications** — Reminders that know what they are reminding you about. Instead of "Task due in 15 minutes," you get "Lab 5 in 15 minutes — last you mentioned you had two questions left." Delivered natively on your machine.
 * **Scope Pinning** — Click any task or event to pin it to the chat. The agent loads its full context and history into the conversation, so you can say "reschedule this" or "what's blocking this" without further explanation.
-* **Context-Isolated Workspaces** — Each workspace is a complete silo: its own conversations, tasks, events, habits, and agent memory context. Switch between them without bleed. Step into the Universal Space for a cross-workspace view of your entire day.
+* **Context-Isolated Workspaces** — Each workspace is a completely isolated vault folder: its own tasks, events, notes, specialized memories, and agent persona. Switch between them without bleed. Step into the Universal Space for a cross-workspace view of your entire day.
 * **Task & Event Resource Tray** — Attach links, files, and documents directly to tasks and events via conversation. They appear as a visual tray when you open that item — your references, one click away.
 
 ---
 
 ## How the Agent Knows You
 
-Dialogue uses three memory systems that work together to give the agent a complete picture of who you are.
+Dialogue uses three memory systems that work together to give the agent a complete picture of who you are. All three are stored as plain Markdown files in your vault — you can open, edit, or delete them in any text editor.
 
-| System | What it holds | How it works |
-|---|---|---|
-| **User Bio** | Your identity, communication preferences, standing instructions | Always loaded. Updated on request. Versioned for rollback. |
-| **Semantic Memory** | Explicit facts — preferences, projects, context, technical details | Vector search retrieves what is relevant to the current conversation. Deduplicated automatically. |
-| **Behavioral Understanding** | Patterns — how you work, what drains you, how you respond to pressure | Synthesized from your conversation history when you open the app. Free-form, not scored. Gets more accurate over time. |
+| System | What it holds | Where it lives | How it works |
+|---|---|---|---|
+| **Startup Profile** | Your identity, working style, communication preferences, standing instructions | `vault/system/user_profile.md` | Refined every N daily logs. Always loaded at session start. Versioned for rollback. |
+| **Auditable Memory** | Explicit facts — preferences, projects, context, technical details | `vault/system/memories.md` | Vector search retrieves what is relevant to the current conversation. Edit the file to correct a memory. Delete a line to make the agent forget. |
+| **Behavioral Understanding** | Patterns — how you work, what drains you, how you respond to pressure | Synthesized from your conversation and daily logs | Generated from daily log analysis when you open the app. Free-form observations, not scored numbers. Gets more accurate over time. |
 
-These three systems answer different questions. The bio answers who you are. Semantic memory answers what the agent knows about your life. Behavioral understanding answers how you actually operate.
+These three systems answer different questions. The profile answers who you are. Auditable memory answers what the agent knows about your life. Behavioral understanding answers how you actually operate.
 
 Together, they mean the agent on day 365 knows you far better than the agent on day 1 — without you having to do anything except use it.
 
@@ -101,7 +103,8 @@ This is not a privacy feature. It is the architecture.
 
 * **Runs on your machine.** Dialogue is a desktop application. Your data does not pass through our servers. There is no subscription, no telemetry, no vendor with access to your conversations.
 * **Bring your own API keys.** Connect whichever AI provider you prefer — Gemini, OpenAI, Anthropic, or a local model running on your own machine via Ollama or LM Studio. Switch providers at any time.
-* **Local embeddings.** Semantic memory uses a lightweight 384-dimension embedding model that runs entirely on your device. No embedding API key required. No data leaves your machine for this step.
+* **Local embeddings.** All memory embedding uses a lightweight 384-dimension model that runs entirely on your device. No embedding API key required. No data leaves your machine for this step.
+* **Filesystem source of truth.** Every task, event, note, memory, persona, and playbook is a plain Markdown file in your vault. You can open them with any text editor, back them up with any tool, and share them through any file sync service. The database cache is a performance optimization — the files are the real record.
 * **Self-host with one binary.** Dialogue's backend runs on PocketBase — a single executable file. Download it, run it, and you have a fully functional local server. No cloud account required, no complex deployment, no always-on VPS. Open the app and it works.
 
 The agent learns deeply personal things about you. That information should belong to you.
@@ -110,31 +113,34 @@ The agent learns deeply personal things about you. That information should belon
 
 ## Technical Architecture
 
-Dialogue is packaged as a Tauri desktop application. The Tauri shell (Rust) spawns and supervises two child processes on startup, then opens a webview pointed at the local Next.js server.
+Dialogue is packaged as a Tauri desktop application. The Tauri shell (Rust) spawns and supervises three child processes on startup, then opens a webview pointed at the local Next.js server.
 
 | Process | Role |
 |---|---|
 | **Tauri shell (Rust)** | Lifecycle, system tray, OS notifications, on-open reminder scan, port coordination. The single binary the user downloads. |
-| **PocketBase (Go)** | Primary store, reactive subscriptions, auth, file storage, on-device DB. Single executable, no Docker. |
+| **Sync Engine** | Filesystem file watcher (via `notify` crate), Markdown parser with YAML frontmatter extraction, SHA-256 change tracking, embedding generation, desync reconciliation on startup. Bridges vault files to the database cache. |
+| **PocketBase (Go)** | Cached store, reactive subscriptions, auth, file storage, on-device DB. Single executable, no Docker. |
 | **Next.js (Node)** | UI, Mastra agent, embedding model loader (Xenova multilingual-e5-small), chat API, periodic reflection jobs. |
-| **LadybugDB (embedded)** | Vector search (384d cosine) and graph store for semantic memory. Local file on disk, queried via Cypher. |
 
 ### Why this stack
 
+* **Filesystem source of truth** — every task, event, memory, persona, and playbook is a Markdown file on disk. The database is a cache, not the primary record. You own your data in a format you can open in any text editor.
+* **Sync engine over direct database writes** — changes made outside the app (editing a note in VS Code, dropping a file into a workspace folder) are detected by the file watcher and synced automatically. No import step, no manual reconciliation.
 * **PocketBase over cloud databases** — runs offline, no account, no subscription, data stays on the user's disk. Single binary, single port (`localhost:8090`).
 * **Server-side embeddings, not browser-side** — the embedding model loads once in the Next.js process. The webview is lightweight, no ~120MB model in the browser bundle.
-* **LadybugDB for vector and graph** — already integrated. Brute-force cosine search is fast at personal scale (sub-50ms for 10K memories). No separate vector service to install.
-* **No always-on scheduler** — periodic work (weekly reflection, OCEAN synthesis, habit reminders) runs on app open, not on a server clock. The relationship is present when the user is present.
+* **In-process vector search** — embeddings and cosine similarity search run inside PocketBase/SQLite. Brute-force is fast at personal scale (sub-50ms for 10K memories). No separate vector service to install.
+* **No always-on scheduler** — periodic work (weekly reflection, daily log synthesis, behavioral profile refinement) runs on app open, not on a server clock. The relationship is present when the user is present.
 * **Native OS notifications** — Tauri uses the system notification API and a system tray icon. No web push subscription required for the desktop app.
 
 ### Memory architecture
 
-Dialogue unifies all memory writes through a single 384-dimension contract. Every memory is stored in both the primary database (for UI) and the vector store (for retrieval):
+Dialogue unifies all memory writes through a single vault-first contract. The source of truth is a Markdown file on disk — the database cache is a derived index for fast retrieval:
 
-1. The text is embedded by a local Xenova model (multilingual-e5-small, 384 dimensions, L2-normalized).
-2. The vector is inserted into the primary database alongside the text and a SHA-256 content hash.
-3. A mirror write to the vector store enables cosine-similarity retrieval and graph traversal.
-4. Hash-based deduplication runs first. If a near-duplicate is found via cosine similarity above 0.85, the write is skipped.
+1. The agent writes or updates `vault/system/memories.md` (or `vault/workspaces/[Name]/workspace_memories.md` for workspace-scoped memories).
+2. The sync engine's file watcher detects the change and computes a SHA-256 hash of each memory chunk.
+3. Each changed chunk is embedded by a local Xenova model (multilingual-e5-small, 384 dimensions, L2-normalized) and upserted into the database cache alongside the hash and file path.
+4. Hash comparison prevents redundant embedding. Stale entries are deleted when chunks are removed from the file.
+5. At retrieval time, results are ranked by a combined score of cosine similarity and recency — recent memories naturally gain presence. Near-duplicate results (cosine > 0.80) are deduplicated to keep context clean.
 
 ---
 
@@ -144,10 +150,12 @@ Dialogue unifies all memory writes through a single 384-dimension contract. Ever
 |---|---|
 | **Desktop shell** | Tauri (Rust) |
 | **Framework** | Next.js 16, React 19 |
-| **Primary database** | PocketBase (single Go binary, on-device) |
+| **Source of truth** | Local filesystem vault (Markdown files with YAML frontmatter) |
+| **Sync engine** | Tauri file watcher (`notify` crate), AST parser, SHA-256 change tracking |
+| **Database cache** | PocketBase (single Go binary, on-device) |
 | **AI orchestration** | Mastra (agent workflows, tool calling) |
 | **AI providers** | Vercel AI SDK — Gemini, OpenAI, Anthropic, Cohere, DeepSeek, Groq, Mistral, xAI, plus local models via Ollama / LM Studio |
-| **Vector + graph store** | LadybugDB (embedded C++ via `@ladybugdb/core`) |
+| **Vector search** | In-process (PocketBase/SQLite, cosine similarity, 384d) |
 | **Embedding model** | Xenova multilingual-e5-small (384d, runs on-device) |
 | **Styling** | Tailwind CSS v4, Framer Motion |
 | **Auth** | PocketBase native (email/password) |
@@ -219,11 +227,13 @@ Produces a `.dmg` (macOS), `.exe` (Windows), or `.AppImage` (Linux). The user do
 
 ## Roadmap
 
-Dialogue is a long-term project. The current build is the foundation — the relationship loop, the three memory systems, the on-device architecture. Things being built toward:
+Dialogue is a long-term project. The current build is the foundation — the vault architecture, the sync engine, the three memory systems, the on-device stack. Things being built toward:
 
-* **Daily Conversation Model** — each day gets its own conversation that the agent initiates. It checks in, asks how you are, reflects at the end of the day. History organized by day, not by thread.
+* **Vault-First Internals** — migrating all data to the filesystem vault model (tasks, events, memories, personas, playbooks, daily logs as Markdown files), with the database as a derived cache. Every piece of user data becomes an openable, editable, backuppable file.
+* **Workspace-Centric Collaboration** — zero-cloud workspace sharing via folder sync (Dropbox, Syncthing, Git). Two users sharing a workspace folder can collaborate on tasks and notes with no central server.
+* **Self-Improving Playbooks** — the agent compiles multi-step tasks into reusable playbooks, stored as Markdown files, retrieved via vector search when similar tasks appear. The agent gets sharper with every execution.
+* **Daily Log Synthesis** — each day gets a habit tracker and reflection log. The agent synthesizes N logs into a compact behavioral profile on app open. No background server, no psychometric scoring.
 * **Proactive Agent** — the agent notices unlogged habits, approaching deadlines, follow-ups from three days ago. Surfaces them as observations, not commands.
-* **Edge relationships in the graph** — when a memory is saved, automatically link it to the tasks, events, and habits it references. The graph becomes useful for retrieval, not just storage.
 
 See `docs/MIGRATION_POCKETBASE.md` for the technical roadmap (the move to a Tauri-packaged PocketBase backend is currently in progress).
 
@@ -231,6 +241,6 @@ See `docs/MIGRATION_POCKETBASE.md` for the technical roadmap (the move to a Taur
 
 ## License
 
-Dialogue is open source. Your conversations, calendar entries, tasks, and memories are completely contained within your local installation. No usage data, telemetry, or personal information is transmitted to any third party.
+Dialogue is open source. Your conversations, calendar entries, tasks, memories, personas, playbooks, and daily logs are all stored as plain Markdown files in your local vault. No usage data, telemetry, or personal information is transmitted to any third party.
 
 The agent learns deeply personal things about you. That information should belong to you.
