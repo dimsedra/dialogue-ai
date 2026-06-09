@@ -45,6 +45,9 @@ opencode.json
 *.tsbuildinfo
 next-env.d.ts
 
+# convex archive
+/convex/
+
 # landing page mockup
 /index.html
 

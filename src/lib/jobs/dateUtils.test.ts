@@ -28,10 +28,14 @@ describe("dateUtils", () => {
     it("handles weekly offset 0 (current week)", () => {
       const { startMs, endMs } = getPeriodRange("weekly", 0, 0);
       const start = new OriginalDate(startMs);
-      const end = new OriginalDate(endMs);
       
-      // Start of week: Monday, Feb 12
-      expect(start.toISOString().startsWith("2024-02-12")).toBe(true);
+      // Start of week: Monday, Feb 12 (local time)
+      expect(start.getFullYear()).toBe(2024);
+      expect(start.getMonth()).toBe(1); // 0-indexed, 1 = Feb
+      expect(start.getDate()).toBe(12);
+      expect(start.getHours()).toBe(0);
+      expect(start.getMinutes()).toBe(0);
+      
       // End cap is current time since it's in the future
       expect(endMs).toBe(Date.now());
     });
@@ -42,9 +46,16 @@ describe("dateUtils", () => {
       const end = new OriginalDate(endMs);
       
       // Start of last week: Monday, Feb 5
-      expect(start.toISOString().startsWith("2024-02-05")).toBe(true);
+      expect(start.getFullYear()).toBe(2024);
+      expect(start.getMonth()).toBe(1);
+      expect(start.getDate()).toBe(5);
+
       // End of last week: Sunday, Feb 11
-      expect(end.toISOString().startsWith("2024-02-11")).toBe(true);
+      expect(end.getFullYear()).toBe(2024);
+      expect(end.getMonth()).toBe(1);
+      expect(end.getDate()).toBe(11);
+      expect(end.getHours()).toBe(23);
+      expect(end.getMinutes()).toBe(59);
     });
 
     it("handles monthly offset 0 (current month)", () => {
@@ -52,7 +63,10 @@ describe("dateUtils", () => {
       const start = new OriginalDate(startMs);
       
       // Start of month: Feb 1
-      expect(start.toISOString().startsWith("2024-02-01")).toBe(true);
+      expect(start.getFullYear()).toBe(2024);
+      expect(start.getMonth()).toBe(1);
+      expect(start.getDate()).toBe(1);
+      
       // End cap is current time
       expect(endMs).toBe(Date.now());
     });

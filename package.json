@@ -14,6 +14,7 @@
     "test:smoke:reads": "node scripts/smoke-pb-readpaths.mjs",
     "test:smoke:dashboard": "node scripts/smoke-pb-dashboard.mjs",
     "test:smoke:jobs": "node scripts/smoke-pb-jobs.mjs",
+    "test:e2e:backend": "node scripts/e2e-pb-backend.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
