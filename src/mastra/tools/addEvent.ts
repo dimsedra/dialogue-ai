@@ -11,6 +11,7 @@ export const addEventTool = createTool({
     description: z.string().optional().describe("Optional description"),
     startTime: z.string().describe("ISO-8601 start time (24-hour format, e.g. '2026-05-15T14:00:00')"),
     endTime: z.string().optional().describe("Optional ISO-8601 end time (24-hour format)"),
+    reminderOffset: z.number().optional().describe("Minutes before startTime to remind the user (e.g. 15)."),
     eventType: z.string().describe("'interval' for duration events or 'point' for momentary events"),
     location: z.string().optional().describe("Optional location"),
     notes: z.string().optional().describe("Optional notes"),
@@ -48,6 +49,7 @@ export const addEventTool = createTool({
         description: input.description,
         startTime: startMs,
         endTime: endMs,
+        reminderOffset: input.reminderOffset,
         eventType: input.eventType as "interval" | "point",
         location: input.location,
         notes: input.notes,
@@ -56,6 +58,19 @@ export const addEventTool = createTool({
         recurrence: recurrence ?? undefined,
         createdAt: Date.now(),
       });
+
+      if (input.reminderOffset !== undefined && input.reminderOffset >= 0) {
+        const triggerAt = Math.max(Date.now(), startMs - input.reminderOffset * 60 * 1000);
+        await pb.collection("scheduled_notifications").create({
+          user,
+          kind: "event_remind",
+          targetId: record.id,
+          triggerAt,
+          delivered: false,
+          createdAt: Date.now(),
+        });
+      }
+
       return { eventId: record.id as string, title: input.title };
     }
 

@@ -310,6 +310,43 @@ export const createCustomReminderTool = createTool({
   outputSchema: z.object({ success: z.boolean(), scheduledFor: z.string() }),
   execute: async (input) => {
     const client = getConvexClient();
+    const { isPbBackend } = await import('../../pb-compat');
+    
+    if (isPbBackend()) {
+      const { getPbClient } = await import('../../lib/pb-server');
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+      
+      const triggerAt = new Date(input.dueDate).getTime();
+      
+      // For custom reminders, we use kind "system" or we can store a fake task.
+      // Wait, scheduled_notifications schema only allows ["event_remind", "task_remind", "habit_remind"].
+      // Since schema is strict, we'll create a task with reminderOffset = 0, which gives us the same result.
+      const record = await pb.collection("tasks").create({
+        user,
+        text: input.message,
+        dueDate: triggerAt,
+        dueDateStr: input.dueDate.split('T')[0],
+        reminderOffset: 0,
+        completed: false,
+        category: "System Reminder",
+        priority: "medium",
+        createdAt: Date.now(),
+      });
+
+      await pb.collection("scheduled_notifications").create({
+        user,
+        kind: "task_remind",
+        targetId: record.id,
+        triggerAt,
+        delivered: false,
+        createdAt: Date.now(),
+      });
+
+      return { success: true, scheduledFor: input.dueDate };
+    }
+
     await client.mutation(api.notifications.createCustomReminder, {
       message: input.message,
       dueDate: input.dueDate,

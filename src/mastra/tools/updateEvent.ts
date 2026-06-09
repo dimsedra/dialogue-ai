@@ -12,6 +12,7 @@ export const updateEventTool = createTool({
     title: z.string().optional().describe("The new event title"),
     startTime: z.string().optional().describe("ISO-8601 start time"),
     endTime: z.string().optional().describe("ISO-8601 end time"),
+    reminderOffset: z.number().optional().describe("Minutes before startTime to remind the user. Pass -1 to remove existing reminder."),
     eventType: z.string().optional().describe("'interval' or 'point'"),
     location: z.string().optional().describe("Optional new location"),
     notes: z.string().optional().describe("Chronological pre-event prep notes or context. Always append with timestamp [YYYY-MM-DD HH:mm]."),
@@ -39,18 +40,48 @@ export const updateEventTool = createTool({
     if (isPbBackend()) {
       const { getPbClient } = await import('../../lib/pb-server');
       const pb = getPbClient();
-      await pb.collection("events").update(input.eventId, {
-        title: input.title,
-        startTime: input.startTime ? new Date(input.startTime).getTime() : undefined,
-        endTime: input.endTime ? new Date(input.endTime).getTime() : undefined,
-        eventType: input.eventType as "interval" | "point",
-        location: input.location,
-        notes: input.notes,
-        outcome: input.outcome,
-        statusHook: input.statusHook,
-        cancelled: input.cancelled,
-        recurrence: recurrence ?? undefined,
-      });
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
+
+      const updates: Record<string, any> = {};
+      if (input.title !== undefined) updates.title = input.title;
+      if (input.startTime !== undefined) updates.startTime = new Date(input.startTime).getTime();
+      if (input.endTime !== undefined) updates.endTime = new Date(input.endTime).getTime();
+      if (input.eventType !== undefined) updates.eventType = input.eventType;
+      if (input.location !== undefined) updates.location = input.location;
+      if (input.notes !== undefined) updates.notes = input.notes;
+      if (input.outcome !== undefined) updates.outcome = input.outcome;
+      if (input.statusHook !== undefined) updates.statusHook = input.statusHook;
+      if (input.cancelled !== undefined) updates.cancelled = input.cancelled;
+      if (input.reminderOffset !== undefined) updates.reminderOffset = input.reminderOffset < 0 ? null : input.reminderOffset;
+      if (input.recurrence !== undefined) updates.recurrence = recurrence ?? null;
+
+      const record = await pb.collection("events").update(input.eventId, updates);
+
+      // Reschedule Reminder Logic
+      try {
+        const existingReminders = await pb.collection("scheduled_notifications").getFullList({
+          filter: `targetId = "${record.id}" && kind = "event_remind" && delivered = false`
+        });
+        for (const er of existingReminders) {
+          await pb.collection("scheduled_notifications").delete(er.id);
+        }
+
+        if (!record.cancelled && record.startTime && record.reminderOffset !== null && record.reminderOffset >= 0) {
+          const triggerAt = Math.max(Date.now(), record.startTime - record.reminderOffset * 60 * 1000);
+          await pb.collection("scheduled_notifications").create({
+            user,
+            kind: "event_remind",
+            targetId: record.id,
+            triggerAt,
+            delivered: false,
+            createdAt: Date.now(),
+          });
+        }
+      } catch (err) {
+        console.error("Failed to reschedule event reminder in PB:", err);
+      }
+
       return { success: true, eventId: input.eventId };
     }
 

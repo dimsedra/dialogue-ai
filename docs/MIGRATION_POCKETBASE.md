@@ -304,7 +304,8 @@ Rough effort estimates. Each phase is independently shippable.
 
 **Delivery:** all 5 background jobs run as Next.js API routes behind `isPbBackend()`. All Mastra tools are dual-backend and safely execute PocketBase mutations.
 
-### Phase 7: Build the on-open scheduler + reminders (~3-5 days)
+### Phase 7: Build the on-open scheduler + reminders
+**Status:** ✅ COMPLETED (2026-06-09)
 - Add `scheduled_notifications` table to PB schema.
 - Tauri Rust process: on app open + every 60s, scan for `dueAt<=now AND firedAt=null`, fire OS notification, mark `firedAt`.
 - Port the 7 cron-equivalent on-open checks.
