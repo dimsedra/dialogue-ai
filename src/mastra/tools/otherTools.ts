@@ -310,7 +310,7 @@ export const createHabitTool = createTool({
 
 export const logHabitTool = createTool({
   id: 'log_habit',
-  description: 'Logs a habit execution (completed or skipped) silently. Runs instantly without confirmation.',
+  description: 'Logs a habit execution (completed or skipped) silently. Always prompt for or deduce daily context to include in the notes field — habit log notes are automatically indexed into semantic memory (with MENTIONS_HABIT graph edges) via the ingestion pipeline. PREFERRED over saveSemanticMemory for habit-related observations.',
   inputSchema: z.object({
     habitId: z.string(),
     dateString: z.string(),

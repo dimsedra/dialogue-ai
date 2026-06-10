@@ -1,6 +1,7 @@
 "use node";
 import { generateText, jsonSchema } from "ai";
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createDeepSeek } from '@ai-sdk/deepseek';
@@ -167,7 +168,11 @@ export function getVercelModel(provider: string, customConfigs: any, modelId?: s
     case 'zhipu':
       return zhipu(resolvedModelId || 'glm-4-plus');
     case 'lmstudio':
-      return createOpenAI(opts)(resolvedModelId || 'default');
+      return createOpenAICompatible({
+        name: 'lmstudio',
+        baseURL: baseUrl || 'http://localhost:1234/v1',
+        apiKey: apiKey || 'lm-studio',
+      })(resolvedModelId || 'local-model');
     default:
       return createOpenAI(opts)(resolvedModelId || 'gpt-4o-mini');
   }

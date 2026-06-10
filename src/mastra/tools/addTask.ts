@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const addTaskTool = createTool({
   id: 'addTask',
-  description: 'Creates a new task. Ask ONE field per turn (priority, category, due date, notes). Call this tool immediately after the last field is answered. No final confirmation needed.',
+  description: 'Creates a new task. Extract as many fields as possible from the user\'s natural language (description, due date, priority, category, notes). Only ask the user if information is missing or ambiguous.',
   inputSchema: z.object({
     text: z.string().describe("The task description"),
     dueDate: z.string().optional().describe("ISO-8601 due date/time (24-hour format, e.g. '2026-05-15T14:00:00')"),

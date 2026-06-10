@@ -40,7 +40,7 @@ import { useAuth } from "@/pb-compat/auth";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { EnrichedToolArgs, Scope } from "./chat/types";
+import { Scope } from "./chat/types";
 import { CreateWorkspaceModal } from "./chat/CreateWorkspaceModal";
 import { DeleteSessionModal } from "./chat/DeleteSessionModal";
 import { WorkspaceRail } from "./chat/WorkspaceRail";
@@ -73,41 +73,9 @@ const exportReflectionAsImage = async (
   const mod = await import("../utils/exportReflectionImage");
   return mod.exportReflectionAsImage(...args);
 };
-// LM Studio client is only used when the user picks the local provider.
-const processLocalLLMRequest = async (
-  ...args: Parameters<typeof import("../lib/lmstudio").processLocalLLMRequest>
-) => {
-  const mod = await import("../lib/lmstudio");
-  return mod.processLocalLLMRequest(...args);
-};
-
 type AIProvider = string;
 type ProviderConfig = { apiKey?: string; baseUrl?: string; modelId?: string };
 type ProviderConfigs = Record<string, ProviderConfig>;
-type RecurrenceInput = {
-  frequency: "daily" | "weekly";
-  interval: number;
-  daysOfWeek?: number[];
-  until?: string;
-};
-type EventUpdateFields = {
-  title?: string;
-  location?: string;
-  notes?: string;
-  outcome?: string;
-  statusHook?: string;
-  startTime?: number;
-  endTime?: number;
-  eventType?: "interval" | "point";
-  cancelled?: boolean;
-  recurrence?: {
-    frequency: "daily" | "weekly";
-    interval: number;
-    daysOfWeek?: number[];
-    until?: number;
-  };
-};
-
 type ChatProps = {
   activeSessionId: string | null;
   setActiveSessionIdAction: (id: string | null) => void;
@@ -126,27 +94,6 @@ type ChatProps = {
   onChatInputResizeAction?: (offset: number) => void;
   onShowTasksAction?: () => void;
 };
-
-function toRecurrenceInput(value: unknown): RecurrenceInput | undefined {
-  if (!value || typeof value !== "object") return undefined;
-
-  const candidate = value as Partial<RecurrenceInput>;
-  if (
-    (candidate.frequency === "daily" || candidate.frequency === "weekly") &&
-    typeof candidate.interval === "number"
-  ) {
-    return {
-      frequency: candidate.frequency,
-      interval: candidate.interval,
-      daysOfWeek: Array.isArray(candidate.daysOfWeek)
-        ? candidate.daysOfWeek
-        : undefined,
-      until: typeof candidate.until === "string" ? candidate.until : undefined,
-    };
-  }
-
-  return undefined;
-}
 
 export function Chat({
   activeSessionId,
@@ -827,433 +774,6 @@ function ActiveChat({
     }
   }, [messages, isLoading, setMessages, aiMessages.length, activeSessionId]);
 
-  // Run LM Studio logic
-  const runLocalLLMForSession = useCallback(
-    async (
-      sessionId: string,
-      userText: string,
-      opts?: { brief?: boolean; scope?: Scope | null },
-    ) => {
-      try {
-        const promptCtx = await api.ai.getPromptContext({
-          sessionId,
-          timezoneOffset: new Date().getTimezoneOffset(),
-          ...(opts?.brief !== undefined ? { brief: opts.brief } : {}),
-          ...(opts?.scope ? { scope: opts.scope } : {}),
-        }) as { systemInstruction: string; workspaceId?: string; timezoneOffset?: number };
-
-        const recentMsgs = (messages || []).slice(-10);
-
-        const result = await processLocalLLMRequest({
-          systemInstruction: promptCtx.systemInstruction,
-          recentMessages: recentMsgs,
-          userText,
-        });
-
-        let aiTextOverride = result.aiText || "Done!";
-
-        if (result.toolCalls && result.toolCalls.length > 0) {
-          const parseLocal = (s: string) => {
-            const match = s.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
-            if (match) {
-              const [, y, m, d, h, min] = match;
-              return new Date(
-                Number(y),
-                Number(m) - 1,
-                Number(d),
-                Number(h),
-                Number(min),
-              ).getTime();
-            }
-            return new Date(s).getTime();
-          };
-
-          const executedCalls: Array<{
-            name: string;
-            args: Record<string, unknown>;
-            result?: unknown;
-          }> = [];
-
-          for (const tc of result.toolCalls) {
-            const { name, args } = tc;
-            const enrichedArgs = { ...args } as EnrichedToolArgs;
-
-            if (name === "addTask" || name === "updateTask") {
-              if (name === "addTask") {
-                await addTask({
-                  text: (args.text as string) || "New Task",
-                  priority: args.priority as
-                    | "low"
-                    | "medium"
-                    | "high"
-                    | undefined,
-                  category: args.category as string | undefined,
-                  notes: args.notes as string | undefined,
-                  progress:
-                    args.progress !== undefined
-                      ? Number(args.progress)
-                      : undefined,
-                  statusHook: args.statusHook as string | undefined,
-                  dueDate: args.dueDate
-                    ? parseLocal(args.dueDate as string)
-                    : undefined,
-                  dueDateStr: args.dueDate
-                    ? (args.dueDate as string).split("T")[0]
-                    : undefined,
-                  workspaceId: promptCtx.workspaceId ?? undefined,
-                });
-              } else {
-                const oldTask = await api.tasks.get({ id: args.taskId as string });
-                const taskUpdates: Record<
-                  string,
-                  string | number | boolean | undefined
-                > = {};
-                if (args.text) taskUpdates.text = args.text as string;
-                if (args.completed !== undefined)
-                  taskUpdates.completed = args.completed as boolean;
-                if (args.priority)
-                  taskUpdates.priority = args.priority as
-                    | "low"
-                    | "medium"
-                    | "high";
-                if (args.category)
-                  taskUpdates.category = args.category as string;
-                if (args.notes) taskUpdates.notes = args.notes as string;
-                if (args.progress !== undefined)
-                  taskUpdates.progress = Number(args.progress);
-                if (args.statusHook !== undefined)
-                  taskUpdates.statusHook = args.statusHook as string;
-                if (args.dueDate) {
-                  taskUpdates.dueDate = parseLocal(args.dueDate as string);
-                  taskUpdates.dueDateStr = (args.dueDate as string).split(
-                    "T",
-                  )[0];
-                }
-
-                await updateTask({
-                  id: args.taskId as string,
-                  timezoneOffset: promptCtx.timezoneOffset ?? undefined,
-                  ...taskUpdates,
-                });
-
-                enrichedArgs.titleHint = oldTask?.text;
-                enrichedArgs.oldValues = oldTask
-                  ? {
-                      text: oldTask.text,
-                      completed: oldTask.completed,
-                      priority: oldTask.priority,
-                      category: oldTask.category,
-                      notes: oldTask.notes,
-                      progress: oldTask.progress,
-                      statusHook: oldTask.statusHook,
-                      dueDate: oldTask.dueDate,
-                      dueDateStr: oldTask.dueDateStr,
-                    }
-                  : undefined;
-              }
-            } else if (name === "deleteTask") {
-              const oldTask = await api.tasks.get({ id: args.taskId as string });
-              await deleteTask({ id: args.taskId as string });
-              enrichedArgs.titleHint = oldTask?.text;
-            } else if (name === "addEvent" || name === "updateEvent") {
-              if (name === "addEvent") {
-                await addEvent({
-                  title: (args.title as string) || "New Event",
-                  startTime: args.startTime
-                    ? parseLocal(args.startTime as string)
-                    : Date.now(),
-                  endTime: args.endTime
-                    ? parseLocal(args.endTime as string)
-                    : Date.now() + 3600000,
-                  location: args.location as string | undefined,
-                  notes: args.notes as string | undefined,
-                  eventType: args.eventType as "interval" | "point" | undefined,
-                  recurrence: toRecurrenceInput(args.recurrence),
-                  workspaceId: promptCtx.workspaceId ?? undefined,
-                });
-              } else {
-                const oldEvent = await api.events.get({ id: args.eventId as string });
-                const updates: EventUpdateFields = {};
-                if (args.title) updates.title = args.title as string;
-                if (args.location) updates.location = args.location as string;
-                if (args.notes) updates.notes = args.notes as string;
-                if (args.outcome) updates.outcome = args.outcome as string;
-                if (args.statusHook !== undefined)
-                  updates.statusHook = args.statusHook as string;
-                if (args.startTime)
-                  updates.startTime = parseLocal(args.startTime as string);
-                if (args.endTime)
-                  updates.endTime = parseLocal(args.endTime as string);
-                if (args.eventType)
-                  updates.eventType = args.eventType as "interval" | "point";
-                if (args.cancelled !== undefined)
-                  updates.cancelled = args.cancelled as boolean;
-                if (args.recurrence) {
-                  const ri = toRecurrenceInput(args.recurrence);
-                  if (ri) {
-                    updates.recurrence = {
-                      frequency: ri.frequency,
-                      interval: ri.interval,
-                      daysOfWeek: ri.daysOfWeek,
-                      until: ri.until ? parseLocal(ri.until) : undefined,
-                    };
-                  }
-                }
-
-                await updateEvent({
-                  id: args.eventId as string,
-                  timezoneOffset: promptCtx.timezoneOffset ?? undefined,
-                  ...updates,
-                });
-
-                enrichedArgs.titleHint = oldEvent?.title;
-                enrichedArgs.oldValues = oldEvent
-                  ? {
-                      title: oldEvent.title,
-                      startTime: oldEvent.startTime,
-                      endTime: oldEvent.endTime,
-                      location: oldEvent.location,
-                      notes: oldEvent.notes,
-                      eventType: oldEvent.eventType,
-                      recurrence: oldEvent.recurrence,
-                      outcome: oldEvent.outcome,
-                      statusHook: oldEvent.statusHook,
-                      cancelled: oldEvent.cancelled,
-                    }
-                  : undefined;
-              }
-            } else if (name === "updateEventOccurrence") {
-              const oldEvent = await api.events.get({ id: args.eventId as string });
-              await updateOccurrence({
-                id: args.eventId as string,
-                occurrenceId: args.occurrenceId as string,
-                startTime: args.startTime
-                  ? parseLocal(args.startTime as string)
-                  : undefined,
-                endTime: args.endTime
-                  ? parseLocal(args.endTime as string)
-                  : undefined,
-                cancelled: args.cancelled as boolean | undefined,
-                notes: args.notes as string | undefined,
-                outcome: args.outcome as string | undefined,
-                statusHook: args.statusHook as string | undefined,
-              });
-              enrichedArgs.titleHint = oldEvent?.title;
-            } else if (name === "deleteEvent") {
-              const oldEvent = await api.events.get({ id: args.eventId as string });
-              await deleteEvent({ id: args.eventId as string });
-              enrichedArgs.titleHint = oldEvent?.title;
-            } else if (name === "updateUserBio") {
-              await updateUserBio({
-                bio: args.bio as string,
-              });
-            } else if (name === "saveSemanticMemory") {
-              // Handled by background cron in Mastra agent (silent)
-            } else if (name === "deleteSemanticMemory") {
-              await deleteSemanticMemory({
-                memoryId: args.memoryId as string,
-              });
-            } else if (name === "retrieveGraphContext") {
-              // Read-only tool
-            } else if (name === "getRelevantTasks") {
-              const limit =
-                args.limit !== undefined ? Number(args.limit) : 10;
-              const statusHook = args.statusHook as string | undefined;
-
-              const tasks = await api.tasks.list({
-                workspaceId: promptCtx.workspaceId ?? undefined,
-                statusHook,
-              } as any);
-
-              enrichedArgs.tasks = tasks.slice(0, limit);
-              enrichedArgs.count = tasks.length;
-            } else if (name === "getRelevantEvents") {
-              const limit =
-                args.limit !== undefined ? Number(args.limit) : 10;
-              const statusHook = args.statusHook as string | undefined;
-
-              const events = await api.events.list({
-                workspaceId: promptCtx.workspaceId ?? undefined,
-                statusHook,
-              } as any);
-
-              enrichedArgs.events = events.slice(0, limit);
-              enrichedArgs.count = events.length;
-            } else if (name === "searchTasksAndEvents") {
-              const limit =
-                args.limit !== undefined ? Number(args.limit) : 10;
-              const queryStr = args.query as string;
-
-              let results: any[] = [];
-              const tasks = await api.tasks.list({
-                workspaceId: promptCtx.workspaceId ?? undefined,
-              });
-              const events = await api.events.list({
-                workspaceId: promptCtx.workspaceId ?? undefined,
-              });
-              const q = queryStr.toLowerCase();
-              const filteredTasks = tasks.filter((t: any) =>
-                t.text.toLowerCase().includes(q),
-              );
-              const filteredEvents = events.filter((e: any) =>
-                e.title.toLowerCase().includes(q),
-              );
-              results = results.concat(
-                filteredTasks.map((t: any) => ({
-                  type: "task",
-                  id: t.id,
-                  title: t.text,
-                  completed: t.completed,
-                })),
-              );
-              results = results.concat(
-                filteredEvents.map((e: any) => ({
-                  type: "event",
-                  id: e.id,
-                  title: e.title,
-                  startTime: e.startTime,
-                  location: e.location,
-                })),
-              );
-
-              results = results.slice(0, limit);
-              enrichedArgs.count = results.length;
-              enrichedArgs.results = results;
-            } else if (name === "batchAddTasks") {
-              const batchArgs = args as {
-                tasks: Array<{
-                  text: string;
-                  priority?: string;
-                  category?: string;
-                  dueDate?: string;
-                  notes?: string;
-                }>;
-              };
-
-              const parsedTasks = batchArgs.tasks.map((t) => ({
-                text: t.text,
-                priority: t.priority as "low" | "medium" | "high" | undefined,
-                category: t.category,
-                dueDate: t.dueDate ? parseLocal(t.dueDate) : undefined,
-                notes: t.notes,
-              }));
-
-              const ids = await Promise.all(
-                parsedTasks.map((t) =>
-                  addTask({
-                    ...t,
-                    workspaceId: promptCtx.workspaceId ?? undefined,
-                  } as any)
-                )
-              );
-              enrichedArgs.ids = ids;
-              enrichedArgs.count = ids.length;
-            } else if (name === "getTaskNotes") {
-              const task = await api.tasks.get({ id: args.taskId as string });
-              enrichedArgs.notes = task?.notes || null;
-              enrichedArgs.hasNotes = !!task?.notes;
-              enrichedArgs.titleHint = task?.text;
-            } else if (name === "listWorkspaces") {
-              const workspaces = await api.workspaces.list({});
-              enrichedArgs.workspaces = workspaces;
-            } else if (name === "create_habit") {
-              const habitId = await createHabit({
-                workspaceId: promptCtx.workspaceId ?? undefined,
-                name: args.name as string,
-                description: args.description as string | undefined,
-                frequency: args.frequency as "daily" | "custom",
-                frequencyConfig: {
-                  daysOfWeek: args.daysOfWeek as number[] | undefined,
-                },
-              });
-              enrichedArgs.habitId = habitId;
-            } else if (name === "log_habit") {
-              const logId = await logHabit({
-                habitId: args.habitId as string,
-                dateString: args.dateString as string,
-                status: args.status as "completed" | "skipped",
-                notes: args.notes as string | undefined,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              });
-              const habit = await api.habits.get({ id: args.habitId as string });
-              enrichedArgs.logId = logId;
-              enrichedArgs.newStreak = habit?.currentStreak || 0;
-              enrichedArgs.titleHint = habit?.name;
-            } else if (name === "get_habit_consistency") {
-              const report = await api.habits.getHabitConsistency({
-                workspaceId: promptCtx.workspaceId ?? undefined,
-                periodStartDate: args.periodStartDate as string,
-                periodEndDate: args.periodEndDate as string,
-              });
-              enrichedArgs.report = report;
-            }
-
-            const isOnlyContext =
-              (name === "updateTask" &&
-                Object.keys(args).every((k) =>
-                  ["taskId", "notes", "progress", "statusHook"].includes(k),
-                ) &&
-                Object.keys(args).some((k) =>
-                  ["notes", "progress", "statusHook"].includes(k),
-                )) ||
-              (name === "updateEvent" &&
-                Object.keys(args).every((k) =>
-                  ["eventId", "notes", "outcome", "statusHook"].includes(k),
-                ) &&
-                Object.keys(args).some((k) =>
-                  ["notes", "outcome", "statusHook"].includes(k),
-                ));
-
-            if (!isOnlyContext) {
-              executedCalls.push({
-                name,
-                args: enrichedArgs,
-                result: { status: "success" },
-              });
-            }
-          }
-
-          await sendMessage({
-            sessionId,
-            text: aiTextOverride,
-            author: "AI",
-            toolCall: executedCalls.length > 0 ? executedCalls[0] : undefined,
-            toolCalls: executedCalls.length > 0 ? executedCalls : undefined,
-          });
-        } else {
-          await sendMessage({
-            sessionId,
-            text: aiTextOverride,
-            author: "AI",
-          });
-        }
-      } catch (error) {
-        console.error("LM Studio Error:", error);
-        await sendMessage({
-          sessionId,
-          text: "I encountered a connection error. Please make sure LM Studio's Local Server is running on port 1234.",
-          author: "AI",
-        });
-      }
-    },
-    [
-      addEvent,
-      addTask,
-      completeTask,
-      deleteEvent,
-      deleteSemanticMemory,
-      deleteTask,
-      messages,
-      profile?.bio,
-      profile?.name,
-      sendMessage,
-      updateEvent,
-      updateOccurrence,
-      updateTask,
-      updateUserBio,
-    ],
-  );
-
   // Set the sync callback
   useEffect(() => {
     if (activeSyncRef) {
@@ -1271,29 +791,19 @@ function ActiveChat({
 
         setIsTyping(true);
 
-        if (provider === "lmstudio") {
-          try {
-            await runLocalLLMForSession(activeSessionId as string, syncText, {
-              brief: true,
-            });
-          } finally {
-            setIsTyping(false);
-          }
-        } else {
-          try {
-            await sendVercelMessage({
-              text: syncText,
-            });
-          } finally {
-            setIsTyping(false);
-          }
+        try {
+          await sendVercelMessage({
+            text: syncText,
+          });
+        } finally {
+          setIsTyping(false);
         }
       };
     }
     return () => {
       if (activeSyncRef) activeSyncRef.current = null;
     };
-  }, [activeSessionId, provider, sendMessage, runLocalLLMForSession, sendVercelMessage, activeSyncRef]);
+  }, [activeSessionId, provider, sendMessage, sendVercelMessage, activeSyncRef]);
 
   // Fire the AI call for new-chat initial messages once the activeSessionId has settled
   useEffect(() => {
@@ -1313,11 +823,7 @@ function ActiveChat({
           provider,
         });
 
-        if (provider === "lmstudio") {
-          await runLocalLLMForSession(activeSessionId as string, pending.text);
-        } else {
-          await sendVercelMessage({ text: pending.text });
-        }
+        await sendVercelMessage({ text: pending.text });
       } catch (err) {
         console.error("Failed to trigger AI for initial message:", err);
       } finally {
@@ -1392,12 +898,8 @@ function ActiveChat({
 
         // Start Vercel AI SDK stream immediately to set isLoading=true
         let aiPromise;
-        if (provider === "lmstudio") {
-          aiPromise = runLocalLLMForSession(activeSessionId, userText, { scope });
-        } else {
-          pendingScopeRef.current = scope ?? null;
-          aiPromise = sendVercelMessage({ text: textMessageContent });
-        }
+        pendingScopeRef.current = scope ?? null;
+        aiPromise = sendVercelMessage({ text: textMessageContent });
 
         if (scope) {
           setLocalScopes(prev => ({
@@ -1432,8 +934,6 @@ function ActiveChat({
     [
       activeSessionId,
       provider,
-
-      runLocalLLMForSession,
       sendMessage,
       sendVercelMessage,
     ],

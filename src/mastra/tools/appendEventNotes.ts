@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const appendEventNotesTool = createTool({
   id: 'appendEventNotes',
-  description: 'Appends a new chronological journal entry, prep details, or outcome summary to an existing event.',
+  description: 'Appends a chronological journal entry, prep details, or outcome summary to an existing event. PREFERRED over saveSemanticMemory when information relates to an event — event notes are automatically indexed into semantic memory (with MENTIONS_EVENT graph edges) via the ingestion pipeline, so a separate saveSemanticMemory call would be redundant.',
   inputSchema: z.object({
     eventId: z.string().describe("The ID of the event to append notes to"),
     notes: z.string().describe("The note, prep detail, or post-event outcome context to append"),

@@ -3,14 +3,14 @@ import { z } from 'zod';
 
 export const addEventTool = createTool({
   id: 'addEvent',
-  description: 'Ask ONE field per turn (event type, start/end time, location, recurrence). Call this tool immediately after the last field is answered. No final confirmation needed.',
+  description: 'Creates a calendar event. Extract as many fields as possible from the user\'s natural language (title, start/end times, location, recurrence, notes). IMPORTANT: endTime is REQUIRED when eventType is \'interval\'. Only ask the user if information is missing or ambiguous.',
   inputSchema: z.object({
     title: z.string().describe("Event title"),
     description: z.string().optional().describe("Optional description"),
     startTime: z.string().describe("ISO-8601 start time (24-hour format, e.g. '2026-05-15T14:00:00')"),
-    endTime: z.string().optional().describe("Optional ISO-8601 end time (24-hour format)"),
+    endTime: z.string().optional().describe("Required when eventType is 'interval'. ISO-8601 end time (24-hour format)."),
     reminderOffset: z.number().optional().describe("Minutes before startTime to remind the user (e.g. 15)."),
-    eventType: z.string().describe("'interval' for duration events or 'point' for momentary events"),
+    eventType: z.enum(["interval", "point"]).describe("'interval' for duration events or 'point' for momentary events"),
     location: z.string().optional().describe("Optional location"),
     notes: z.string().optional().describe("Optional notes"),
     outcome: z.string().optional().describe("Post-event summary or outcome"),
@@ -21,6 +21,14 @@ export const addEventTool = createTool({
       daysOfWeek: z.array(z.number()).optional().describe("For weekly recurrence: array of day numbers (0=Sun, 1=Mon, ..., 6=Sat)"),
       until: z.string().optional().describe("Optional ISO-8601 end date for the recurrence series")
     }).optional().describe("Optional recurrence rule if the event repeats")
+  }).superRefine((data, ctx) => {
+    if (data.eventType === "interval" && !data.endTime) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["endTime"],
+        message: "endTime is required when eventType is 'interval'",
+      });
+    }
   }),
   outputSchema: z.object({ eventId: z.string(), title: z.string() }),
   execute: async (input) => {

@@ -16,6 +16,7 @@
 
 export interface PbActionContext {
   user: { id: string; email: string };
+  token: string;
 }
 
 export type PbActionHandler<TArgs = unknown, TResult = unknown> = (

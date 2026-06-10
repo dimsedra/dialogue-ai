@@ -1,5 +1,5 @@
+import PocketBase from "pocketbase";
 import type { PbActionHandler } from "./registry";
-import { getPbAdmin } from "../pb-server-admin";
 import { ingestTaskNotes, ingestEventNotes, ingestHabitLogNotes, deleteSourceMemories } from "../graph/ingest";
 
 interface IngestNotesArgs {
@@ -9,10 +9,13 @@ interface IngestNotesArgs {
 
 export const ingestNotes: PbActionHandler<IngestNotesArgs, { success: boolean }> = async (
   args,
-  _ctx
+  ctx
 ) => {
-  const pb = await getPbAdmin();
-  
+  const pb = new PocketBase(
+    process.env.NEXT_PUBLIC_PB_URL ?? "http://localhost:8090",
+  );
+  pb.authStore.save(ctx.token, null);
+
   if (args.targetType === "Task") {
     try {
       const record = await pb.collection("tasks").getOne(args.targetId);

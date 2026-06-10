@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createDeepSeek } from '@ai-sdk/deepseek';
@@ -89,6 +90,13 @@ export function createDialogueAgent(
     case 'opencode':
       model = opencode(modelId || 'anthropic/claude-3-5-sonnet-20241022');
       break;
+    case 'lmstudio':
+      model = createOpenAICompatible({
+        name: 'lmstudio',
+        baseURL: baseUrl || 'http://localhost:1234/v1',
+        apiKey: apiKey || 'lm-studio',
+      })(modelId || 'local-model');
+      break;
     case 'openrouter':
       model = createOpenRouter(opts)(modelId || 'anthropic/claude-3.5-sonnet:beta');
       break;
@@ -140,20 +148,27 @@ export function createDialogueAgent(
 
 ## CRITICAL: Tool Usage Rules
 
-### Memory Tools — MANDATORY
-You have two memory tools: \`saveSemanticMemory\` and \`retrieveGraphContext\`.
+### Priority Decision Tree for Capturing Information
+When the user shares information, follow this priority order — information belongs FIRST to its source entity, then to general memory:
 
-**saveSemanticMemory**: You MUST actually CALL this tool to save information. Do NOT just say "I'll remember this" or "I've noted this" — those are LIES unless you invoke the tool. When the user shares personal facts, preferences, life events, project details, emotional context, or anything worth remembering long-term, you MUST call \`saveSemanticMemory\` with a granular, specific fact. Break compound information into multiple separate tool calls (one fact per call). Examples:
+**1. Task-related info** → call \`appendTaskNotes\` (or \`updateTask\` with notes)
+If the user talks about a task's progress, blockers, thoughts, or context, append it as a chronological journal entry to that task. Task notes auto-index into semantic memory — no separate \`saveSemanticMemory\` call needed.
+
+**2. Event-related info** → call \`appendEventNotes\` (or \`updateEvent\` with notes)
+Log preparations, outcomes, or context to the event's journal. Event notes auto-index into semantic memory — no separate \`saveSemanticMemory\` call needed.
+
+**3. Habit execution info** → call \`log_habit\` with the \`notes\` parameter
+Always prompt for or deduce daily context to include in notes. Habit log notes auto-index into semantic memory — no separate \`saveSemanticMemory\` call needed.
+
+**4. General user facts (NOT related to any task/event/habit)** → call \`saveSemanticMemory\`
+Only for standalone knowledge: preferences, life context, project-level details, personal background. Break compound information into multiple separate tool calls (one fact per call). Examples:
 - User says "My dad just got laid off" → call saveSemanticMemory with "User's father was recently laid off from his job after being employed for only half a month, following years of unemployment"
 - User says "I prefer React over Vue" → call saveSemanticMemory with "User prefers React over Vue for frontend development"
 
-**retrieveGraphContext**: Before answering questions about the user's history, preferences, or past conversations, CALL this tool first to check what you actually know. Do NOT fabricate memories.
+**IMPORTANT**: Do NOT call \`saveSemanticMemory\` for information that belongs in a task note, event note, or habit log. Those tools auto-generate memories via the ingestion pipeline — calling \`saveSemanticMemory\` in addition creates duplicate, unlinked entries. You MUST actually CALL these tools to save information. Do NOT just say "I'll remember this" or "I've noted this" — those are LIES unless you invoke the tool.
 
-### Proactive Journaling & Note-Taking — MANDATORY
-You must proactively document the user's progress, blockers, thoughts, and reflections using specialized tools.
-- **Task Updates / Blockers**: If the user shares an update about a task (even a casual remark in chat like "I'm stuck on this database issue" or "CORS is failing"), immediately call \`appendTaskNotes\` to record the context.
-- **Event Outcomes**: When an event completes or you discuss a calendar item, call \`appendEventNotes\` to log details, preparations, or outcomes.
-- **Habit Logs**: When logging a habit, always prompt for or deduce daily context to include in the \`notes\` parameter of \`log_habit\`.
+### retrieveGraphContext — MANDATORY
+Before answering questions about the user's history, preferences, or past conversations, CALL \`retrieveGraphContext\` first to check what you actually know. Do NOT fabricate memories.
 
 ### General Tool Rules
 - NEVER claim you performed an action without actually calling the corresponding tool

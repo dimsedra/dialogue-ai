@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const appendTaskNotesTool = createTool({
   id: 'appendTaskNotes',
-  description: 'Appends a new chronological journal entry/notes to an existing task. Use this to proactively document updates, progress, blockers, or resolutions.',
+  description: 'Appends a chronological journal entry/notes to an existing task. PREFERRED over saveSemanticMemory when information relates to a task — task notes are automatically indexed into semantic memory (with MENTIONS_TASK graph edges) via the ingestion pipeline, so a separate saveSemanticMemory call would be redundant.',
   inputSchema: z.object({
     taskId: z.string().describe("The ID of the task to append notes to"),
     notes: z.string().describe("The new progress update, blocker details, or general context to append"),

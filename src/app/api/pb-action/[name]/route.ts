@@ -66,7 +66,7 @@ export async function POST(
   }
 
   try {
-    const result = await handler(args, { user });
+    const result = await handler(args, { user, token });
     return NextResponse.json({ ok: true, result });
   } catch (err) {
     return NextResponse.json(

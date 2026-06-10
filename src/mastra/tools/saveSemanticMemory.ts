@@ -6,7 +6,7 @@ import { wireMentionsEdges } from '../../lib/graph/edges';
 
 export const saveSemanticMemoryTool = createTool({
   id: 'saveSemanticMemory',
-  description: 'Saves a granular, long-term semantic memory/fact about the user (e.g., technical preferences, project details).',
+  description: 'Saves a granular, long-term semantic memory/fact about the user. Use ONLY for general user knowledge (preferences, life context, personal background) that is NOT associated with any existing task, event, or habit. If the information relates to a specific task, event, or habit, use their respective note/log tool instead — those auto-index into semantic memory, making this call redundant.',
   inputSchema: z.object({
     text: z.string().describe("The granular fact or preference to remember"),
     taskIds: z.array(z.string()).optional().describe("Optional: Task node IDs this memory mentions. Creates MENTIONS_TASK edges in the graph."),
