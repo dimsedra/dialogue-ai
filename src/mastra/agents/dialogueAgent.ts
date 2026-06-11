@@ -37,7 +37,8 @@ export async function createDialogueAgent(
   personaName: string = 'Dialogue',
   personaPrompt: string = 'You build relationships through concrete behaviors, not prescribed tones.',
   scope?: { type: string; id: string; title: string } | null,
-  mcpToolsets?: Record<string, Record<string, unknown>> | null
+  mcpToolsets?: Record<string, Record<string, unknown>> | null,
+  timeFormat: "auto" | "12h" | "24h" = "auto"
 ) {
   let model;
   const opts = { apiKey: apiKey || undefined, baseURL: baseUrl || undefined };
@@ -122,7 +123,7 @@ export async function createDialogueAgent(
       day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
-      hour12: true,
+      hour12: timeFormat === '12h' ? true : timeFormat === '24h' ? false : undefined,
       timeZoneName: 'short'
     });
     instructions += `\n\n## Temporal Context\nThe current date and time is ${formatter.format(new Date())}.\n`;
@@ -131,7 +132,13 @@ export async function createDialogueAgent(
     instructions += `\n\n## Temporal Context\nThe current date and time is ${new Date().toISOString()}.\n`;
   }
 
-  instructions += `\n## Time Formatting Rule\nWhen mentioning times in your chat replies to the user, ALWAYS use 12-hour format with AM/PM (e.g. "3:00 PM", "9:30 AM"). When calling tools that accept ISO-8601 parameters (startTime, endTime, dueDate), always use 24-hour format as the tool schemas require.\n`;
+  if (timeFormat === '24h') {
+    instructions += `\n## Time Formatting Rule\nWhen mentioning times in your chat replies to the user, ALWAYS use 24-hour format (e.g. "15:00", "09:30"). When calling tools that accept ISO-8601 parameters (startTime, endTime, dueDate), always use 24-hour format as the tool schemas require.\n`;
+  } else if (timeFormat === '12h') {
+    instructions += `\n## Time Formatting Rule\nWhen mentioning times in your chat replies to the user, ALWAYS use 12-hour format with AM/PM (e.g. "3:00 PM", "9:30 AM"). When calling tools that accept ISO-8601 parameters (startTime, endTime, dueDate), always use 24-hour format as the tool schemas require.\n`;
+  } else {
+    instructions += `\n## Time Formatting Rule\nWhen mentioning times in your chat replies to the user, follow the user's timezone locale preference or default to 12-hour format with AM/PM (e.g. "3:00 PM", "9:30 AM"). When calling tools that accept ISO-8601 parameters (startTime, endTime, dueDate), always use 24-hour format as the tool schemas require.\n`;
+  }
 
   
   if (userName || userBio) {

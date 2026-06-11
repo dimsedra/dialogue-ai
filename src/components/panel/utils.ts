@@ -3,10 +3,18 @@ import { format, parse, parseISO } from "date-fns";
 /**
  * Locale-aware time formatter. Uses the browser's locale and OS preferences
  * to render times in 12-hour (e.g. "3:00 PM") or 24-hour (e.g. "15:00")
- * format automatically, without hardcoding either convention.
+ * format automatically or according to the user's settings.
  */
-export const formatTime = (date: Date | number): string => {
+export const formatTime = (
+  date: Date | number,
+  formatOption: "auto" | "12h" | "24h" = "auto"
+): string => {
   const d = typeof date === "number" ? new Date(date) : date;
+  if (formatOption === "12h") {
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+  } else if (formatOption === "24h") {
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: false });
+  }
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 };
 
@@ -51,13 +59,16 @@ export const parseTaskDate = (dateStr: string | number | undefined): Date | null
   }
 };
 
-export const formatDateLabel = (date: Date | string | number | undefined) => {
+export const formatDateLabel = (
+  date: Date | string | number | undefined,
+  formatOption: "auto" | "12h" | "24h" = "auto"
+) => {
   if (!date) return "";
   const d = typeof date === "string" ? parseTaskDate(date) : new Date(date);
   if (!d) return typeof date === "string" ? date : "";
   
   const yearStr = d.getFullYear() === new Date().getFullYear() ? "" : `, ${d.getFullYear()}`;
-  return `${format(d, `MMM d${yearStr}`)}, ${formatTime(d)}`;
+  return `${format(d, `MMM d${yearStr}`)}, ${formatTime(d, formatOption)}`;
 };
 
 

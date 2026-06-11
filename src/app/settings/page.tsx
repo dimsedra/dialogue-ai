@@ -22,6 +22,7 @@ import {
   EyeOff,
   Bell,
   ChevronDown,
+  Clock,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -88,6 +89,7 @@ export default function SettingsPage() {
 
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
+  const [timeFormat, setTimeFormat] = useState<"auto" | "12h" | "24h">("auto");
   type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic" | "deepseek" | "xai" | "mistral" | "groq" | "cohere" | "moonshotai" | "deepinfra" | "togetherai" | "fireworks" | "alibaba" | "baseten" | "huggingface" | "minimax" | "ollama" | "opencode" | "openrouter" | "zhipu";
   const [provider, setProvider] = useState<AIProvider>("gemini");
   const [customConfigs, setCustomConfigs] = useState<
@@ -144,6 +146,11 @@ export default function SettingsPage() {
     if (prefs?.mcpServers) {
       setMcpServers(prefs.mcpServers as Record<string, { command: string; args: string[] }>);
     }
+    if (prefs?.timeFormat) {
+      setTimeFormat(prefs.timeFormat as "auto" | "12h" | "24h");
+    } else {
+      setTimeFormat("auto");
+    }
   }
 
   useEffect(() => {
@@ -160,6 +167,7 @@ export default function SettingsPage() {
         customConfigs,
         taskModels,
         mcpServers,
+        timeFormat,
       });
     } catch (error) {
       console.error(error);
@@ -403,6 +411,49 @@ export default function SettingsPage() {
                           placeholder="Tell Dialogue about your role, goals, and communication style..."
                           className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all resize-none"
                         />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg">
+                    <div className="flex items-center gap-2.5 mb-4">
+                      <Clock className="w-4 h-4 text-[#d4a373]" />
+                      <div>
+                        <h2 className="text-base font-bold text-[#f2efeb]">
+                          Interface Preferences
+                        </h2>
+                        <p className="text-[#a8a29e] text-[11px]">
+                          Customize how time and dates are formatted.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">
+                        Time Format
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(
+                          [
+                            { id: "auto", label: "Auto", desc: "Locale default" },
+                            { id: "12h", label: "12-Hour", desc: "e.g. 4:12 PM" },
+                            { id: "24h", label: "24-Hour", desc: "e.g. 16:12" },
+                          ] as const
+                        ).map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setTimeFormat(opt.id)}
+                            className={`p-3 rounded-lg border text-left transition-all focus:outline-none ${
+                              timeFormat === opt.id
+                                ? "bg-[#d4a373]/10 border-[#d4a373] text-[#f2efeb]"
+                                : "bg-[#0f0e0c] border-[#2a2723] hover:border-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb]"
+                            }`}
+                          >
+                            <div className="text-xs font-bold">{opt.label}</div>
+                            <div className="text-[9px] opacity-60 mt-0.5">{opt.desc}</div>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   </section>

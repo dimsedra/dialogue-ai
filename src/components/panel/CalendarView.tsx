@@ -5,6 +5,7 @@ import { Calendar as CalendarIcon, Clock, Edit3, RefreshCw, Tag, Trash2, Zap, Me
 import { PbTasks, PbEvents, PbWorkspaces } from "@/pb-compat/_generated/dataModel";
 import { EventDoc, TaskDoc } from "./types";
 import { formatTime } from "./utils";
+import { useTimeFormat } from "@/hooks/useTimeFormat";
 import { useState, useMemo } from "react";
 import { usePbHabitLog } from "@/pb-compat";
 import { HabitWithLogs } from "./HabitList";
@@ -52,6 +53,7 @@ export function CalendarView({
 }: CalendarViewProps) {
   const logHabit = usePbHabitLog();
   const [loggingId, setLoggingId] = useState<string | null>(null);
+  const timeFormat = useTimeFormat();
 
   const selectedDateStr = useMemo(() => {
     if (!selectedDate) return "";
@@ -283,9 +285,9 @@ export function CalendarView({
                   <div className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     <span>
-                      {formatTime(new Date(event.startTime))}
+                      {formatTime(new Date(event.startTime), timeFormat)}
                       {event.eventType !== "point" && event.endTime
-                        ? ` - ${formatTime(new Date(event.endTime))}`
+                        ? ` - ${formatTime(new Date(event.endTime), timeFormat)}`
                         : ""}
                     </span>
                   </div>

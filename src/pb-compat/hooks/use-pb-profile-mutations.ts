@@ -54,6 +54,7 @@ export function usePbUpdatePreferences() {
     customConfigs?: any;
     taskModels?: any;
     mcpServers?: any;
+    timeFormat?: "auto" | "12h" | "24h";
     userId?: string;
   }) => {
     if (!user) throw new Error("Unauthorized");
@@ -75,6 +76,7 @@ export function usePbUpdatePreferences() {
         : { searchProvider: "tavily" }),
       ...(args.taskModels ? { taskModels: args.taskModels } : {}),
       ...(args.mcpServers ? { mcpServers: args.mcpServers } : {}),
+      ...(args.timeFormat ? { timeFormat: args.timeFormat } : {}),
       customConfigs: newConfigs,
     };
 

@@ -25,6 +25,8 @@ import {
   ChainOfThoughtSearchResults,
   ChainOfThoughtSearchResult,
 } from "../ai-elements/chain-of-thought";
+import { useTimeFormat } from "../../hooks/useTimeFormat";
+import { formatTime } from "../panel/utils";
 
 // Code blocks pull in react-syntax-highlighter (~250 KB). Lazy-load so the
 // heavy highlighter only ships when a code block actually renders.
@@ -208,6 +210,7 @@ interface MessageBubbleProps {
 
 export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport, agentName, isStreaming = false }: MessageBubbleProps) {
   const smoothedText = useSmoothText(msg.text, isStreaming);
+  const timeFormat = useTimeFormat();
   return (
     <motion.div
       key={msg._id}
@@ -238,7 +241,7 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
           {msg.author === "User" ? "You" : (agentName || "Dialogue")}
         </span>
         <span className="text-[9px] text-[#a8a29e]/40 font-bold tracking-widest uppercase">
-          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {formatTime(msg.timestamp, timeFormat)}
         </span>
       </div>
 

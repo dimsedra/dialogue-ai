@@ -6,6 +6,8 @@ import { useState, useRef, useEffect } from "react";
 import { Bell, Check, Calendar, CheckSquare, BellOff, Info, ListTodo } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useTimeFormat } from "../hooks/useTimeFormat";
+import { formatTime } from "./panel/utils";
 
 const listUnreadQuery = defineQuery<Record<string, never>, PbNotifications[]>(
   { collection: "notifications", kind: "list", buildFilter: () => "read = false" },
@@ -27,6 +29,7 @@ export const rewriteActionUrl = (url?: string) => {
 export function NotificationBell() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const timeFormat = useTimeFormat();
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   const notifications = useQuery(listUnreadQuery) || [];
@@ -154,10 +157,7 @@ export function NotificationBell() {
                           {item.title}
                         </span>
                         <span className="text-[9px] text-[#a8a29e] shrink-0 font-medium">
-                          {new Date(item.createdAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {formatTime(item.createdAt, timeFormat)}
                         </span>
                       </div>
                       <p className="text-[#a8a29e] text-[10px] leading-relaxed break-words">

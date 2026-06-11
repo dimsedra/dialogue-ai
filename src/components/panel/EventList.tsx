@@ -5,6 +5,7 @@ import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, Ch
 import { PbEvents, PbWorkspaces } from "@/pb-compat/_generated/dataModel";
 import { EventDoc } from "./types";
 import { formatRecurrenceText, formatTime } from "./utils";
+import { useTimeFormat } from "@/hooks/useTimeFormat";
 import { ResourceTray } from "./ResourceTray";
 
 interface EventListProps {
@@ -32,6 +33,7 @@ export function EventList({
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
   const sevenDaysAgo = useMemo(() => now - 7 * 24 * 60 * 60 * 1000, [now]);
+  const timeFormat = useTimeFormat();
 
   const { upcoming, past } = useMemo(() => {
     if (!events) return { upcoming: [], past: [] };
@@ -147,8 +149,8 @@ export function EventList({
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
             <span className="capitalize">
-              {formatTime(new Date(event.startTime))}
-              {event.eventType !== "point" && event.endTime ? ` - ${formatTime(new Date(event.endTime))}` : ""}
+              {formatTime(new Date(event.startTime), timeFormat)}
+              {event.eventType !== "point" && event.endTime ? ` - ${formatTime(new Date(event.endTime), timeFormat)}` : ""}
             </span>
             <span className="text-[8px] opacity-50 font-bold ml-1 uppercase tracking-tighter">
               {Intl.DateTimeFormat().resolvedOptions().timeZone.split("/").pop()?.replace("_", " ")}

@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { PbTasks, PbWorkspaces } from "@/pb-compat/_generated/dataModel";
 import { TaskDoc } from "./types";
 import { formatDateLabel } from "./utils";
+import { useTimeFormat } from "@/hooks/useTimeFormat";
 import { ResourceTray } from "./ResourceTray";
 
 interface TaskListProps {
@@ -35,6 +36,7 @@ export function TaskList({
 }: TaskListProps) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const timeFormat = useTimeFormat();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -158,7 +160,7 @@ export function TaskList({
                 {task.dueDate && (
                   <div className="flex items-center gap-1 text-[10px] font-bold text-[#a8a29e]/60">
                     <Clock className="w-3.5 h-3.5 text-[#d4a373]/40" />
-                    {formatDateLabel(task.dueDate)}
+                    {formatDateLabel(task.dueDate, timeFormat)}
                   </div>
                 )}
                 {task.priority === "high" && (
@@ -216,7 +218,7 @@ export function TaskList({
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3 h-3 text-[#a8a29e]/40" />
                       <span className="text-[10px] text-[#f2efeb] font-medium">
-                        {task.dueDate ? `Due ${formatDateLabel(task.dueDate)}` : "No due date set"}
+                        {task.dueDate ? `Due ${formatDateLabel(task.dueDate, timeFormat)}` : "No due date set"}
                       </span>
                     </div>
                   </div>

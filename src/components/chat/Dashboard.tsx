@@ -38,6 +38,8 @@ import { PageCustomizer } from "./PageCustomizer";
 import { usePageSettings } from "../../hooks/usePageSettings";
 import { DASHBOARD_DEFAULTS, getCardBgStyle } from "../../utils/color";
 import { NotificationBell } from "../notifications-bell";
+import { useTimeFormat } from "../../hooks/useTimeFormat";
+import { formatTime } from "../panel/utils";
 import { CardMenu } from "./CardMenu";
 
 const USE_SPLIT_PROACTIVE_STATE = true;
@@ -72,10 +74,8 @@ function EventPrepCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const eventTime = new Date(state.startTime);
-  const timeStr = eventTime.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const timeFormat = useTimeFormat();
+  const timeStr = formatTime(eventTime, timeFormat);
 
   return (
     <motion.div

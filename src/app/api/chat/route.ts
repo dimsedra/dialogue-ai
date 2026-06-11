@@ -51,6 +51,7 @@ export async function POST(req: Request) {
     let behavioralProfile = null;
     let monthlyDigest = null;
     let latestWeeklyDigest = null;
+    let timeFormat: "auto" | "12h" | "24h" = "auto";
     let personaName = "Dialogue";
     let personaPrompt = "You build relationships through concrete behaviors, not prescribed tones.";
     
@@ -58,13 +59,38 @@ export async function POST(req: Request) {
       if (isPb && pbClient?.authStore.isValid) {
         const userId = pbClient.authStore.record?.id;
         if (userId) {
-          const profile = await pbClient.collection('users').getOne(userId);
-          userName = profile.name;
-          userBio = profile.bio;
-          userPreferences = profile.preferences;
-          behavioralProfile = profile.behavioralProfile;
-          monthlyDigest = profile.monthlyDigest;
-          latestWeeklyDigest = profile.latestWeeklyDigest;
+          try {
+            const userRecord = await pbClient.collection('users').getOne(userId);
+            userName = userRecord.name;
+          } catch (e) {
+            console.warn("Could not fetch user record from users collection:", e);
+          }
+
+          try {
+            const profile = await pbClient.collection('user_profile').getFirstListItem(`user = "${userId.replace(/"/g, '\\"')}"`);
+            if (profile) {
+              if (!userName) userName = profile.name;
+              userBio = profile.bio;
+              userPreferences = profile.preferences;
+              behavioralProfile = profile.behavioralProfile;
+              
+              if (userPreferences && typeof userPreferences === 'object') {
+                const prefs = userPreferences as any;
+                if (prefs.timeFormat) {
+                  timeFormat = prefs.timeFormat;
+                }
+              }
+
+              if (Array.isArray(profile.weeklyNotesSummaries) && profile.weeklyNotesSummaries.length > 0) {
+                latestWeeklyDigest = profile.weeklyNotesSummaries[profile.weeklyNotesSummaries.length - 1];
+              }
+              if (Array.isArray(profile.monthlyNotesSummaries) && profile.monthlyNotesSummaries.length > 0) {
+                monthlyDigest = profile.monthlyNotesSummaries[profile.monthlyNotesSummaries.length - 1];
+              }
+            }
+          } catch (e) {
+            console.warn("Could not fetch user_profile record for agent context:", e);
+          }
         }
       }
     } catch (err) {
@@ -106,7 +132,8 @@ export async function POST(req: Request) {
       personaName,
       personaPrompt,
       scope,
-      mcpToolsets
+      mcpToolsets,
+      timeFormat
     );
     
     // File-based LibSQL ensures approval snapshots survive across HTTP requests
