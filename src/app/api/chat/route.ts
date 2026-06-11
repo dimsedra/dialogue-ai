@@ -2,6 +2,7 @@ import { handleChatStream } from '@mastra/ai-sdk';
 import { createUIMessageStreamResponse } from 'ai';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { createDialogueAgent } from '@/mastra/agents/dialogueAgent';
 import { isPbBackend } from '@/pb-compat/env';
 import PocketBase from 'pocketbase';
@@ -117,6 +118,47 @@ export async function POST(req: Request) {
     const mcpClient = createMcpClient(mcpServerDefs);
     const mcpToolsets = await getToolsets(mcpClient);
 
+    // Resolve user vault path or use DEV_LOCAL_PATH fallback
+    let devFallbackPath = process.env.NODE_ENV === 'development' ? process.env.DEV_LOCAL_PATH : null;
+    if (devFallbackPath && devFallbackPath.startsWith('"') && devFallbackPath.endsWith('"')) {
+      devFallbackPath = devFallbackPath.slice(1, -1);
+    }
+    const vaultRootPath = req.headers.get('x-vault-path') || devFallbackPath || join(process.cwd(), 'dialogue-vault');
+
+    // Make sure the root directory exists
+    if (!existsSync(vaultRootPath)) {
+      mkdirSync(vaultRootPath, { recursive: true });
+    }
+
+    const activeWorkspace = req.headers.get('x-active-workspace') || '';
+    const basePath = activeWorkspace ? join(vaultRootPath, activeWorkspace) : vaultRootPath;
+
+    // Make sure the active workspace folder exists
+    if (!existsSync(basePath)) {
+      mkdirSync(basePath, { recursive: true });
+    }
+
+    const filesystem = new LocalFilesystem({
+      basePath,
+      contained: true,
+      allowedPaths: [vaultRootPath],
+    });
+
+    const userWorkspace = new Workspace({
+      id: `dialogue-workspace-${sessionId || 'default'}`,
+      filesystem,
+      tools: {
+        mastra_workspace_read_file: { name: 'readVaultFile' },
+        mastra_workspace_write_file: { 
+          name: 'writeVaultFile', 
+          requireApproval: true,
+          requireReadBeforeWrite: true,
+        },
+        mastra_workspace_list_files: { name: 'listVaultDirectory' },
+        mastra_workspace_grep: { name: 'searchVaultContent' },
+      }
+    });
+
     // Create a dynamic agent configured with the user's provider settings, profile, and persona
     const dynamicAgent = await createDialogueAgent(
       provider, 
@@ -133,7 +175,8 @@ export async function POST(req: Request) {
       personaPrompt,
       scope,
       mcpToolsets,
-      timeFormat
+      timeFormat,
+      userWorkspace
     );
     
     // File-based LibSQL ensures approval snapshots survive across HTTP requests

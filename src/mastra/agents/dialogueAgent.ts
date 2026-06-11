@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { Workspace } from '@mastra/core/workspace';
 import { TokenLimiter } from '@mastra/core/processors';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
@@ -64,7 +65,8 @@ export async function createDialogueAgent(
   personaPrompt: string = 'You build relationships through concrete behaviors, not prescribed tones.',
   scope?: { type: string; id: string; title: string } | null,
   mcpToolsets?: Record<string, Record<string, unknown>> | null,
-  timeFormat: "auto" | "12h" | "24h" = "auto"
+  timeFormat: "auto" | "12h" | "24h" = "auto",
+  workspace?: Workspace
 ) {
   let model;
   const opts = {
@@ -242,6 +244,17 @@ Before answering questions about the user's history, preferences, or past conver
 - NEVER say "I've saved this" or "I've created a task" unless the tool call succeeded
 - If a tool call fails, tell the user honestly`;
 
+  if (workspace) {
+    instructions += `\n\n## Vault Filesystem Tools
+You have access to the user's local vault files:
+- \`readVaultFile\`: View content of a file
+- \`writeVaultFile\`: Save/modify a file (YAML frontmatter + Markdown body)
+- \`listVaultDirectory\`: Browse folders
+- \`searchVaultContent\`: Search text in files
+
+All paths are relative to your active workspace base path. Do NOT output raw file content paths in responses unless requested.`;
+  }
+
   const allTools = {
     addTask: tools.addTaskTool,
     updateTask: tools.updateTaskTool,
@@ -303,6 +316,7 @@ Before answering questions about the user's history, preferences, or past conver
       },
     },
     tools: filteredTools,
+    workspace,
   };
 
   return new Agent(agentConfig as any);
