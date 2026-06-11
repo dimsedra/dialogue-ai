@@ -46,8 +46,12 @@ This is not automation. It is collaboration. The agent handles the orchestration
 
 ## Core Features
 
-### Vault-Backed Workspaces
-Every workspace in Dialogue is a folder on your disk. Tasks, events, notes, and memories are all plain Markdown files with YAML frontmatter. The agent works directly from these files — there is no hidden database you cannot see. Share a workspace folder via Dropbox or Syncthing and two instances of Dialogue stay in sync with zero cloud infrastructure.
+### The Local Vault: Unified Synergy on Your Machine
+Every workspace in Dialogue is a simple folder on your disk—meaning tasks, events, habits, notes, daily logs, playbooks, and memories all live locally in a single directory structure. Instead of isolated records in separate silos, these systems work in constant synergy:
+* **Task-Note Edges**: A free-form research note can explicitly reference a task or event via frontmatter links (e.g. `mentions: [task-123]`), automatically drawing connections in the agent's knowledge graph.
+* **Habit Check-ins**: Checking off a habit doesn't just increment a progress bar; it logs a record directly into your daily journal, feeding into your self-reflection loops.
+* **Playbook Compilation**: Successfully resolved tasks compile tool execution logs and CLI histories into playbooks, which the agent uses to solve future tasks automatically.
+* **Direct File Editing**: Since there is no proprietary database, you can edit your task markdown files or notes in VS Code or Obsidian, and the sync engine instantly reconciles the DB cache and RAG indexing. Share a workspace folder via Dropbox or Syncthing and two instances stay in sync with zero cloud infrastructure.
 
 ### Auditable Memory
 The agent remembers facts about you — your preferences, your projects, your working style — and writes them to `vault/system/memories.md`. You can open this file at any time and see everything the agent knows about you. Delete a line and the agent forgets it. Edit a line and the agent corrects itself instantly. Memories are automatically deduplicated and time-decayed so the most relevant ones surface first.
@@ -79,17 +83,29 @@ At the end of the week, the month, and the year, Dialogue synthesizes your compl
 
 ---
 
-## How the Agent Knows You
+## How the Agent Knows You: The Unified Knowledge Graph
 
-Dialogue uses three memory systems that work together to give the agent a complete picture of who you are. All three are stored as plain Markdown files in your vault — you can open, edit, or delete them in any text editor.
+Dialogue doesn't treat memory as a flat list of text strings in a hidden database. Instead, it constructs a **Unified, Auditable Knowledge Graph** that integrates notes, tasks, events, habits, and explicit user facts. All memory sources are stored as plain Markdown files in your vault—you can open, edit, or delete them in any editor.
 
-| System | What it holds | Where it lives | How it works |
+### Three Layers of Personal Context
+
+| Layer | What it holds | Where it lives | How it works |
 |---|---|---|---|
-| **Startup Profile** | Your identity, working style, communication preferences, standing instructions | `vault/system/user_profile.md` | Refined every N daily logs. Always loaded at session start. Versioned for rollback. |
-| **Auditable Memory** | Explicit facts — preferences, projects, context, technical details | `vault/system/memories.md` | Vector search retrieves what is relevant to the current conversation. Edit the file to correct a memory. Delete a line to make the agent forget. |
-| **Behavioral Understanding** | Patterns — how you work, what drains you, how you respond to pressure | Synthesized from your conversation and daily logs | Generated from daily log analysis when you open the app. Free-form observations, not scored numbers. Gets more accurate over time. |
+| **Startup Profile** | Standing instructions, identity, workspace-specific standing rules, communication preferences | `vault/system/user_profile.md` | Compiled dynamically from Daily Logs. Always loaded in the system instructions on session boot. |
+| **Auditable Memory** | Explicit facts, user preferences, projects, context, and client details | `vault/system/memories.md` | Bullet points in Markdown. Edit a bullet to correct a fact; delete a line to force the agent to forget. Synced via file watcher. |
+| **Behavioral Understanding** | Long-term patterns—how you respond to pressure, peak productivity hours, cognitive load thresholds | Synthesized across conversations and daily summaries | Refined locally through log analysis when you open the app. Free-form observations, not abstract numbers. |
 
-These three systems answer different questions. The profile answers who you are. Auditable memory answers what the agent knows about your life. Behavioral understanding answers how you actually operate.
+### The Graph Synergy: Memory Ingestion & In-Process Retrieval
+
+Dialogue's memory system is active and highly relational, designed around a **transparent, hybrid-retrieval pipeline**:
+
+* **Note-to-Memory Ingestion**: When you save a note in `vault/notes/`, the sync engine segments the document, embeds the individual text chunks using local Xenova models, and links them as memories with `source_type: "Note"`. If you edit or delete the note file, the sync engine re-indexes the changed chunks or cascade-deletes the memories automatically.
+* **Declarative Graph Relations**: Relationships are written directly in frontmatter (e.g. `mentions: [{type: Task, id: "xyz"}]` or `source_id: "abc"`). The sync engine parses these declarations to construct edges in the local SQLite/PocketBase cache, allowing the agent to perform **graph traversals** (e.g., retrieving notes linked to a task, or events related to a project memory).
+* **Hybrid Ranking (Cosine + Recency Decay)**: Pure vector search misses the dimension of time. Dialogue ranks memories by combining semantic cosine similarity with **Time-Decay Recency**:
+  $$\text{Final Score} = \text{Cosine Similarity} \times e^{-\lambda t}$$
+  This ensures that a relevant task or note from yesterday has a higher presence in the conversation than a note from 6 months ago, while preserving critical old memories.
+* **Semantic Deduplication**: To keep the context window clear of redundant entries (e.g., repeating the same preference phrased slightly differently), the search engine performs cross-cosine comparisons on retrieved memories. Matches with a mutual similarity score $> 0.80$ are automatically deduplicated.
+* **Dynamic Persona Refinement**: The agent's instructions (stored in `vault/personas/`) are compiled and compressed under a strict character cap. When the agent learns new standing preferences, it refines and merges the prompt rather than simply appending bullet points, keeping instruction-following sharp.
 
 Together, they mean the agent on day 365 knows you far better than the agent on day 1 — without you having to do anything except use it.
 
