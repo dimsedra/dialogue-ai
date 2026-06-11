@@ -4,6 +4,7 @@ import { DayPicker, type DayButtonProps } from "react-day-picker";
 import { Calendar as CalendarIcon, Clock, Edit3, RefreshCw, Tag, Trash2, Zap, MessageSquarePlus } from "lucide-react";
 import { PbTasks, PbEvents, PbWorkspaces } from "@/pb-compat/_generated/dataModel";
 import { EventDoc, TaskDoc } from "./types";
+import { formatTime } from "./utils";
 import { useState, useMemo } from "react";
 import { usePbHabitLog } from "@/pb-compat";
 import { HabitWithLogs } from "./HabitList";
@@ -282,9 +283,9 @@ export function CalendarView({
                   <div className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
                     <span>
-                      {format(new Date(event.startTime), "HH:mm")}
+                      {formatTime(new Date(event.startTime))}
                       {event.eventType !== "point" && event.endTime
-                        ? ` - ${format(new Date(event.endTime), "HH:mm")}`
+                        ? ` - ${formatTime(new Date(event.endTime))}`
                         : ""}
                     </span>
                   </div>

@@ -72,7 +72,7 @@ function EventPrepCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const eventTime = new Date(state.startTime);
-  const timeStr = eventTime.toLocaleTimeString("en-US", {
+  const timeStr = eventTime.toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
   });

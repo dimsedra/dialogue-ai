@@ -122,6 +122,7 @@ export async function createDialogueAgent(
       day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
+      hour12: true,
       timeZoneName: 'short'
     });
     instructions += `\n\n## Temporal Context\nThe current date and time is ${formatter.format(new Date())}.\n`;
@@ -129,6 +130,9 @@ export async function createDialogueAgent(
     console.error("Failed to format timezone:", timezone, e);
     instructions += `\n\n## Temporal Context\nThe current date and time is ${new Date().toISOString()}.\n`;
   }
+
+  instructions += `\n## Time Formatting Rule\nWhen mentioning times in your chat replies to the user, ALWAYS use 12-hour format with AM/PM (e.g. "3:00 PM", "9:30 AM"). When calling tools that accept ISO-8601 parameters (startTime, endTime, dueDate), always use 24-hour format as the tool schemas require.\n`;
+
   
   if (userName || userBio) {
     instructions += `\n\n## User Identity\n`;

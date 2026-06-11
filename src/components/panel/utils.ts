@@ -1,5 +1,15 @@
 import { format, parse, parseISO } from "date-fns";
 
+/**
+ * Locale-aware time formatter. Uses the browser's locale and OS preferences
+ * to render times in 12-hour (e.g. "3:00 PM") or 24-hour (e.g. "15:00")
+ * format automatically, without hardcoding either convention.
+ */
+export const formatTime = (date: Date | number): string => {
+  const d = typeof date === "number" ? new Date(date) : date;
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+};
+
 export const formatRecurrenceText = (rec: { frequency: string; interval: number; daysOfWeek?: number[]; until?: string | number } | undefined) => {
   if (!rec) return "";
   let base = rec.frequency === "daily" 
@@ -47,7 +57,7 @@ export const formatDateLabel = (date: Date | string | number | undefined) => {
   if (!d) return typeof date === "string" ? date : "";
   
   const yearStr = d.getFullYear() === new Date().getFullYear() ? "" : `, ${d.getFullYear()}`;
-  return format(d, `MMM d${yearStr}, HH:mm`);
+  return `${format(d, `MMM d${yearStr}`)}, ${formatTime(d)}`;
 };
 
 

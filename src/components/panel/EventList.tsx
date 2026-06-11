@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { Clock, Calendar as CalendarIcon, Tag, Zap, Edit3, Trash2, RefreshCw, ChevronDown, ChevronUp, MessageSquarePlus, Paperclip, Plus } from "lucide-react";
 import { PbEvents, PbWorkspaces } from "@/pb-compat/_generated/dataModel";
 import { EventDoc } from "./types";
-import { formatRecurrenceText } from "./utils";
+import { formatRecurrenceText, formatTime } from "./utils";
 import { ResourceTray } from "./ResourceTray";
 
 interface EventListProps {
@@ -147,8 +147,8 @@ export function EventList({
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
             <span className="capitalize">
-              {format(new Date(event.startTime), "HH:mm")}
-              {event.eventType !== "point" && event.endTime ? ` - ${format(new Date(event.endTime), "HH:mm")}` : ""}
+              {formatTime(new Date(event.startTime))}
+              {event.eventType !== "point" && event.endTime ? ` - ${formatTime(new Date(event.endTime))}` : ""}
             </span>
             <span className="text-[8px] opacity-50 font-bold ml-1 uppercase tracking-tighter">
               {Intl.DateTimeFormat().resolvedOptions().timeZone.split("/").pop()?.replace("_", " ")}
