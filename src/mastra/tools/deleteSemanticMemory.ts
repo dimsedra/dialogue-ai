@@ -7,15 +7,12 @@ export const deleteSemanticMemoryTool = createTool({
   inputSchema: z.object({
     memoryId: z.string(),
   }),
+  requireApproval: true,
   execute: async (input) => {
     const { getPbClient } = await import('../../lib/pb-server');
     const pb = getPbClient();
     await pb.collection("memories").delete(input.memoryId);
 
-    return {
-      _interceptedForConsent: true,
-      action: "deleteSemanticMemory",
-      payload: input
-    };
+    return { success: true, memoryId: input.memoryId };
   }
 });

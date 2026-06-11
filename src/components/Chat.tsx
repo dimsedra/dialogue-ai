@@ -48,6 +48,7 @@ import { SessionSidebar } from "./chat/SessionSidebar";
 import { ChatHeader } from "./chat/ChatHeader";
 import { MessageStream } from "./chat/MessageStream";
 import { ChatInput } from "./chat/ChatInput";
+import { ToolApprovalCard } from "./chat/ToolApprovalCard";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 
@@ -650,7 +651,8 @@ function ActiveChat({
 
   const pendingScopeRef = useRef<Scope | null | undefined>(undefined);
 
-  const { messages: aiMessages, setMessages, sendMessage: sendVercelMessage, status } = useChat({
+  const { messages: aiMessages, setMessages, sendMessage: sendVercelMessage, status, addToolApprovalResponse } = useChat({
+    sendAutomaticallyWhen: () => true,
     transport: new DefaultChatTransport({ 
       api: `/api/chat?sessionId=${activeSessionId || ""}&provider=${provider}&modelId=${getActiveModelName}`,
       fetch: async (input, init) => {
@@ -714,6 +716,48 @@ function ActiveChat({
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
+ 
+  // Extract pending tool approval requests from AI messages
+  const pendingApprovals = useMemo(() => {
+    const approvals: Array<{
+      approvalId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+    }> = [];
+    for (const m of aiMessages) {
+      if (m.role !== 'assistant') continue;
+      for (const part of m.parts ?? []) {
+        const isToolPart = part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'));
+        if (!isToolPart) continue;
+        const tp = part as any;
+        if (tp.state !== 'approval-requested' || !tp.approval?.id) continue;
+        const toolName = part.type === 'dynamic-tool'
+          ? tp.toolName
+          : part.type.split('-').slice(1).join('-');
+        approvals.push({
+          approvalId: tp.approval.id,
+          toolName,
+          args: typeof tp.input === 'object' && tp.input ? tp.input as Record<string, unknown> : {},
+        });
+      }
+    }
+    return approvals;
+  }, [aiMessages]);
+
+  // Debug: log approval state changes
+  useEffect(() => {
+    if (pendingApprovals.length > 0) {
+      console.log('[ToolApproval] Found pending approvals:', JSON.stringify(pendingApprovals), 'status:', status);
+    }
+    for (const m of aiMessages) {
+      if (m.role !== 'assistant') continue;
+      const toolParts = (m.parts ?? []).filter(p => p.type === 'dynamic-tool' || (typeof p.type === 'string' && p.type.startsWith('tool-')))
+        .map(p => { const tp = p as any; return { type: p.type, state: tp.state, toolName: tp.toolName || p.type.split('-').slice(1).join('-'), hasApproval: !!tp.approval?.id }; });
+      if (toolParts.length > 0) {
+        console.log('[ToolApproval] Assistant tool parts:', JSON.stringify(toolParts));
+      }
+    }
+  }, [aiMessages, status, pendingApprovals]);
 
   // Vercel AI SDK vs Convex Sync (Hybrid Approach)
   useEffect(() => {
@@ -982,7 +1026,22 @@ function ActiveChat({
         onLoadOlder={loadOlderMessages}
         canLoadOlder={messagesPaginated.status === "CanLoadMore"}
         isLoadingOlder={false}
-      />
+      >
+        {pendingApprovals.length > 0 && (
+          <div className="space-y-2 px-4">
+            {pendingApprovals.map((pa) => (
+              <ToolApprovalCard
+                key={pa.approvalId}
+                approvalId={pa.approvalId}
+                toolName={pa.toolName}
+                args={pa.args}
+                onApprove={() => addToolApprovalResponse({ id: pa.approvalId, approved: true })}
+                onDecline={() => addToolApprovalResponse({ id: pa.approvalId, approved: false, reason: 'User declined' })}
+              />
+            ))}
+          </div>
+        )}
+      </MessageStream>
 
       <ChatInput
         activeSessionId={activeSessionId}

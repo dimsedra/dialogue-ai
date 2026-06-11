@@ -23,10 +23,19 @@ export const retrieveGraphContextTool = createTool({
     });
 
     return {
-      _interceptedForRead: true, // We execute silently and return to LLM
       action: "retrieveGraphContext",
-      payload: { query: input.query },
-      results: results
+      query: input.query,
+      results
     };
-  }
+  },
+  toModelOutput: (output: any) => {
+    if (!output.results?.length) return `No memories found for "${output.query}".`;
+    return output.results.map((r: any, i: number) =>
+      `[${i + 1}] "${r.text}" (relevance: ${r.similarity.toFixed(2)})` +
+      (r.tasks?.length ? ` — linked to ${r.tasks.length} task(s)` : '') +
+      (r.events?.length ? ` — linked to ${r.events.length} event(s)` : '') +
+      (r.habits?.length ? ` — linked to ${r.habits.length} habit(s)` : '')
+    ).join('\n');
+  },
+  background: { enabled: true }
 });

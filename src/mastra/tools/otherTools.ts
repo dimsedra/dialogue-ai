@@ -77,7 +77,8 @@ export const searchWebTool = createTool({
       }
       return { error: `Error searching for "${query}": ${err instanceof Error ? err.message : 'Unknown error'}` };
     }
-  }
+  },
+  background: { enabled: true }
 });
 
 export const searchHistoricalEntitiesTool = createTool({
@@ -123,6 +124,22 @@ export const searchHistoricalEntitiesTool = createTool({
     }
     
     return results;
+  },
+  toModelOutput: (output: any) => {
+    const parts: string[] = [];
+    if (output.tasks?.length) {
+      parts.push('Tasks:');
+      output.tasks.forEach((t: any) => parts.push(
+        `  "${t.text}"${t.dueDate ? ` due ${new Date(t.dueDate).toLocaleDateString()}` : ''}${t.priority ? ` [${t.priority}]` : ''}${t.completed ? ' ✓' : ''}`
+      ));
+    }
+    if (output.events?.length) {
+      parts.push('Events:');
+      output.events.forEach((e: any) => parts.push(
+        `  "${e.title}"${e.startTime ? ` ${new Date(e.startTime).toLocaleString()}` : ''}${e.location ? ` @ ${e.location}` : ''}`
+      ));
+    }
+    return parts.join('\n') || 'No results found.';
   }
 });
 
@@ -179,7 +196,9 @@ export const getTaskNotesTool = createTool({
     } catch (err) {
       return { notes: 'No notes found.', task: null };
     }
-  }
+  },
+  toModelOutput: (output: any) =>
+    `Notes for "${output.task?.text || 'task'}":\n${output.notes || '(empty)'}`
 });
 
 export const fetchUrlTool = createTool({
@@ -226,7 +245,8 @@ export const fetchUrlTool = createTool({
     } catch (err: unknown) {
       return { error: `Failed to fetch URL: ${err instanceof Error ? err.message : "Unknown error"}` };
     }
-  }
+  },
+  background: { enabled: true }
 });
 
 export const getTaskResourcesTool = createTool({
@@ -276,6 +296,10 @@ export const listWorkspacesTool = createTool({
     if (!user) throw new Error("Unauthorized");
     const records = await pb.collection("workspaces").getFullList({ sort: '-createdAt' });
     return { workspaces: records };
+  },
+  toModelOutput: (output: any) => {
+    if (!output.workspaces?.length) return 'No workspaces found.';
+    return output.workspaces.map((w: any) => `"${w.name}"`).join(', ');
   }
 });
 
@@ -375,6 +399,18 @@ export const getHabitConsistencyTool = createTool({
         })),
       })),
     };
+  },
+  toModelOutput: (output: any) => {
+    if (!output.habits?.length) return 'No habits found.';
+    return output.habits.map((h: any) => {
+      const total = h.logs.length;
+      const done = h.logs.filter((l: any) => l.status === 'completed').length;
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      const sorted = [...h.logs].sort((a: any, b: any) => b.dateString.localeCompare(a.dateString));
+      let streak = 0;
+      for (const log of sorted) { if (log.status === 'completed') streak++; else break; }
+      return `${h.name}: ${done}/${total} (${pct}%), ${streak}-day streak`;
+    }).join('\n');
   }
 });
 
@@ -393,6 +429,12 @@ export const listUnreadNotificationsTool = createTool({
       sort: 'triggerAt',
     });
     return { notifications: records.items };
+  },
+  toModelOutput: (output: any) => {
+    if (!output.notifications?.length) return 'No unread notifications.';
+    return output.notifications.map((n: any) =>
+      `[${(n.kind || 'reminder').replace('_remind', '')}] ${n.targetId} — ${n.triggerAt ? new Date(n.triggerAt).toLocaleString() : '?'}`
+    ).join('\n');
   }
 });
 

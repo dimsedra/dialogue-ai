@@ -53,6 +53,7 @@ export function usePbUpdatePreferences() {
     searchProvider?: "tavily" | "serper";
     customConfigs?: any;
     taskModels?: any;
+    mcpServers?: any;
     userId?: string;
   }) => {
     if (!user) throw new Error("Unauthorized");
@@ -73,6 +74,7 @@ export function usePbUpdatePreferences() {
         ? { searchProvider: args.searchProvider }
         : { searchProvider: "tavily" }),
       ...(args.taskModels ? { taskModels: args.taskModels } : {}),
+      ...(args.mcpServers ? { mcpServers: args.mcpServers } : {}),
       customConfigs: newConfigs,
     };
 

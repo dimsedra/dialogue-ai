@@ -3,11 +3,12 @@ import { z } from 'zod';
 
 export const deleteTaskTool = createTool({
   id: 'deleteTask',
-  description: 'Deletes a task. CRITICAL MANDATE: MUST ask the user for confirmation first before calling this tool.',
+  description: 'Deletes a task.',
   inputSchema: z.object({
     taskId: z.string().describe("The ID of the task to delete"),
   }),
   outputSchema: z.object({ success: z.boolean(), taskId: z.string() }),
+  requireApproval: true,
   execute: async (input) => {
     const { getPbClient } = await import('../../lib/pb-server');
     const { deleteSourceMemories } = await import('../../lib/graph/ingest');

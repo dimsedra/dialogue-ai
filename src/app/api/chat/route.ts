@@ -1,11 +1,15 @@
 import { handleChatStream } from '@mastra/ai-sdk';
 import { createUIMessageStreamResponse } from 'ai';
 import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
 import { createDialogueAgent } from '@/mastra/agents/dialogueAgent';
 import { isPbBackend } from '@/pb-compat/env';
 import PocketBase from 'pocketbase';
 import { pbRequestContext } from '@/lib/pb-server';
 import { verifyPbToken } from '@/lib/pb-actions/auth';
+import { mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
+import { parseMcpServers, createMcpClient, getToolsets } from '@/mastra/mcp/client';
 
 export async function POST(req: Request) {
   try {
@@ -43,6 +47,7 @@ export async function POST(req: Request) {
     // Fetch user profile and persona from the active backend
     let userName = null;
     let userBio = null;
+    let userPreferences = null;
     let behavioralProfile = null;
     let monthlyDigest = null;
     let latestWeeklyDigest = null;
@@ -56,6 +61,7 @@ export async function POST(req: Request) {
           const profile = await pbClient.collection('users').getOne(userId);
           userName = profile.name;
           userBio = profile.bio;
+          userPreferences = profile.preferences;
           behavioralProfile = profile.behavioralProfile;
           monthlyDigest = profile.monthlyDigest;
           latestWeeklyDigest = profile.latestWeeklyDigest;
@@ -80,8 +86,13 @@ export async function POST(req: Request) {
       }
     }
 
+    // Load MCP server config from user preferences and create toolsets
+    const mcpServerDefs = parseMcpServers(userPreferences as Record<string, unknown> | null);
+    const mcpClient = createMcpClient(mcpServerDefs);
+    const mcpToolsets = await getToolsets(mcpClient);
+
     // Create a dynamic agent configured with the user's provider settings, profile, and persona
-    const dynamicAgent = createDialogueAgent(
+    const dynamicAgent = await createDialogueAgent(
       provider, 
       modelId, 
       apiKey, 
@@ -94,12 +105,20 @@ export async function POST(req: Request) {
       timezone,
       personaName,
       personaPrompt,
-      scope
+      scope,
+      mcpToolsets
     );
     
-    // Create a temporary Mastra instance for this request
+    // File-based LibSQL ensures approval snapshots survive across HTTP requests
+    const dbDir = join(process.cwd(), '.dialogue');
+    if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true });
     const tempMastra = new Mastra({
       agents: { dialogueAgent: dynamicAgent },
+      storage: new LibSQLStore({
+        id: 'approval-snapshots',
+        url: 'file:.dialogue/approval.db',
+      }),
+      backgroundTasks: { enabled: true, defaultTimeoutMs: 30_000 },
     });
 
     // Vercel AI SDK 'useChat' sends the body payload here automatically
@@ -124,6 +143,7 @@ export async function POST(req: Request) {
         version: 'v6',
         params: {
           ...params,
+          toolsets: mcpToolsets || undefined,
           maxSteps: 20,
         },
       });
@@ -137,7 +157,39 @@ export async function POST(req: Request) {
     }
     
     // Return the response back in Vercel AI SDK UI streaming format
-    return createUIMessageStreamResponse({ stream: stream as any });
+    const response = createUIMessageStreamResponse({ stream: stream as any });
+
+    // Wrap response body to disconnect MCPClient after streaming completes
+    if (response.body && mcpClient) {
+      const reader = response.body.getReader();
+      const wrappedStream = new ReadableStream({
+        async pull(controller) {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              controller.close();
+              await mcpClient.disconnect();
+              return;
+            }
+            controller.enqueue(value);
+          } catch (e) {
+            controller.error(e);
+            await mcpClient.disconnect();
+          }
+        },
+        cancel() {
+          reader.cancel();
+          mcpClient.disconnect();
+        },
+      });
+      return new Response(wrappedStream, {
+        headers: response.headers,
+        status: response.status,
+        statusText: response.statusText,
+      });
+    }
+
+    return response;
   } catch (error) {
     console.error("Chat API Routing Error:", error);
     return new Response(JSON.stringify({ error: "Agent Orchestration Failed" }), { 

@@ -1,3 +1,5 @@
+// When adding a new tool here, also add its key to TOOL_CATEGORIES
+// in categories.ts so scope-based filtering includes it correctly.
 export * from './addTask';
 export * from './updateTask';
 export * from './completeTask';

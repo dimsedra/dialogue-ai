@@ -101,7 +101,7 @@ export default function SettingsPage() {
   const [isLocalEmbeddingReady, setIsLocalEmbeddingReady] = useState(false);
   const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"profile" | "ai" | "memory">(
+  const [activeTab, setActiveTab] = useState<"profile" | "ai" | "memory" | "mcp">(
     "profile",
   );
   const [isSaving, setIsSaving] = useState(false);
@@ -111,6 +111,9 @@ export default function SettingsPage() {
   const [editMemoryText, setEditMemoryText] = useState("");
   const [newMemoryText, setNewMemoryText] = useState("");
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [mcpServers, setMcpServers] = useState<Record<string, { command: string; args: string[] }>>({});
+  const [editingMcpKey, setEditingMcpKey] = useState<string | null>(null);
+  const [editMcpForm, setEditMcpForm] = useState({ name: '', command: 'npx', args: '' });
   const [prevProfileId, setPrevProfileId] = useState<string | null>(
     null,
   );
@@ -138,6 +141,9 @@ export default function SettingsPage() {
     if (prefs?.pushEnabled !== undefined) {
       setPushEnabled(!!prefs.pushEnabled);
     }
+    if (prefs?.mcpServers) {
+      setMcpServers(prefs.mcpServers as Record<string, { command: string; args: string[] }>);
+    }
   }
 
   useEffect(() => {
@@ -153,6 +159,7 @@ export default function SettingsPage() {
         searchProvider,
         customConfigs,
         taskModels,
+        mcpServers,
       });
     } catch (error) {
       console.error(error);
@@ -296,6 +303,7 @@ export default function SettingsPage() {
                   { id: "profile", label: "Profile", icon: User },
                   { id: "ai", label: "AI Provider", icon: Cpu },
                   { id: "memory", label: "Intelligence", icon: Brain },
+                  { id: "mcp", label: "MCP Servers", icon: Globe },
                 ] as const
               ).map((tab) => (
                 <button
@@ -1059,6 +1067,228 @@ export default function SettingsPage() {
                         </div>
                       ))}
                     </div>
+                  </section>
+                </motion.div>
+              )}
+
+              {activeTab === "mcp" && (
+                <motion.div
+                  key="mcp"
+                  initial={{ opacity: 0, x: 5 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -5 }}
+                  className="space-y-4"
+                >
+                  <section className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg">
+                    <div className="flex items-center gap-2.5 mb-4">
+                      <Globe className="w-4 h-4 text-[#d4a373]" />
+                      <div>
+                        <h2 className="text-base font-bold text-[#f2efeb]">
+                          MCP Servers
+                        </h2>
+                        <p className="text-[#a8a29e] text-[10px]">
+                          External tool integrations via the Model Context Protocol.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {Object.keys(mcpServers).length === 0 && !editingMcpKey && (
+                        <div className="text-center py-8 border border-dashed border-[#2a2723] rounded-lg">
+                          <p className="text-[#a8a29e] text-[10px] italic mb-3">
+                            No MCP servers configured.
+                          </p>
+                          <button
+                            onClick={() => {
+                              setEditingMcpKey("__new");
+                              setEditMcpForm({ name: '', command: 'npx', args: '' });
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#d4a373] text-[#0f0e0c] text-[10px] font-bold hover:bg-[#c39262] transition-all"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Add Server
+                          </button>
+                        </div>
+                      )}
+
+                      {editingMcpKey === "__new" && (
+                        <div className="p-3 rounded-lg bg-[#0f0e0c] border border-[#d4a373]/40 space-y-2">
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-bold uppercase tracking-wider text-[#a8a29e]">
+                              Server Name
+                            </label>
+                            <input
+                              autoFocus
+                              value={editMcpForm.name}
+                              onChange={(e) => setEditMcpForm(f => ({ ...f, name: e.target.value }))}
+                              placeholder="e.g. wikipedia"
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-bold uppercase tracking-wider text-[#a8a29e]">
+                              Command
+                            </label>
+                            <input
+                              value={editMcpForm.command}
+                              onChange={(e) => setEditMcpForm(f => ({ ...f, command: e.target.value }))}
+                              placeholder="npx"
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] font-bold uppercase tracking-wider text-[#a8a29e]">
+                              Arguments
+                            </label>
+                            <input
+                              value={editMcpForm.args}
+                              onChange={(e) => setEditMcpForm(f => ({ ...f, args: e.target.value }))}
+                              placeholder="-y wikipedia-mcp"
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                            />
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              disabled={!editMcpForm.name.trim() || !editMcpForm.command.trim()}
+                              onClick={() => {
+                                setMcpServers(prev => ({
+                                  ...prev,
+                                  [editMcpForm.name.trim()]: {
+                                    command: editMcpForm.command.trim(),
+                                    args: editMcpForm.args.trim() ? editMcpForm.args.trim().split(/\s+/) : [],
+                                  },
+                                }));
+                                setEditingMcpKey(null);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#d4a373] text-[#0f0e0c] text-[10px] font-bold hover:bg-[#c39262] transition-all disabled:opacity-40"
+                            >
+                              <Save className="w-3 h-3" />
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingMcpKey(null)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] text-[10px] font-bold hover:border-[#3a3733] transition-all"
+                            >
+                              <X className="w-3 h-3" />
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {Object.entries(mcpServers).map(([key, server]) => (
+                        <div key={key}>
+                          {editingMcpKey === key ? (
+                            <div className="p-3 rounded-lg bg-[#0f0e0c] border border-[#d4a373]/40 space-y-2">
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold uppercase tracking-wider text-[#a8a29e]">
+                                  Server Name
+                                </label>
+                                <input
+                                  autoFocus
+                                  value={editMcpForm.name}
+                                  onChange={(e) => setEditMcpForm(f => ({ ...f, name: e.target.value }))}
+                                  className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold uppercase tracking-wider text-[#a8a29e]">
+                                  Command
+                                </label>
+                                <input
+                                  value={editMcpForm.command}
+                                  onChange={(e) => setEditMcpForm(f => ({ ...f, command: e.target.value }))}
+                                  className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[9px] font-bold uppercase tracking-wider text-[#a8a29e]">
+                                  Arguments
+                                </label>
+                                <input
+                                  value={editMcpForm.args}
+                                  onChange={(e) => setEditMcpForm(f => ({ ...f, args: e.target.value }))}
+                                  className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                                />
+                              </div>
+                              <div className="flex gap-2 pt-1">
+                                <button
+                                  disabled={!editMcpForm.name.trim() || !editMcpForm.command.trim()}
+                                  onClick={() => {
+                                    const updated = { ...mcpServers };
+                                    delete updated[key];
+                                    updated[editMcpForm.name.trim()] = {
+                                      command: editMcpForm.command.trim(),
+                                      args: editMcpForm.args.trim() ? editMcpForm.args.trim().split(/\s+/) : [],
+                                    };
+                                    setMcpServers(updated);
+                                    setEditingMcpKey(null);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#d4a373] text-[#0f0e0c] text-[10px] font-bold hover:bg-[#c39262] transition-all disabled:opacity-40"
+                                >
+                                  <Save className="w-3 h-3" />
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => setEditingMcpKey(null)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1814] border border-[#2a2723] text-[#a8a29e] text-[10px] font-bold hover:border-[#3a3733] transition-all"
+                                >
+                                  <X className="w-3 h-3" />
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="group p-3 rounded-lg bg-[#0f0e0c] border border-[#2a2723] hover:border-[#d4a373]/20 transition-all">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-[12px] font-bold text-[#f2efeb]">
+                                    {key}
+                                  </h3>
+                                  <p className="text-[10px] text-[#a8a29e] font-mono truncate mt-0.5">
+                                    {server.command} {server.args.join(' ')}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      setEditingMcpKey(key);
+                                      setEditMcpForm({ name: key, command: server.command, args: server.args.join(' ') });
+                                    }}
+                                    className="p-1.5 text-[#a8a29e] hover:text-[#d4a373] transition-colors"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const updated = { ...mcpServers };
+                                      delete updated[key];
+                                      setMcpServers(updated);
+                                    }}
+                                    className="p-1.5 text-[#a8a29e] hover:text-red-400 transition-colors"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {Object.keys(mcpServers).length > 0 && editingMcpKey !== "__new" && (
+                      <button
+                        onClick={() => {
+                          setEditingMcpKey("__new");
+                          setEditMcpForm({ name: '', command: 'npx', args: '' });
+                        }}
+                        className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-[#2a2723] text-[#a8a29e] text-[10px] font-bold hover:border-[#d4a373]/40 hover:text-[#d4a373] transition-all"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add Server
+                      </button>
+                    )}
                   </section>
                 </motion.div>
               )}

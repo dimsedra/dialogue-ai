@@ -56,10 +56,9 @@ export const saveSemanticMemoryTool = createTool({
     }
 
     return {
-      _silentExecution: true,
       action: "saveSemanticMemory",
       payload: { id: memoryId, text: input.text },
-      status: "Memory securely sent to Graph Engine queue and UI backend."
+      status: "Memory saved."
     };
   }
 });

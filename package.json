@@ -38,12 +38,13 @@
     "@anthropic-ai/sdk": "^0.98.0",
     "@auth0/auth0-react": "^2.16.2",
     "@base-ui/react": "^1.5.0",
-
     "@google/generative-ai": "^0.24.1",
     "@huggingface/transformers": "^4.2.0",
     "@ladybugdb/core": "^0.17.1",
     "@mastra/ai-sdk": "^1.4.3",
-    "@mastra/core": "^1.37.1",
+    "@mastra/core": "^1.41.0",
+    "@mastra/libsql": "^1.12.1",
+    "@mastra/mcp": "^1.9.1",
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@streamdown/cjk": "^1.0.3",
@@ -54,7 +55,6 @@
     "ai-sdk-provider-opencode-sdk": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-
     "date-fns": "^4.1.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.17.0",
@@ -92,7 +92,6 @@
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/web-push": "^3.6.4",
-
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",

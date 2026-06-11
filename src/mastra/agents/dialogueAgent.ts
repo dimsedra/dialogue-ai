@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { TokenLimiter } from '@mastra/core/processors';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -20,8 +21,9 @@ import { opencode } from 'ai-sdk-provider-opencode-sdk';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { zhipu } from 'zhipu-ai-provider';
 import * as tools from '../tools';
+import { filterToolsByScope } from '../tools/categories';
 
-export function createDialogueAgent(
+export async function createDialogueAgent(
   provider?: string | null, 
   modelId?: string | null,
   apiKey?: string | null,
@@ -34,7 +36,8 @@ export function createDialogueAgent(
   timezone: string = 'UTC',
   personaName: string = 'Dialogue',
   personaPrompt: string = 'You build relationships through concrete behaviors, not prescribed tones.',
-  scope?: { type: string; id: string; title: string } | null
+  scope?: { type: string; id: string; title: string } | null,
+  mcpToolsets?: Record<string, Record<string, unknown>> | null
 ) {
   let model;
   const opts = { apiKey: apiKey || undefined, baseURL: baseUrl || undefined };
@@ -144,6 +147,21 @@ export function createDialogueAgent(
     instructions += `\n\n## Active Scope (Pinned Context)\nThe user has explicitly pinned the following item to this chat message:\n[${scope.type.toUpperCase()}] ${scope.title} (ID: ${scope.id})\n\nCRITICAL INSTRUCTION: When answering or executing tool calls for this query, ALWAYS prioritize this specific pinned context. If the user says "this", "reschedule this", "mark this done", etc., they are referring directly to this pinned active scope!`;
   }
 
+  const activeCategoryNote = scope && ['task', 'event', 'habit'].includes(scope.type)
+    ? `\n\n## Active Tool Scope\nOnly ${scope.type} tools and core utilities are available right now. You cannot create, modify, or delete entities outside the "${scope.type}" category in this turn.`
+    : '';
+
+  instructions += activeCategoryNote;
+
+  if (mcpToolsets && Object.keys(mcpToolsets).length > 0) {
+    instructions += `\n\n## External MCP Tools\nYou have access to the following MCP servers:\n`;
+    for (const [serverName, tools] of Object.entries(mcpToolsets)) {
+      const toolNames = Object.keys(tools).join(', ');
+      instructions += `- ${serverName}: ${toolNames}\n`;
+    }
+    instructions += `\nUse these for file system operations, factual lookups, and external data access.`;
+  }
+
   instructions += `
 
 ## CRITICAL: Tool Usage Rules
@@ -173,15 +191,9 @@ Before answering questions about the user's history, preferences, or past conver
 ### General Tool Rules
 - NEVER claim you performed an action without actually calling the corresponding tool
 - NEVER say "I've saved this" or "I've created a task" unless the tool call succeeded
-- If a tool call fails, tell the user honestly
-- Tools marked with _silentExecution run in the background — do not mention them to the user unless asked`;
+- If a tool call fails, tell the user honestly`;
 
-  return new Agent({
-    id: 'dialogueAgent',
-    name: 'Dialogue AI Agent',
-    instructions,
-    model,
-    tools: {
+  const allTools = {
     addTask: tools.addTaskTool,
     updateTask: tools.updateTaskTool,
     completeTask: tools.completeTaskTool,
@@ -209,7 +221,39 @@ Before answering questions about the user's history, preferences, or past conver
     create_custom_reminder: tools.createCustomReminderTool,
     appendTaskNotes: tools.appendTaskNotesTool,
     appendEventNotes: tools.appendEventNotesTool,
-  }
-});
+  };
 
+  const filteredTools = scope ? filterToolsByScope(allTools, scope) : allTools;
+
+  const agentConfig = {
+    id: 'dialogueAgent',
+    name: 'Dialogue AI Agent',
+    instructions,
+    model,
+    inputProcessors: [
+      new TokenLimiter(127000),
+    ],
+    hooks: {
+      beforeToolCall: ({ toolName, input }: { toolName: string; input: Record<string, unknown> }) => {
+        const sanitized = { ...input };
+        for (const [key, val] of Object.entries(sanitized)) {
+          if (typeof val === 'string' && val.length > 100) {
+            sanitized[key] = val.slice(0, 100) + '...';
+          }
+        }
+        delete sanitized.notes;
+        delete sanitized.bio;
+        delete sanitized.content;
+        console.log(`[ToolCall] ${toolName}`, JSON.stringify(sanitized));
+      },
+      afterToolCall: ({ toolName, output, error }: { toolName: string; output: unknown; error?: Error }) => {
+        if (error) {
+          console.error(`[ToolCall] ${toolName} FAILED:`, error.message);
+        }
+      },
+    },
+    tools: filteredTools,
+  };
+
+  return new Agent(agentConfig as any);
 }

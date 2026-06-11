@@ -227,15 +227,15 @@ Produces a `.dmg` (macOS), `.exe` (Windows), or `.AppImage` (Linux). The user do
 
 ## Roadmap
 
-Dialogue is a long-term project. The current build is the foundation — the vault architecture, the sync engine, the three memory systems, the on-device stack. Things being built toward:
+Dialogue is a long-term project organized into three sequential phases. See [`docs/PROJECT_TIMELINE.md`](docs/PROJECT_TIMELINE.md) for the full phased plan with dependency graph and work items.
 
-* **Vault-First Internals** — migrating all data to the filesystem vault model (tasks, events, memories, personas, playbooks, daily logs as Markdown files), with the database as a derived cache. Every piece of user data becomes an openable, editable, backuppable file.
-* **Workspace-Centric Collaboration** — zero-cloud workspace sharing via folder sync (Dropbox, Syncthing, Git). Two users sharing a workspace folder can collaborate on tasks and notes with no central server.
-* **Self-Improving Playbooks** — the agent compiles multi-step tasks into reusable playbooks, stored as Markdown files, retrieved via vector search when similar tasks appear. The agent gets sharper with every execution.
-* **Daily Log Synthesis** — each day gets a habit tracker and reflection log. The agent synthesizes N logs into a compact behavioral profile on app open. No background server, no psychometric scoring.
-* **Proactive Agent** — the agent notices unlogged habits, approaching deadlines, follow-ups from three days ago. Surfaces them as observations, not commands.
+**Phase 1 — Mastra Orchestration:** Exploit Mastra's full capabilities — MCP sidecar lifecycle, workflow engine, Workspace integration, structured agents (approval, guardrails, supervisors).
 
-See `docs/MIGRATION_POCKETBASE.md` for the technical roadmap (the move to a Tauri-packaged PocketBase backend is currently in progress).
+**Phase 2 — Vault System:** Filesystem source of truth with sync engine. Tasks, events, memories, personas, playbooks, daily logs as editable Markdown files. PB demoted to database cache.
+
+**Phase 3 — Add-on Features:** Notes (BlockNote editor + vault-native storage), Deep Research (GPT Researcher as Python MCP sidecar), Community Skills (last30days and the entire Agent Skills ecosystem via Workspace).
+
+> Previous work (Convex → PocketBase migration) is complete. See [`docs/MIGRATION_POCKETBASE.md`](docs/MIGRATION_POCKETBASE.md) for the migration record.
 
 ---
 

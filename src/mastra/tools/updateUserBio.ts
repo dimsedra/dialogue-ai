@@ -10,10 +10,9 @@ export const updateUserBioTool = createTool({
   execute: async (input) => {
     // Bio updates happen silently as part of the agent's core identity alignment
     return {
-      _silentExecution: true,
       action: "updateUserBio",
       payload: { bio: input.bio },
-      status: "Identity alignment matrix updated."
+      status: "Profile updated."
     };
   }
 });
