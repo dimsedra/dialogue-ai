@@ -23,6 +23,32 @@ import { zhipu } from 'zhipu-ai-provider';
 import * as tools from '../tools';
 import { filterToolsByScope } from '../tools/categories';
 
+const customFetch = (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  if (init && init.body && typeof init.body === 'string') {
+    try {
+      const body = JSON.parse(init.body);
+      if (Array.isArray(body.messages)) {
+        let modified = false;
+        body.messages = body.messages.map((msg: any) => {
+          if (msg && typeof msg === 'object') {
+            if (msg.content === undefined || msg.content === null) {
+              msg.content = '';
+              modified = true;
+            }
+          }
+          return msg;
+        });
+        if (modified) {
+          init.body = JSON.stringify(body);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to rewrite request body in customFetch:", e);
+    }
+  }
+  return fetch(url, init);
+};
+
 export async function createDialogueAgent(
   provider?: string | null, 
   modelId?: string | null,
@@ -41,7 +67,11 @@ export async function createDialogueAgent(
   timeFormat: "auto" | "12h" | "24h" = "auto"
 ) {
   let model;
-  const opts = { apiKey: apiKey || undefined, baseURL: baseUrl || undefined };
+  const opts = {
+    apiKey: apiKey || undefined,
+    baseURL: baseUrl || undefined,
+    fetch: customFetch
+  };
   
   switch (provider) {
     case 'anthropic':
@@ -126,7 +156,7 @@ export async function createDialogueAgent(
       hour12: timeFormat === '12h' ? true : timeFormat === '24h' ? false : undefined,
       timeZoneName: 'short'
     });
-    instructions += `\n\n## Temporal Context\nThe current date and time is ${formatter.format(new Date())}.\n`;
+    instructions += `\n\n## Temporal Context\nThe current date and time is ${formatter.format(new Date())} (IANA Timezone: ${timezone}).\n`;
   } catch (e) {
     console.error("Failed to format timezone:", timezone, e);
     instructions += `\n\n## Temporal Context\nThe current date and time is ${new Date().toISOString()}.\n`;
@@ -199,6 +229,14 @@ Only for standalone knowledge: preferences, life context, project-level details,
 ### retrieveGraphContext — MANDATORY
 Before answering questions about the user's history, preferences, or past conversations, CALL \`retrieveGraphContext\` first to check what you actually know. Do NOT fabricate memories.
 
+### Scheduling and Calendar Adaptations (Conversational Planning)
+- When the user asks you to schedule or plan an event, task, or routine, you MUST call \`checkUpcomingSchedule\` first to inspect their calendar and busy times.
+- When calling \`checkUpcomingSchedule\`, \`addEvent\`, \`updateEvent\`, \`addTask\`, or \`updateTask\`, you MUST pass the user's current timezone ID (e.g. "Asia/Jakarta" from ## Temporal Context) as the \`timezone\` parameter so that times are correctly aligned and formatted in their local timezone.
+  - CRITICAL: When you call \`checkUpcomingSchedule\`, you MUST inspect the returned top-level fields \`isScheduleClear\`, \`conflictCount\`, and \`conflictsList\` with absolute care BEFORE answering. If \`isScheduleClear\` is false, you MUST identify the items in \`conflictsList\` as blockers, count them as busy time, and report them. Under no circumstances should you report that a schedule is clear or that the user is completely free if \`isScheduleClear\` is false or \`conflictCount\` is greater than 0. Read the \`summary\` output line-by-line to get details of each conflict to plan around it.
+  - Analyze their upcoming week, identify conflicts, and suggest specific free slots that avoid events, task due dates, or regular habit routines.
+  - Verbally explain your reasoning to the user (e.g. "I noticed you have Y on Thursday morning, so I suggest Friday afternoon instead").
+  - NEVER execute \`addEvent\` or \`addTask\` tools until the user has explicitly verbally agreed to the proposed time slots in the chat. The user must verbally confirm before you proceed to schedule.
+
 ### General Tool Rules
 - NEVER claim you performed an action without actually calling the corresponding tool
 - NEVER say "I've saved this" or "I've created a task" unless the tool call succeeded
@@ -224,6 +262,7 @@ Before answering questions about the user's history, preferences, or past conver
     fetchUrl: tools.fetchUrlTool,
     getTaskResources: tools.getTaskResourcesTool,
     getEventResources: tools.getEventResourcesTool,
+    checkUpcomingSchedule: tools.checkUpcomingScheduleTool,
     listWorkspaces: tools.listWorkspacesTool,
     create_habit: tools.createHabitTool,
     log_habit: tools.logHabitTool,

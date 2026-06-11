@@ -192,3 +192,62 @@ export function getTodayBounds(timezone: string, date?: Date): { start: number; 
   const end = start + 24 * 60 * 60 * 1000;
   return { start, end };
 }
+
+export function parseDateTime(value: string, timezone?: string): Date {
+  if (!value) return new Date();
+  
+  // If the date string already contains timezone info (e.g. 'Z', '+', or '-' after 'T'), parse it directly
+  const hasTimezone = value.includes('Z') || value.includes('+') || (value.includes('T') && value.split('T')[1].includes('-'));
+  if (hasTimezone) {
+    return new Date(value);
+  }
+  
+  // If it's a timezone-naive date-time (e.g. '2026-06-12T18:00:00') and timezone is provided:
+  if (timezone) {
+    try {
+      const dateParts = value.split('T');
+      const dateStr = dateParts[0];
+      const timeStr = dateParts[1] || '00:00:00';
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const [hour, minute, second] = timeStr.split(':').map(Number);
+      const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second || 0));
+      
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+      });
+      
+      const parts = formatter.formatToParts(utcDate);
+      const partMap: Record<string, number> = {};
+      for (const part of parts) {
+        if (part.type !== 'literal') {
+          partMap[part.type] = Number(part.value);
+        }
+      }
+      
+      const formattedUtc = Date.UTC(
+        partMap.year,
+        partMap.month - 1,
+        partMap.day,
+        partMap.hour,
+        partMap.minute,
+        partMap.second || 0
+      );
+      
+      const offsetMs = formattedUtc - utcDate.getTime();
+      return new Date(utcDate.getTime() - offsetMs);
+    } catch (e) {
+      console.warn(`Failed to parse timezone-naive date ${value} with timezone ${timezone}, falling back to default parsing:`, e);
+    }
+  }
+  
+  // Fallback
+  return new Date(value);
+}
+

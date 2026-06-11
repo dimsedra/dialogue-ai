@@ -9,6 +9,7 @@ export const updateEventTool = createTool({
     title: z.string().optional().describe("The new event title"),
     startTime: z.string().optional().describe("ISO-8601 start time"),
     endTime: z.string().optional().describe("ISO-8601 end time"),
+    timezone: z.string().optional().describe("The user's IANA timezone ID (e.g. 'Asia/Jakarta', 'UTC') to parse timestamps properly."),
     reminderOffset: z.number().optional().describe("Minutes before startTime to remind the user. Pass -1 to remove existing reminder."),
     eventType: z.string().optional().describe("'interval' or 'point'"),
     location: z.string().optional().describe("Optional new location"),
@@ -25,11 +26,12 @@ export const updateEventTool = createTool({
   }),
   outputSchema: z.object({ success: z.boolean(), eventId: z.string() }),
   execute: async (input) => {
+    const { parseDateTime } = await import('../../lib/jobs/dateUtils');
     const recurrence = input.recurrence ? {
       frequency: input.recurrence.frequency as "daily" | "weekly",
       interval: input.recurrence.interval,
       daysOfWeek: input.recurrence.daysOfWeek,
-      until: input.recurrence.until ? new Date(input.recurrence.until).getTime() : undefined,
+      until: input.recurrence.until ? parseDateTime(input.recurrence.until, input.timezone).getTime() : undefined,
     } : undefined;
 
     const { getPbClient } = await import('../../lib/pb-server');
@@ -39,8 +41,8 @@ export const updateEventTool = createTool({
 
     const updates: Record<string, any> = {};
     if (input.title !== undefined) updates.title = input.title;
-    if (input.startTime !== undefined) updates.startTime = new Date(input.startTime).getTime();
-    if (input.endTime !== undefined) updates.endTime = new Date(input.endTime).getTime();
+    if (input.startTime !== undefined) updates.startTime = parseDateTime(input.startTime, input.timezone).getTime();
+    if (input.endTime !== undefined) updates.endTime = parseDateTime(input.endTime, input.timezone).getTime();
     if (input.eventType !== undefined) updates.eventType = input.eventType;
     if (input.location !== undefined) updates.location = input.location;
     if (input.notes !== undefined) updates.notes = input.notes;

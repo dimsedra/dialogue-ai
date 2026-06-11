@@ -9,6 +9,7 @@ export const addEventTool = createTool({
     description: z.string().optional().describe("Optional description"),
     startTime: z.string().describe("ISO-8601 start time (24-hour format, e.g. '2026-05-15T14:00:00')"),
     endTime: z.string().optional().describe("Required when eventType is 'interval'. ISO-8601 end time (24-hour format)."),
+    timezone: z.string().describe("The user's IANA timezone ID (e.g. 'Asia/Jakarta', 'UTC') from ## Temporal Context to parse timestamps properly."),
     reminderOffset: z.number().optional().describe("Minutes before startTime to remind the user (e.g. 15)."),
     eventType: z.enum(["interval", "point"]).describe("'interval' for duration events or 'point' for momentary events"),
     location: z.string().optional().describe("Optional location"),
@@ -32,8 +33,9 @@ export const addEventTool = createTool({
   }),
   outputSchema: z.object({ eventId: z.string(), title: z.string() }),
   execute: async (input) => {
-    const startMs = new Date(input.startTime).getTime();
-    const endMs = input.endTime ? new Date(input.endTime).getTime() : undefined;
+    const { parseDateTime } = await import('../../lib/jobs/dateUtils');
+    const startMs = parseDateTime(input.startTime, input.timezone).getTime();
+    const endMs = input.endTime ? parseDateTime(input.endTime, input.timezone).getTime() : undefined;
     const recurrence = input.recurrence ? {
       frequency: input.recurrence.frequency as "daily" | "weekly",
       interval: input.recurrence.interval,

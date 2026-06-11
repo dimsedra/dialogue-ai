@@ -9,6 +9,7 @@ export const updateTaskTool = createTool({
     text: z.string().optional().describe("Updated text"),
     completed: z.boolean().optional().describe("Whether the task is finished"),
     dueDate: z.string().optional().describe("Updated ISO-8601 due date (24-hour, e.g. '2026-05-15T14:00:00')"),
+    timezone: z.string().optional().describe("The user's IANA timezone ID (e.g. 'Asia/Jakarta', 'UTC') to parse timestamps properly."),
     reminderOffset: z.number().optional().describe("Minutes before due date to remind the user. Pass -1 to remove existing reminder."),
     priority: z.enum(['low', 'medium', 'high']).optional(),
     category: z.string().optional(),
@@ -23,6 +24,7 @@ export const updateTaskTool = createTool({
     const user = pb.authStore.record?.id;
     if (!user) throw new Error("Unauthorized");
     
+    const { parseDateTime } = await import('../../lib/jobs/dateUtils');
     const updates: Record<string, any> = {};
     if (input.text !== undefined) updates.text = input.text;
     if (input.completed !== undefined) {
@@ -30,7 +32,8 @@ export const updateTaskTool = createTool({
       updates.completedAt = input.completed ? Date.now() : null;
     }
     if (input.dueDate !== undefined) {
-      updates.dueDate = new Date(input.dueDate).getTime();
+      const parsedDate = parseDateTime(input.dueDate, input.timezone);
+      updates.dueDate = parsedDate.getTime();
       updates.dueDateStr = input.dueDate.split('T')[0];
     }
     if (input.priority !== undefined) updates.priority = input.priority;

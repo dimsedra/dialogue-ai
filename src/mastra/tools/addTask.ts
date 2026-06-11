@@ -7,6 +7,7 @@ export const addTaskTool = createTool({
   inputSchema: z.object({
     text: z.string().describe("The task description"),
     dueDate: z.string().optional().describe("ISO-8601 due date/time (24-hour format, e.g. '2026-05-15T14:00:00')"),
+    timezone: z.string().describe("The user's IANA timezone ID (e.g. 'Asia/Jakarta', 'UTC') from ## Temporal Context to parse timestamps properly."),
     reminderOffset: z.number().optional().describe("Minutes before due date to remind the user (e.g. 15). Only valid if dueDate is provided."),
     priority: z.enum(['low', 'medium', 'high']).optional(),
     category: z.string().optional(),
@@ -24,7 +25,8 @@ export const addTaskTool = createTool({
     const user = pb.authStore.record?.id;
     if (!user) throw new Error("Unauthorized");
     
-    const dueDateMs = input.dueDate ? new Date(input.dueDate).getTime() : undefined;
+    const { parseDateTime } = await import('../../lib/jobs/dateUtils');
+    const dueDateMs = input.dueDate ? parseDateTime(input.dueDate, input.timezone).getTime() : undefined;
     const record = await pb.collection("tasks").create({
       user,
       text: input.text,

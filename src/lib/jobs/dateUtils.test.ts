@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { getPeriodRange, getPeriodLabel } from "./dateUtils";
+import { getPeriodRange, getPeriodLabel, parseDateTime } from "./dateUtils";
 
 describe("dateUtils", () => {
   const OriginalDate = global.Date;
@@ -69,6 +69,33 @@ describe("dateUtils", () => {
       
       // End cap is current time
       expect(endMs).toBe(Date.now());
+    });
+  });
+
+  describe("parseDateTime", () => {
+    it("handles ISO-8601 string with Z", () => {
+      const parsed = parseDateTime("2026-06-12T13:00:00Z");
+      expect(parsed.getTime()).toBe(1781269200000);
+    });
+
+    it("handles ISO-8601 string with positive offset", () => {
+      const parsed = parseDateTime("2026-06-12T20:00:00+07:00");
+      expect(parsed.getTime()).toBe(1781269200000);
+    });
+
+    it("handles ISO-8601 string with negative offset", () => {
+      const parsed = parseDateTime("2026-06-12T08:00:00-05:00");
+      expect(parsed.getTime()).toBe(1781269200000);
+    });
+
+    it("parses timezone-naive string in local/specified timezone", () => {
+      const parsed = parseDateTime("2026-06-12T20:00:00", "Asia/Jakarta");
+      expect(parsed.getTime()).toBe(1781269200000);
+    });
+
+    it("falls back to standard parser if no timezone or UTC", () => {
+      const parsed = parseDateTime("2026-06-12T13:00:00", "UTC");
+      expect(parsed.getTime()).toBe(1781269200000);
     });
   });
 });

@@ -108,7 +108,13 @@ export const searchHistoricalEntitiesTool = createTool({
         filter: filters.join(' && '),
         sort: '-dueDate'
       });
-      results.tasks = tasks.items;
+      results.tasks = tasks.items.map((t: any) => ({
+        id: t.id,
+        text: t.text,
+        dueDate: t.dueDate || undefined,
+        priority: t.priority || undefined,
+        completed: !!t.completed,
+      }));
     }
     
     if (input.type === 'events' || input.type === 'all') {
@@ -120,7 +126,13 @@ export const searchHistoricalEntitiesTool = createTool({
         filter: filters.join(' && '),
         sort: '-startTime'
       });
-      results.events = events.items;
+      results.events = events.items.map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        startTime: e.startTime,
+        endTime: e.endTime || undefined,
+        location: e.location || undefined,
+      }));
     }
     
     return results;
@@ -192,7 +204,16 @@ export const getTaskNotesTool = createTool({
     if (!user) throw new Error("Unauthorized");
     try {
       const record = await pb.collection("tasks").getOne(input.taskId);
-      return { notes: record.notes || 'No notes found.', task: record };
+      return {
+        notes: record.notes || 'No notes found.',
+        task: {
+          id: record.id,
+          text: record.text,
+          dueDate: record.dueDate || undefined,
+          priority: record.priority || undefined,
+          completed: !!record.completed,
+        }
+      };
     } catch (err) {
       return { notes: 'No notes found.', task: null };
     }
@@ -295,7 +316,15 @@ export const listWorkspacesTool = createTool({
     const user = pb.authStore.record?.id;
     if (!user) throw new Error("Unauthorized");
     const records = await pb.collection("workspaces").getFullList({ sort: '-createdAt' });
-    return { workspaces: records };
+    return {
+      workspaces: records.map((w: any) => ({
+        id: w.id,
+        name: w.name,
+        icon: w.icon,
+        color: w.color,
+        createdAt: w.createdAt,
+      }))
+    };
   },
   toModelOutput: (output: any) => {
     if (!output.workspaces?.length) return 'No workspaces found.';
@@ -428,7 +457,14 @@ export const listUnreadNotificationsTool = createTool({
       filter: `user = "${user}" && delivered = false`,
       sort: 'triggerAt',
     });
-    return { notifications: records.items };
+    return {
+      notifications: records.items.map((n: any) => ({
+        id: n.id,
+        kind: n.kind,
+        targetId: n.targetId,
+        triggerAt: n.triggerAt,
+      }))
+    };
   },
   toModelOutput: (output: any) => {
     if (!output.notifications?.length) return 'No unread notifications.';
