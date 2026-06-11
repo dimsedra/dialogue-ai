@@ -54,13 +54,13 @@ Every workspace in Dialogue is a simple folder on your disk—meaning tasks, eve
 * **Direct File Editing**: Since there is no proprietary database, you can edit your task markdown files or notes in VS Code or Obsidian, and the sync engine instantly reconciles the DB cache and RAG indexing. Share a workspace folder via Dropbox or Syncthing and two instances stay in sync with zero cloud infrastructure.
 
 ### Auditable Memory
-The agent remembers facts about you — your preferences, your projects, your working style — and writes them to `vault/system/memories.md`. You can open this file at any time and see everything the agent knows about you. Delete a line and the agent forgets it. Edit a line and the agent corrects itself instantly. Memories are automatically deduplicated and time-decayed so the most relevant ones surface first.
+The agent remembers facts about you — your preferences, your projects, your contacts — and writes them to `vault/system/memories.md`. You can open this file at any time and see everything the agent knows about you. Delete a line and the agent forgets it. Edit a line and the agent corrects itself instantly. Memories are automatically deduplicated, time-decayed, and retrieved semantically so the most relevant ones surface first.
 
 ### Dynamic Agent Personas
-Personas are Markdown files in `vault/personas/`. You can edit them directly to change how the agent behaves, or tell the agent to update them. Each persona has a strict character cap — when new preferences are added, the agent consolidates and compresses the prompt rather than stacking bullet points. Workspaces can have their own personas for context-isolated behavior.
+Personas are Markdown files in `vault/personas/`. You can edit them directly to change how the agent behaves, or tell the agent to update them. Each persona has a strict character cap — when new instructions or constraints are added, the agent consolidates and compresses the prompt rather than stacking bullet points. Workspaces can have their own personas for context-isolated behavior.
 
 ### Daily Logs & Behavioral Synthesis
-Dialogue replaces abstract personality scoring (OCEAN, etc.) with something simpler: a daily log file at `vault/daily-logs/YYYY-MM-DD.md` that tracks your habits, reflections, and activity. Every few days, the agent synthesizes these logs into a compact startup profile — concrete observations about how you work and what matters to you, not numbers on a psychometric scale. This runs on app open, not on a server schedule. No always-on infrastructure required.
+Dialogue replaces traditional psychometric scoring and abstract personality profiling with a timeline of habits, daily reflections, and workspace activities. Global Daily Logs (`vault/daily-logs/`) and Workspace Activity Logs track these dynamically. On app boot, if new logs exceed your threshold ($N$, default 7), Dialogue runs a brief startup refinement phase (displaying a "Synchronizing and Refining Profile" loader for a few seconds). This pass consolidates your working style, cognitive load, and traits into `vault/system/user_profile.md` (strictly under 2,000 characters), while delegating new static facts to `memories.md`. This runs entirely locally on startup, requiring no always-on server infrastructure.
 
 ### Self-Improving Playbooks
 When the agent completes a complex multi-step task, it compiles its tool calls, CLI commands, errors, and successful configuration into a reusable Playbook — stored as a Markdown file in `vault/playbooks/`. The next time a similar task appears, the agent retrieves the relevant playbook via vector search and uses it as a template. The more you use Dialogue, the sharper its execution gets — and you can edit or delete any playbook at any time.
@@ -91,21 +91,23 @@ Dialogue doesn't treat memory as a flat list of text strings in a hidden databas
 
 | Layer | What it holds | Where it lives | How it works |
 |---|---|---|---|
-| **Startup Profile** | Standing instructions, identity, workspace-specific standing rules, communication preferences | `vault/system/user_profile.md` | Compiled dynamically from Daily Logs. Always loaded in the system instructions on session boot. |
-| **Auditable Memory** | Explicit facts, user preferences, projects, context, and client details | `vault/system/memories.md` | Bullet points in Markdown. Edit a bullet to correct a fact; delete a line to force the agent to forget. Synced via file watcher. |
-| **Behavioral Understanding** | Long-term patterns—how you respond to pressure, peak productivity hours, cognitive load thresholds | Synthesized across conversations and daily summaries | Refined locally through log analysis when you open the app. Free-form observations, not abstract numbers. |
+| **Startup Profile** | Standing instructions, style, personality, scheduling guidelines, workspace rules | `vault/system/user_profile.md` | Compiled dynamically from Daily Logs. Strictly limited to **2,000 characters** (max 7 items). Always loaded in the system prompt on session boot. |
+| **Auditable Memory** | Explicit facts, user preferences, projects, context, and client details | `vault/system/memories.md` | Bullet points in Markdown. Edit a bullet to correct a fact; delete a line to force the agent to forget. Synced via file watcher. No character cap. |
+| **Workspace-Scoped Context** | Specialized workspace facts, project constraints, and local activity timelines | `vault/workspaces/[Workspace-Name]/workspace_memories.md` | Loaded dynamically alongside global context *only* when that workspace is active, ensuring strict context isolation. |
 
 ### The Graph Synergy: Memory Ingestion & In-Process Retrieval
 
 Dialogue's memory system is active and highly relational, designed around a **transparent, hybrid-retrieval pipeline**:
 
 * **Note-to-Memory Ingestion**: When you save a note in `vault/notes/`, the sync engine segments the document, embeds the individual text chunks using local Xenova models, and links them as memories with `source_type: "Note"`. If you edit or delete the note file, the sync engine re-indexes the changed chunks or cascade-deletes the memories automatically.
-* **Declarative Graph Relations**: Relationships are written directly in frontmatter (e.g. `mentions: [{type: Task, id: "xyz"}]` or `source_id: "abc"`). The sync engine parses these declarations to construct edges in the local SQLite/PocketBase cache, allowing the agent to perform **graph traversals** (e.g., retrieving notes linked to a task, or events related to a project memory).
+* **Hybrid Dual-Graph Model**:
+  * **Logical Graph (Structured Edges)**: Explicit relationships written in frontmatter (e.g. `blocked_by: [task-123]`) or in-text wiki-links (`[[note-456]]`) are cached in SQLite. The agent queries them via a **recursive CTE walker** that traverses up to 3 hops with distance-based score decay, resolving exact workflows and scheduling constraints.
+  * **Semantic Graph (Mastra GraphRAG)**: Chunks stored in `memories` are linked dynamically **in-memory at query time** by computing cosine similarity. The agent searches this conceptual web using a **Random Walk with Restart (RWR)** algorithm, finding conceptual matches across notes and logs even without shared keywords.
 * **Hybrid Ranking (Cosine + Recency Decay)**: Pure vector search misses the dimension of time. Dialogue ranks memories by combining semantic cosine similarity with **Time-Decay Recency**:
   $$\text{Final Score} = \text{Cosine Similarity} \times e^{-\lambda t}$$
   This ensures that a relevant task or note from yesterday has a higher presence in the conversation than a note from 6 months ago, while preserving critical old memories.
-* **Semantic Deduplication**: To keep the context window clear of redundant entries (e.g., repeating the same preference phrased slightly differently), the search engine performs cross-cosine comparisons on retrieved memories. Matches with a mutual similarity score $> 0.80$ are automatically deduplicated.
-* **Dynamic Persona Refinement**: The agent's instructions (stored in `vault/personas/`) are compiled and compressed under a strict character cap. When the agent learns new standing preferences, it refines and merges the prompt rather than simply appending bullet points, keeping instruction-following sharp.
+* **Semantic Deduplication**: To keep the context window clear of redundant entries, the search engine performs cross-cosine comparisons on retrieved memories. Matches with a mutual similarity score $> 0.80$ are automatically deduplicated.
+* **App-Start Profile Synthesis**: Rather than accumulating logs indefinitely or using background crons, Dialogue consolidates daily logs on startup. The LLM updates your active `user_profile.md` to reflect recent productivity states, stress levels, and styles (keeping it under the 2,000-character cap), while separating static declarative facts and appending them to `memories.md` where they are indexed for RAG.
 
 Together, they mean the agent on day 365 knows you far better than the agent on day 1 — without you having to do anything except use it.
 
@@ -150,11 +152,12 @@ Dialogue is packaged as a Tauri desktop application. The Tauri shell (Rust) spaw
 
 Dialogue unifies all memory writes through a single vault-first contract. The source of truth is a Markdown file on disk — the database cache is a derived index for fast retrieval:
 
-1. The agent writes or updates `vault/system/memories.md` (or `vault/workspaces/[Name]/workspace_memories.md` for workspace-scoped memories).
-2. The sync engine's file watcher detects the change and computes a SHA-256 hash of each memory chunk.
-3. Each changed chunk is embedded by a local Xenova model (multilingual-e5-small, 384 dimensions, L2-normalized) and upserted into the database cache alongside the hash and file path.
-4. Hash comparison prevents redundant embedding. Stale entries are deleted when chunks are removed from the file.
-5. At retrieval time, results are ranked by a combined score of cosine similarity and recency — recent memories naturally gain presence. Near-duplicate results (cosine > 0.80) are deduplicated to keep context clean.
+1. **The agent writes or updates** `vault/system/memories.md` (or `vault/workspaces/[Name]/workspace_memories.md` for workspace-scoped memories).
+2. **The sync engine's file watcher** detects the change and computes a SHA-256 hash of each memory chunk.
+3. **Each changed chunk is embedded** by a local Xenova model (multilingual-e5-small, 384 dimensions, L2-normalized) and upserted into the database cache alongside the hash and file path.
+4. **Hash comparison prevents redundant embedding**. Stale entries are deleted when chunks are removed from the file.
+5. **Startup Consolidation** runs on app boot to scan daily logs, consolidating cognitive and working styles into the `user_profile.md` under a strict 2,000-character cap while delegating facts to `memories.md`.
+6. **At retrieval time**, results are ranked by a combined score of cosine similarity and recency — recent memories naturally gain presence. Near-duplicate results (cosine > 0.80) are deduplicated to keep context clean.
 
 ---
 

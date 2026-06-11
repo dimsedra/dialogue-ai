@@ -82,9 +82,9 @@ dialogue-vault/
 |---|---|---|
 | 2.1 | **Sync engine** (Rust, `notify` crate) — file watcher, YAML frontmatter parser, SHA-256 change tracking, SQLite cache upsert | [`sync_ingestion_engine.md`](future-impl/sync_ingestion_engine.md) |
 | 2.2 | **Workspace isolation** — per-workspace vault subdirectories, scope-pinned memory lookup, zero-cloud collaboration via folder sync (Dropbox / Syncthing / Git) | [`workspace_vault_layout.md`](future-impl/workspace_vault_layout.md) |
-| 2.3 | **Auditable memory** — `vault/system/memories.md` as editable source of truth, time-decay ranking, semantic deduplication | [`auditable_memory.md`](future-impl/auditable_memory.md) |
+| 2.3 | **Auditable memory** — `vault/system/memories.md` as editable source of truth, time-decay ranking, semantic deduplication | [`unified_memory_architecture.md`](future-impl/unified_memory_architecture.md) |
 | 2.4 | **Dynamic agent personas** — `vault/personas/` as editable Markdown, length-capped prompt refinement on updates | [`dynamic_agent_personas.md`](future-impl/dynamic_agent_personas.md) |
-| 2.5 | **Daily log synthesis** — `vault/daily-logs/YYYY-MM-DD.md`, N-log behavioral profile refinement on app open | [`daily_log_synthesis.md`](future-impl/daily_log_synthesis.md) |
+| 2.5 | **Daily log synthesis** — `vault/daily-logs/YYYY-MM-DD.md`, N-log behavioral profile refinement on app open | [`unified_memory_architecture.md`](future-impl/unified_memory_architecture.md) |
 | 2.6 | **Self-improving playbooks** — agent compiles multi-step traces into `vault/playbooks/`, retrieved via vector search | [`task_playbook_synthesis.md`](future-impl/task_playbook_synthesis.md) |
 | 2.7 | **Build & deploy** — bundle PocketBase + Node + Python sidecars into single Tauri installer | [`build_and_deploy.md`](future-impl/build_and_deploy.md) |
 
