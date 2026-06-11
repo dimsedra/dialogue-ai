@@ -66,6 +66,7 @@ let cachedClient: PocketBase | null = null;
 export function getPbClient(): PocketBase {
   if (cachedClient === null) {
     cachedClient = new PocketBase(resolvePbUrl());
+    cachedClient.autoCancellation(false);
   }
   return cachedClient;
 }

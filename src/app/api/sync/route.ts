@@ -1,0 +1,88 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { join } from 'path';
+import PocketBase from 'pocketbase';
+import { verifyPbToken } from '@/lib/pb-actions/auth';
+import { getPbAdmin } from '@/lib/pb-server-admin';
+import { syncVaultFileToDb, resolveEntityFromPath } from '@/lib/vault/sync';
+import { existsSync } from 'fs';
+import { deleteSourceMemories } from '@/lib/graph/ingest';
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const auth = req.headers.get('authorization');
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null;
+  const cronSecret = process.env.INTERNAL_CRON_SECRET || 'default_local_secret';
+
+  let pb: PocketBase;
+  
+  if (!token) {
+    return NextResponse.json({ ok: false, error: 'Missing Bearer token' }, { status: 401 });
+  }
+
+  // Support both background jobs/watchers (using INTERNAL_CRON_SECRET) and authenticated user tokens
+  if (token === cronSecret) {
+    try {
+      pb = await getPbAdmin();
+    } catch (err) {
+      return NextResponse.json({ ok: false, error: 'Failed to authenticate admin' }, { status: 500 });
+    }
+  } else {
+    const user = await verifyPbToken(token);
+    if (!user) {
+      return NextResponse.json({ ok: false, error: 'Invalid or expired token' }, { status: 401 });
+    }
+    const pbUrl = process.env.NEXT_PUBLIC_PB_URL ?? 'http://127.0.0.1:8090';
+    pb = new PocketBase(pbUrl);
+    pb.autoCancellation(false);
+    pb.authStore.save(token, null);
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const filePath = (body as { filePath?: string })?.filePath;
+  if (!filePath) {
+    return NextResponse.json({ ok: false, error: 'Missing filePath in body' }, { status: 400 });
+  }
+
+  // Resolve vaultRootPath
+  let devFallbackPath = process.env.NODE_ENV === 'development' ? process.env.DEV_LOCAL_PATH : null;
+  if (devFallbackPath && devFallbackPath.startsWith('"') && devFallbackPath.endsWith('"')) {
+    devFallbackPath = devFallbackPath.slice(1, -1);
+  }
+  const vaultRootPath = req.headers.get('x-vault-path') || devFallbackPath || join(process.cwd(), 'dialogue-vault');
+
+  try {
+    const info = resolveEntityFromPath(filePath, vaultRootPath);
+    if (!info) {
+      return NextResponse.json({ ok: true, status: 'ignored', reason: 'Path outside vault or invalid collection' });
+    }
+
+    if (existsSync(filePath)) {
+      await syncVaultFileToDb(filePath, pb, vaultRootPath);
+      return NextResponse.json({ ok: true, status: 'synced', entity: info });
+    } else {
+      // File deleted, let's prune it
+      console.log(`[Sync Engine API] File deleted, pruning:`, filePath);
+      const { id, collectionName } = info;
+      const sourceType = collectionName === 'tasks' ? 'Task' : 'Event';
+      
+      // Cascade delete memories and DB records
+      await deleteSourceMemories(pb, id, sourceType);
+      try {
+        await pb.collection(collectionName).delete(id);
+      } catch {
+        // Already deleted or not found
+      }
+      
+      return NextResponse.json({ ok: true, status: 'pruned', entity: info });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Sync Engine API] Sync error:', msg);
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+  }
+}

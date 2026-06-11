@@ -11,6 +11,8 @@ import { verifyPbToken } from '@/lib/pb-actions/auth';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { parseMcpServers, createMcpClient, getToolsets } from '@/mastra/mcp/client';
+import { reconcileVault, vaultRequestContext } from '@/lib/vault/sync';
+
 
 export async function POST(req: Request) {
   try {
@@ -35,6 +37,7 @@ export async function POST(req: Request) {
     let pbClient: PocketBase | null = null;
     if (isPb) {
       pbClient = new PocketBase(process.env.NEXT_PUBLIC_PB_URL || "http://127.0.0.1:8090");
+      pbClient.autoCancellation(false);
       if (authToken) {
         const verifiedUser = await verifyPbToken(authToken);
         if (verifiedUser) {
@@ -204,20 +207,30 @@ export async function POST(req: Request) {
       params.messages = [scopeMsg, ...(params.messages || [])];
     }
     
+    // Trigger background reconciliation on boot/API hit
+    if (isPb && pbClient) {
+      reconcileVault(vaultRootPath, pbClient).catch((err) => {
+        console.error('[Sync Engine] Background reconciliation failed:', err);
+      });
+    }
+
     // Run agent execution within the PB authenticated context
     const executeStream = async () => {
-      return handleChatStream({
-        mastra: tempMastra,
-        agentId: 'dialogueAgent',
-        sendReasoning: true,
-        version: 'v6',
-        params: {
-          ...params,
-          toolsets: mcpToolsets || undefined,
-          maxSteps: 20,
-        },
+      return vaultRequestContext.run({ vaultRootPath, activeWorkspace, basePath }, () => {
+        return handleChatStream({
+          mastra: tempMastra,
+          agentId: 'dialogueAgent',
+          sendReasoning: true,
+          version: 'v6',
+          params: {
+            ...params,
+            toolsets: mcpToolsets || undefined,
+            maxSteps: 20,
+          },
+        });
       });
     };
+
 
     let stream;
     if (isPb && pbClient) {

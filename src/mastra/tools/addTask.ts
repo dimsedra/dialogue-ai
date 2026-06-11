@@ -21,44 +21,67 @@ export const addTaskTool = createTool({
   }),
   execute: async (input) => {
     const { getPbClient } = await import('../../lib/pb-server');
+    const { getVaultContext, syncVaultFileToDb } = await import('../../lib/vault/sync');
+    const { serializeMarkdownFile } = await import('../../lib/vault/parser');
+    const { parseDateTime } = await import('../../lib/jobs/dateUtils');
+    const { existsSync, mkdirSync, writeFileSync } = await import('fs');
+    const { join } = await import('path');
+
     const pb = getPbClient();
     const user = pb.authStore.record?.id;
     if (!user) throw new Error("Unauthorized");
     
-    const { parseDateTime } = await import('../../lib/jobs/dateUtils');
-    const dueDateMs = input.dueDate ? parseDateTime(input.dueDate, input.timezone).getTime() : undefined;
-    const record = await pb.collection("tasks").create({
-      user,
-      text: input.text,
-      dueDate: dueDateMs,
-      dueDateStr: input.dueDate ? input.dueDate.split('T')[0] : undefined,
-      reminderOffset: input.reminderOffset,
-      priority: input.priority,
-      category: input.category,
-      notes: input.notes,
-      progress: input.progress,
-      statusHook: input.statusHook,
-      completed: false,
-      createdAt: Date.now(),
-    });
+    const { vaultRootPath, basePath } = getVaultContext();
 
+    // Generate a new stable 15-character alphanumeric ID
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    const taskId = Array.from({ length: 15 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+
+    const dueDateMs = input.dueDate ? parseDateTime(input.dueDate, input.timezone).getTime() : undefined;
+    const dueDateStr = input.dueDate ? new Date(parseDateTime(input.dueDate, input.timezone)).toISOString() : undefined;
+
+    const metadata: Record<string, any> = {
+      id: taskId,
+      title: input.text,
+      status: 'todo',
+      completed: false,
+      priority: input.priority || 'medium',
+      category: input.category || '',
+      dueDate: dueDateStr || null,
+      progress: input.progress || 0,
+      statusHook: input.statusHook || '',
+      reminderOffset: input.reminderOffset !== undefined ? input.reminderOffset : null,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+    };
+
+    const notes = input.notes || '';
+    const fileContent = serializeMarkdownFile(metadata, notes);
+
+    const tasksDir = join(basePath, 'tasks');
+    if (!existsSync(tasksDir)) {
+      mkdirSync(tasksDir, { recursive: true });
+    }
+
+    const filePath = join(tasksDir, `task-${taskId}.md`);
+    writeFileSync(filePath, fileContent, 'utf8');
+
+    // Sync to DB cache (which handles RAG embedding)
+    await syncVaultFileToDb(filePath, pb, vaultRootPath);
+
+    // Schedule notification in DB if due date and reminder offset are set
     if (dueDateMs && input.reminderOffset !== undefined && input.reminderOffset >= 0) {
       const triggerAt = Math.max(Date.now(), dueDateMs - input.reminderOffset * 60 * 1000);
       await pb.collection("scheduled_notifications").create({
         user,
         kind: "task_remind",
-        targetId: record.id,
+        targetId: taskId,
         triggerAt,
         delivered: false,
         createdAt: Date.now(),
       });
     }
 
-    if (input.notes) {
-      const { ingestTaskNotes } = await import('../../lib/graph/ingest');
-      await ingestTaskNotes(pb, record.id, input.notes);
-    }
-
-    return { taskId: record.id, text: input.text };
+    return { taskId, text: input.text };
   }
 });

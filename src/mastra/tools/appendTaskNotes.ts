@@ -16,18 +16,47 @@ export const appendTaskNotesTool = createTool({
     const newEntry = `[${timestamp}]\n- ${input.notes.trim()}`;
 
     const { getPbClient } = await import('../../lib/pb-server');
-    const { ingestTaskNotes } = await import('../../lib/graph/ingest');
-    const pb = getPbClient();
-    const user = pb.authStore.record?.id;
-    if (!user) throw new Error("Unauthorized");
+    const { getVaultContext, syncVaultFileToDb } = await import('../../lib/vault/sync');
+    const { parseMarkdownFile, serializeMarkdownFile } = await import('../../lib/vault/parser');
+    const { existsSync, readFileSync, writeFileSync } = await import('fs');
+    const { join } = await import('path');
 
-    const task = await pb.collection("tasks").getOne(input.taskId);
-    const currentNotes = task.notes ? task.notes.trim() : "";
-    const updatedNotes = currentNotes ? `${currentNotes}\n\n${newEntry}` : newEntry;
+    try {
+      const pb = getPbClient();
+      const { vaultRootPath, basePath } = getVaultContext();
 
-    await pb.collection("tasks").update(input.taskId, { notes: updatedNotes });
-    await ingestTaskNotes(pb, input.taskId, updatedNotes);
+      // Normalize taskId by stripping any redundant "task-" prefix
+      let cleanTaskId = input.taskId;
+      if (cleanTaskId.startsWith('task-')) {
+        cleanTaskId = cleanTaskId.slice(5);
+      }
 
-    return { success: true, taskId: input.taskId };
+      const filePath = join(basePath, 'tasks', `task-${cleanTaskId}.md`);
+      console.log('[appendTaskNotes Tool] Resolved filePath:', filePath);
+
+      if (!existsSync(filePath)) {
+        console.error('[appendTaskNotes Tool] Task file not found:', filePath);
+        throw new Error(`Task file not found: tasks/task-${cleanTaskId}.md`);
+      }
+
+      const fileContent = readFileSync(filePath, 'utf8');
+      const { metadata, body } = parseMarkdownFile(fileContent);
+
+      const currentNotes = body ? body.trim() : "";
+      const updatedNotes = currentNotes ? `${currentNotes}\n\n${newEntry}` : newEntry;
+
+      const updatedContent = serializeMarkdownFile(metadata, updatedNotes);
+      writeFileSync(filePath, updatedContent, 'utf8');
+      console.log('[appendTaskNotes Tool] Updated file content on disk.');
+
+      // Sync to DB
+      await syncVaultFileToDb(filePath, pb, vaultRootPath);
+      console.log('[appendTaskNotes Tool] Synced with DB successfully.');
+
+      return { success: true, taskId: cleanTaskId };
+    } catch (err) {
+      console.error('[appendTaskNotes Tool] Error during execution:', err);
+      throw err;
+    }
   }
 });

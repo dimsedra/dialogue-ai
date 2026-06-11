@@ -662,7 +662,18 @@ function ActiveChat({
   const pendingScopeRef = useRef<Scope | null | undefined>(undefined);
 
   const { messages: aiMessages, setMessages, sendMessage: sendVercelMessage, status, addToolApprovalResponse } = useChat({
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    sendAutomaticallyWhen: ({ messages }) => {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage?.role !== 'assistant') return false;
+      const parts = lastMessage.parts ?? [];
+      const toolParts = parts.filter((p: any) => p.type === 'dynamic-tool' || (typeof p.type === 'string' && p.type.startsWith('tool-')));
+      if (toolParts.length === 0) return false;
+      // Only auto-submit when the user has responded to a pending approval request,
+      // and there are no other pending approval requests waiting for action.
+      const hasResponded = toolParts.some((p: any) => (p as any).state === 'approval-responded');
+      const hasPending = toolParts.some((p: any) => (p as any).state === 'approval-requested');
+      return hasResponded && !hasPending;
+    },
     transport: new DefaultChatTransport({ 
       api: `/api/chat?sessionId=${activeSessionId || ""}&provider=${provider}&modelId=${getActiveModelName}`,
       fetch: async (input, init) => {
@@ -710,27 +721,51 @@ function ActiveChat({
         const existingDbId = message.id ? sdkToDbIdRef.current.get(message.id) : undefined;
         let convexId;
 
-        if (existingDbId) {
-          convexId = await updateMessage(existingDbId, {
-            text: textContent || "(tool execution)",
-            reasoning,
-            toolCalls,
-          });
-        } else {
-          convexId = await sendMessage({
-            sessionId: activeSessionId,
-            text: textContent || "(tool execution)",
-            author: "AI",
-            reasoning,
-            toolCalls,
-          });
-          if (convexId && message.id) {
-            sdkToDbIdRef.current.set(message.id, convexId);
+        try {
+          if (existingDbId) {
+            try {
+              convexId = await updateMessage(existingDbId, {
+                text: textContent || "(tool execution)",
+                reasoning,
+                toolCalls,
+              });
+            } catch (err: any) {
+              // Handle database 404 (stale cache/deleted record) by falling back to message creation
+              if (err?.status === 404 || String(err).includes("404")) {
+                console.warn(`[onFinish] Message record ${existingDbId} not found. Creating a new message in DB cache.`);
+                sdkToDbIdRef.current.delete(message.id);
+                convexId = await sendMessage({
+                  sessionId: activeSessionId,
+                  text: textContent || "(tool execution)",
+                  author: "AI",
+                  reasoning,
+                  toolCalls,
+                });
+                if (convexId && message.id) {
+                  sdkToDbIdRef.current.set(message.id, convexId);
+                }
+              } else {
+                throw err;
+              }
+            }
+          } else {
+            convexId = await sendMessage({
+              sessionId: activeSessionId,
+              text: textContent || "(tool execution)",
+              author: "AI",
+              reasoning,
+              toolCalls,
+            });
+            if (convexId && message.id) {
+              sdkToDbIdRef.current.set(message.id, convexId);
+            }
           }
-        }
 
-        if (convexId && message.id) {
-          idMapRef.current.set(convexId, message.id);
+          if (convexId && message.id) {
+            idMapRef.current.set(convexId, message.id);
+          }
+        } catch (err) {
+          console.error("[onFinish] Failed to save/update assistant message in DB cache:", err);
         }
 
         // Trigger AI title generation on first response (idempotent — skips if title already set)
@@ -789,6 +824,7 @@ function ActiveChat({
       const hasConvexCaughtUp = messages.length > aiMessages.length;
 
       if (hasConvexCaughtUp || aiMessages.length === 0) {
+        const seenIds = new Set<string>();
         const mappedHistory = messages.map(m => {
           const parts: any[] = [];
           if (m.reasoning) {
@@ -815,7 +851,12 @@ function ActiveChat({
             });
           }
 
-          const sdkId = idMapRef.current.get(m._id) || m._id;
+          let sdkId = idMapRef.current.get(m._id) || m._id;
+          if (seenIds.has(sdkId)) {
+            sdkId = `${sdkId}-dup-${m._id}`;
+          }
+          seenIds.add(sdkId);
+
           return {
             id: sdkId,
             role: (m.author === "User" ? "user" : "assistant") as "user" | "assistant",
@@ -937,7 +978,8 @@ function ActiveChat({
     if (!activeSessionId) return undefined;
     if (messagesPaginated.status === "LoadingFirstPage") return undefined;
     
-    return aiMessages.map((m) => {
+    const seenIds = new Set<string>();
+    return aiMessages.map((m, idx) => {
       const textParts = m.parts ? m.parts.filter(p => p.type === 'text') : [];
       const reasoningParts = m.parts ? m.parts.filter(p => p.type === 'reasoning') : [];
       
@@ -949,8 +991,14 @@ function ActiveChat({
         ? reasoningParts.map(p => (p as any).reasoning || (p as any).text).join('\n\n')
         : (m as any).reasoning || undefined;
 
+      let msgId = m.id;
+      if (seenIds.has(msgId)) {
+        msgId = `${msgId}-dup-${idx}`;
+      }
+      seenIds.add(msgId);
+
       return {
-        _id: m.id,
+        _id: msgId,
         author: m.role === "user" ? "User" : "AI",
         text,
         reasoning,
