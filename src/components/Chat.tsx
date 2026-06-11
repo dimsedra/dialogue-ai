@@ -863,22 +863,23 @@ function ActiveChat({
     if (activeSyncRef) {
       activeSyncRef.current = async () => {
         const syncText = "Sync my workspace.";
-        await sendMessage({
-          sessionId: activeSessionId,
-          text: syncText,
-          author: "User",
-          brief: true,
-          timezoneOffset: new Date().getTimezoneOffset(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          provider,
-        });
-
         setIsTyping(true);
-
         try {
-          await sendVercelMessage({
-            text: syncText,
-          });
+          const aiPromise = sendVercelMessage({ text: syncText });
+          await Promise.all([
+            sendMessage({
+              sessionId: activeSessionId,
+              text: syncText,
+              author: "User",
+              brief: true,
+              timezoneOffset: new Date().getTimezoneOffset(),
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              provider,
+            }),
+            aiPromise
+          ]);
+        } catch (err) {
+          console.error("Failed to sync workspace:", err);
         } finally {
           setIsTyping(false);
         }
@@ -898,16 +899,18 @@ function ActiveChat({
     const trigger = async () => {
       setIsTyping(true);
       try {
-        await sendMessage({
-          sessionId: activeSessionId,
-          text: pending.text,
-          author: "User",
-          timezoneOffset: new Date().getTimezoneOffset(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          provider,
-        });
-
-        await sendVercelMessage({ text: pending.text });
+        const aiPromise = sendVercelMessage({ text: pending.text });
+        await Promise.all([
+          sendMessage({
+            sessionId: activeSessionId,
+            text: pending.text,
+            author: "User",
+            timezoneOffset: new Date().getTimezoneOffset(),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            provider,
+          }),
+          aiPromise
+        ]);
       } catch (err) {
         console.error("Failed to trigger AI for initial message:", err);
       } finally {
