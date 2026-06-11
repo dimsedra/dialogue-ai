@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { usePbPersonasList, usePbSessionRename, usePbSessionTogglePin, PbChatSessions, PbWorkspaces } from "@/pb-compat";
 
 interface SessionSidebarProps {
+  isLoaded?: boolean;
   sessions: PbChatSessions[] | undefined;
   workspaces: PbWorkspaces[] | undefined;
   activeSessionId: string | null;
@@ -22,6 +23,7 @@ interface SessionSidebarProps {
 }
 
 export function SessionSidebar({
+  isLoaded,
   sessions,
   workspaces,
   activeSessionId,
@@ -208,7 +210,11 @@ export function SessionSidebar({
         opacity: isLargeViewport ? (showHistory ? 1 : 0) : (showHistory ? 1 : 0),
         x: isLargeViewport ? 0 : (showHistory ? 0 : "-100%")
       }}
-      transition={isLargeViewport ? { type: "spring", damping: 30, stiffness: 250 } : { duration: 0 }}
+      transition={
+        isLoaded && isLargeViewport
+          ? { type: "spring", damping: 30, stiffness: 250 }
+          : { duration: 0 }
+      }
       className={`h-full border-[#2a2723] bg-[#1a1814] shrink-0 z-100 overflow-hidden ${
         isLargeViewport ? "relative border-r" : "fixed left-0 shadow-[20px_0_40px_rgba(0,0,0,0.5)]"
       }`}

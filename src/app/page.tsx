@@ -122,12 +122,14 @@ export default function Home() {
     const savedHistory = localStorage.getItem("dialogue_show_history");
     const savedTasks = localStorage.getItem("dialogue_show_tasks");
 
-    queueMicrotask(() => {
-      if (savedHistory !== null) setShowHistory(savedHistory === "true");
-      if (savedTasks !== null) setShowTasks(savedTasks === "true");
-      // 2. Mark as loaded so we don't immediately overwrite with defaults
+    if (savedHistory !== null) setShowHistory(savedHistory === "true");
+    if (savedTasks !== null) setShowTasks(savedTasks === "true");
+
+    // 2. Mark as loaded after a short delay so the initial layout settles without transition animations
+    const timer = setTimeout(() => {
       setIsLoaded(true);
-    });
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -201,10 +203,11 @@ export default function Home() {
 
           {/* Main Content Area */}
           <motion.div
-            layout
+            layout={isLoaded ? "x" : false}
             className="flex-1 flex h-full overflow-hidden relative"
           >
             <Chat
+              isLoaded={isLoaded}
               activeSessionId={activeSessionId as any}
               setActiveSessionIdAction={setActiveSessionId as any}
               activeWorkspaceId={activeWorkspaceId as any}
@@ -244,7 +247,7 @@ export default function Home() {
               x: isLargeViewport ? 0 : showTasks ? 0 : "100%",
             }}
             transition={
-              isLargeViewport
+              isLoaded && isLargeViewport
                 ? { type: "spring", damping: 30, stiffness: 250 }
                 : { duration: 0 }
             }

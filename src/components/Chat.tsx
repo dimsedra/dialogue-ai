@@ -79,6 +79,7 @@ type AIProvider = string;
 type ProviderConfig = { apiKey?: string; baseUrl?: string; modelId?: string };
 type ProviderConfigs = Record<string, ProviderConfig>;
 type ChatProps = {
+  isLoaded?: boolean;
   activeSessionId: string | null;
   setActiveSessionIdAction: (id: string | null) => void;
   activeWorkspaceId: string | undefined;
@@ -98,6 +99,7 @@ type ChatProps = {
 };
 
 export function Chat({
+  isLoaded,
   activeSessionId,
   setActiveSessionIdAction,
   activeWorkspaceId,
@@ -424,6 +426,7 @@ export function Chat({
 
       {/* Sessions Sidebar */}
       <SessionSidebar
+        isLoaded={isLoaded}
         sessions={sessions}
         workspaces={workspaces}
         activeSessionId={activeSessionId}
@@ -443,7 +446,7 @@ export function Chat({
 
       {/* Main Content Area */}
       <motion.div
-        layout
+        layout={isLoaded ? "x" : false}
         className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
       >
         {!activeWorkspaceId && !activeSessionId ? (
