@@ -12,7 +12,7 @@ describe("resolvePbUrl", () => {
   });
 
   test("returns the default when NEXT_PUBLIC_PB_URL is unset", () => {
-    expect(resolvePbUrl()).toBe("http://localhost:8090");
+    expect(resolvePbUrl()).toBe("http://127.0.0.1:8090");
   });
 
   test("returns the env value when NEXT_PUBLIC_PB_URL is set", () => {
@@ -22,7 +22,7 @@ describe("resolvePbUrl", () => {
 
   test("falls back to default when NEXT_PUBLIC_PB_URL is empty string", () => {
     process.env.NEXT_PUBLIC_PB_URL = "";
-    expect(resolvePbUrl()).toBe("http://localhost:8090");
+    expect(resolvePbUrl()).toBe("http://127.0.0.1:8090");
   });
 });
 
@@ -47,7 +47,7 @@ describe("getPbClient", () => {
 
   test("client's baseUrl falls back to the default when env is unset", () => {
     const client = getPbClient();
-    expect(client.baseUrl).toBe("http://localhost:8090");
+    expect(client.baseUrl).toBe("http://127.0.0.1:8090");
   });
 
   test("__resetPbClientForTests() forces the next call to rebuild", () => {

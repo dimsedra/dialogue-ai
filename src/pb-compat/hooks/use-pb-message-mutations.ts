@@ -80,3 +80,41 @@ export function usePbMessageSend() {
     return record.id;
   };
 }
+
+export function usePbMessageUpdate() {
+  const { user } = useAuth();
+  const mutate = useMutation<PbMessages>({ collection: "messages", kind: "update" });
+  return async (
+    id: string,
+    args: {
+      text?: string;
+      timezoneOffset?: number;
+      toolCall?: { name: string; args: Record<string, unknown>; result?: unknown };
+      toolCalls?: { name: string; args: Record<string, unknown>; result?: unknown }[];
+      reasoning?: string;
+      storageId?: string;
+      fileType?: string;
+      fileName?: string;
+      attachments?: { storageId: string; fileName: string; fileType: string }[];
+      scope?: { type: "date" | "task" | "event" | "habit"; id: string; title: string };
+    },
+  ) => {
+    if (!user) throw new Error("Unauthorized");
+    const record = await mutate({
+      id,
+      record: {
+        text: args.text,
+        timezoneOffset: args.timezoneOffset,
+        toolCall: args.toolCall || undefined,
+        toolCalls: args.toolCalls || undefined,
+        reasoning: args.reasoning || undefined,
+        storageId: args.storageId || undefined,
+        fileType: args.fileType || undefined,
+        fileName: args.fileName || undefined,
+        attachments: args.attachments || undefined,
+        scope: args.scope || undefined,
+      },
+    });
+    return record.id;
+  };
+}

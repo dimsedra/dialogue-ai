@@ -26,7 +26,7 @@ let _serverPb: PocketBase | null = null;
 function getServerPb(): PocketBase {
   if (!_serverPb) {
     _serverPb = new PocketBase(
-      process.env.NEXT_PUBLIC_PB_URL ?? "http://localhost:8090",
+      process.env.NEXT_PUBLIC_PB_URL ?? "http://127.0.0.1:8090",
     );
   }
   return _serverPb;

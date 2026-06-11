@@ -9,7 +9,7 @@ export async function getPbAdmin(): Promise<PocketBase> {
     }
   }
 
-  const pbUrl = process.env.NEXT_PUBLIC_PB_URL ?? "http://localhost:8090";
+  const pbUrl = process.env.NEXT_PUBLIC_PB_URL ?? "http://127.0.0.1:8090";
   const pb = new PocketBase(pbUrl);
 
   const email = process.env.PB_ADMIN_EMAIL || "admin@dialogue.local";

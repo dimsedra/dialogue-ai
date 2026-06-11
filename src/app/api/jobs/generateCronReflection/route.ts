@@ -45,7 +45,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Request-scoped PB client authenticated as the calling user.
-  const pbUrl = process.env.NEXT_PUBLIC_PB_URL ?? "http://localhost:8090";
+  const pbUrl = process.env.NEXT_PUBLIC_PB_URL ?? "http://127.0.0.1:8090";
   const userPb = new PocketBase(pbUrl);
   userPb.authStore.save(token, null);
 
@@ -64,10 +64,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // 204 on no-op (skipped / failed) so the caller can treat all
-  // non-200/204 as real errors. 200 on created.
+  // 200 on no-op (skipped / failed) or created.
   if (result.status === "created") {
     return NextResponse.json({ ok: true, result }, { status: 200 });
   }
-  return NextResponse.json({ ok: true, result }, { status: 204 });
+  return NextResponse.json({ ok: true, result }, { status: 200 });
 }

@@ -73,7 +73,7 @@ export { usePbHabitCreate, usePbHabitUpdate, usePbHabitLog, usePbHabitArchive, u
 export { usePbDismissCard, usePbSnoozeCard, usePbMuteCardType, usePbMarkCardShown } from "./hooks/use-pb-dashboard-mutations";
 export { usePbUpdateProfile, usePbUpdatePreferences, usePbAddSubscription, usePbRemoveSubscription } from "./hooks/use-pb-profile-mutations";
 export { usePbMemoryCreate, usePbMemoryUpdate, usePbMemoryDelete } from "./hooks/use-pb-memory-mutations";
-export { usePbMessageSend } from "./hooks/use-pb-message-mutations";
+export { usePbMessageSend, usePbMessageUpdate } from "./hooks/use-pb-message-mutations";
 export { usePbImageSave, usePbImageDelete } from "./hooks/use-pb-image-mutations";
 export { usePbReflectionSaveComment, usePbReflectionToggleShare } from "./hooks/use-pb-reflection-mutations";
 

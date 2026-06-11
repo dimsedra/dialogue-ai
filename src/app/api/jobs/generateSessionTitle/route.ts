@@ -77,7 +77,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // construct a fresh client (don't reuse the auth-refresh singleton
   // from `lib/pb-actions/auth.ts`) so the data-query rules apply
   // (`user = @request.auth.id`).
-  const pbUrl = process.env.NEXT_PUBLIC_PB_URL ?? "http://localhost:8090";
+  const pbUrl = process.env.NEXT_PUBLIC_PB_URL ?? "http://127.0.0.1:8090";
   const userPb = new PocketBase(pbUrl);
   userPb.authStore.save(token, null);
 
@@ -95,10 +95,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // 204 on no-op (skipped / failed) so the caller can treat all
-  // non-200/204 as real errors. 200 on updated with the new title.
+  // 200 on no-op (skipped / failed) or updated with the new title.
   if (result.status === "updated") {
     return NextResponse.json({ ok: true, result }, { status: 200 });
   }
-  return NextResponse.json({ ok: true, result }, { status: 204 });
+  return NextResponse.json({ ok: true, result }, { status: 200 });
 }

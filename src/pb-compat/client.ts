@@ -33,7 +33,7 @@
 
 import PocketBase from "pocketbase";
 
-const DEFAULT_PB_URL = "http://localhost:8090";
+const DEFAULT_PB_URL = "http://127.0.0.1:8090";
 
 /**
  * Resolves the PB server URL from the env. Order of precedence:

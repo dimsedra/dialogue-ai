@@ -12,7 +12,7 @@ export const ingestNotes: PbActionHandler<IngestNotesArgs, { success: boolean }>
   ctx
 ) => {
   const pb = new PocketBase(
-    process.env.NEXT_PUBLIC_PB_URL ?? "http://localhost:8090",
+    process.env.NEXT_PUBLIC_PB_URL ?? "http://127.0.0.1:8090",
   );
   pb.authStore.save(ctx.token, null);
 

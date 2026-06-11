@@ -8,6 +8,7 @@ import {
   usePbPersonasList,
   usePbWorkspaceCreate,
   usePbMessageSend,
+  usePbMessageUpdate,
   usePbSessionCreate,
   usePbSessionDelete,
   usePbTaskCreate,
@@ -38,7 +39,7 @@ import {
 import { api } from "@/pb-compat/api";
 import { useAuth } from "@/pb-compat/auth";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Scope } from "./chat/types";
 import { CreateWorkspaceModal } from "./chat/CreateWorkspaceModal";
@@ -128,6 +129,7 @@ export function Chat({
 
   const createWorkspace = usePbWorkspaceCreate();
   const sendMessage = usePbMessageSend();
+  const updateMessage = usePbMessageUpdate();
   const createSession = usePbSessionCreate();
   const deleteSession = usePbSessionDelete();
   const triggerAutoTitle = async ({ sessionId }: { sessionId: string }) => {
@@ -477,6 +479,7 @@ export function Chat({
             signOut={signOut}
             handleProviderChange={handleProviderChange}
             sendMessage={sendMessage}
+            updateMessage={updateMessage}
             addTask={addTask}
             updateTask={updateTask}
             addEvent={addEvent}
@@ -555,6 +558,7 @@ interface ActiveChatProps {
   signOut: () => void;
   handleProviderChange: (p: AIProvider) => void;
   sendMessage: any;
+  updateMessage: any;
   addTask: any;
   updateTask: any;
   addEvent: any;
@@ -593,6 +597,7 @@ function ActiveChat({
   signOut,
   handleProviderChange,
   sendMessage,
+  updateMessage,
   addTask,
   updateTask,
   addEvent,
@@ -612,12 +617,14 @@ function ActiveChat({
 }: ActiveChatProps) {
 
   const idMapRef = useRef<Map<string, string>>(new Map());
+  const sdkToDbIdRef = useRef<Map<string, string>>(new Map());
   const [localScopes, setLocalScopes] = useState<Record<string, Scope>>({});
   const [isTyping, setIsTyping] = useState(false);
 
-  // Clear local scopes when activeSessionId changes
+  // Clear local scopes and mappings when activeSessionId changes
   useEffect(() => {
     setLocalScopes({});
+    sdkToDbIdRef.current.clear();
   }, [activeSessionId]);
 
   const messagesPaginated = usePbPaginatedQuery(
@@ -652,7 +659,7 @@ function ActiveChat({
   const pendingScopeRef = useRef<Scope | null | undefined>(undefined);
 
   const { messages: aiMessages, setMessages, sendMessage: sendVercelMessage, status, addToolApprovalResponse } = useChat({
-    sendAutomaticallyWhen: () => true,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     transport: new DefaultChatTransport({ 
       api: `/api/chat?sessionId=${activeSessionId || ""}&provider=${provider}&modelId=${getActiveModelName}`,
       fetch: async (input, init) => {
@@ -697,13 +704,27 @@ function ActiveChat({
             }))
           : undefined;
 
-        const convexId = await sendMessage({
-          sessionId: activeSessionId,
-          text: textContent || "(tool execution)",
-          author: "AI",
-          reasoning,
-          toolCalls,
-        });
+        const existingDbId = message.id ? sdkToDbIdRef.current.get(message.id) : undefined;
+        let convexId;
+
+        if (existingDbId) {
+          convexId = await updateMessage(existingDbId, {
+            text: textContent || "(tool execution)",
+            reasoning,
+            toolCalls,
+          });
+        } else {
+          convexId = await sendMessage({
+            sessionId: activeSessionId,
+            text: textContent || "(tool execution)",
+            author: "AI",
+            reasoning,
+            toolCalls,
+          });
+          if (convexId && message.id) {
+            sdkToDbIdRef.current.set(message.id, convexId);
+          }
+        }
 
         if (convexId && message.id) {
           idMapRef.current.set(convexId, message.id);
@@ -770,10 +791,26 @@ function ActiveChat({
           if (m.reasoning) {
             const splitReasoning = m.reasoning.split('\n[---DIALOGUE_REASONING_SPLIT---]\n');
             for (const rText of splitReasoning) {
-              parts.push({ type: "reasoning" as const, text: rText });
+              parts.push({
+                type: "reasoning" as const,
+                reasoning: rText,
+                text: rText,
+                details: [],
+              });
             }
           }
           parts.push({ type: "text" as const, text: m.text });
+
+          if (m.toolCalls && m.toolCalls.length > 0) {
+            m.toolCalls.forEach((tc: any, index: number) => {
+              parts.push({
+                type: "tool-call" as const,
+                toolCallId: tc.id || `${m._id}-tool-${index}`,
+                toolName: tc.name,
+                args: tc.args,
+              });
+            });
+          }
 
           const sdkId = idMapRef.current.get(m._id) || m._id;
           return {
