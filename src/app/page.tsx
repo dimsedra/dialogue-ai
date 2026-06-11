@@ -181,8 +181,11 @@ export default function Home() {
   return (
     <>
       <main
-          style={{ height: initialHeight ? `${initialHeight}px` : "100svh" }}
-          className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c]"
+          style={{
+            height: initialHeight ? `${initialHeight}px` : "100svh",
+            opacity: isLoaded ? 1 : 0
+          }}
+          className="fixed inset-0 flex overflow-hidden bg-[#0f0e0c] transition-opacity duration-150 ease-out"
         >
           {/* Backdrops for Mobile Overlay */}
           <AnimatePresence>
