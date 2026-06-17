@@ -49,15 +49,15 @@ dialogue-folio/
 
 ### Work Items
 
-| Item | What | Reference |
-|---|---|---|
-| 1.1 | **Sync engine** (Rust, `notify` crate) — file watcher, YAML frontmatter parser, SHA-256 change tracking, SQLite cache upsert | [`sync_ingestion_engine.md`](future-impl/folio-system/sync_ingestion_engine.md) |
-| 1.2 | **Workspace isolation** — per-workspace folio subdirectories, scope-pinned memory lookup, zero-cloud collaboration via folder sync (Dropbox / Syncthing / Git) | [`workspace_folio_layout.md`](future-impl/folio-system/workspace_folio_layout.md) |
-| 1.3 | **Auditable memory** — `folio/system/memories.md` as editable source of truth, time-decay ranking, semantic deduplication | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
-| 1.4 | **Dynamic agent personas** — `folio/personas/` as editable Markdown, length-capped prompt refinement on updates | [`dynamic_agent_personas.md`](future-impl/agent-orchestration/dynamic_agent_personas.md) |
-| 1.5 | **Daily log synthesis** — `folio/daily-logs/YYYY-MM-DD.md`, N-log behavioral profile refinement on app open | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
-| 1.6 | **Self-improving playbooks** — agent compiles multi-step traces into `folio/playbooks/`, retrieved via vector search | [`task_playbook_synthesis.md`](future-impl/folio-system/task_playbook_synthesis.md) |
-| 1.7 | **Build & deploy** — bundle PocketBase + Node + Python sidecars into single Electron installer | — |
+| Item | Status | What | Reference |
+|---|---|---|---|
+| 1.1 | **Partial** | **Sync engine** — Node-based file watcher, YAML frontmatter parser, SHA-256 change tracking, PocketBase cache upsert (implemented in `src/lib/folio/sync.ts`) | [`sync_ingestion_engine.md`](future-impl/folio-system/sync_ingestion_engine.md) |
+| 1.2 | **Done** | **Workspace isolation** — per-workspace folio subdirectories (`workspaces/[slug]-[id]`), scope-pinned memory lookup, folder operations, and deletion/archive capabilities | [`workspace_folio_layout.md`](future-impl/folio-system/workspace_folio_layout.md) |
+| 1.3 | **Done** | **Auditable memory** — `folio/system/memories.md` and workspace-scoped memories as editable sources of truth, local vector embeddings, and semantic deduplication | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
+| 1.4 | **Pending** | **Dynamic agent personas** — `folio/personas/` as editable Markdown, length-capped prompt refinement on updates | [`dynamic_agent_personas.md`](future-impl/agent-orchestration/dynamic_agent_personas.md) |
+| 1.5 | **Pending** | **Daily log synthesis** — `folio/daily-logs/YYYY-MM-DD.md`, N-log behavioral profile refinement on app open | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
+| 1.6 | **Pending** | **Self-improving playbooks** — agent compiles multi-step traces into `folio/playbooks/`, retrieved via vector search | [`task_playbook_synthesis.md`](future-impl/folio-system/task_playbook_synthesis.md) |
+| 1.7 | **In Progress**| **Build & deploy** — bundle PocketBase + Node + Python sidecars into single Electron installer | — |
 
 ### Migration Path
 
@@ -78,15 +78,15 @@ Existing PB data migrates to folio files via an export-on-upgrade script: read e
 
 ### Work Items
 
-| Item | What | Depends On | Reference |
-|---|---|---|---|
-| 2.1 | **MCP Client infrastructure** — connect to external MCP servers (STDIO sidecars, HTTP) with lifecycle management (spawn, health-check, kill) | `@mastra/mcp` install | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#3-mcp) |
-| 2.2 | **MCP Sidecar lifecycle** — Electron manages Python/Node child processes alongside PocketBase; health-check, restart, graceful shutdown | 2.1 | — |
-| 2.3 | **Workflow engine** — replace ad-hoc agent tool-chaining with `createWorkflow` + `createStep` for compound operations: daily log synthesis, playbook generation, task execution loops | `@mastra/core` (already installed) | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#1-workflows) |
-| 2.4 | **Workspace integration** — wire `@mastra/core/workspace` pointed at `folio/` for native file read/write/list/grep, sandboxed CLI execution, and BM25/vector/hybrid search | `@mastra/core` (already installed), Phase 1 (1.1, 1.2) | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#4-workspace) |
-| 2.4b | **Workspace Skills** — configure a `skills/` directory on the Workspace. Agent gains `skill`, `skill_read`, `skill_search` tools automatically, discovering any community skill installed as a folder with `SKILL.md` + scripts. Follows the [Agent Skills](https://agentskills.io) open standard. Includes authoring **`dialogue-core` skill** — a first-party skill always loaded on the Workspace that teaches the agent folio conventions (directory layout, YAML frontmatter schemas, memory ingestion pipeline, graph edge wiring). Community skills return raw results; `dialogue-core` shows the agent how to store them properly in Dialogue's ecosystem. | 2.4 | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#4-workspace) |
-| 2.5 | **Structured agents** — agent approval (human-in-the-loop), processors (message intercept/transform), guardrails, supervisor agents for multi-agent orchestration | 2.1–2.4 | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#6-structured-agents) |
-| 2.6 | **Studio integration** — use Mastra Studio for interactive dev, inspection, and debugging | — | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#2-editor) |
+| Item | Status | What | Depends On | Reference |
+|---|---|---|---|---|
+| 2.1 | **Done** | **MCP Client infrastructure** — connect to external MCP servers (STDIO sidecars, HTTP) with lifecycle management | `@mastra/mcp` install | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#3-mcp) |
+| 2.2 | **Pending** | **MCP Sidecar lifecycle** — Electron manages Python/Node child processes alongside PocketBase; health-check, restart, graceful shutdown | 2.1 | — |
+| 2.3 | **Pending** | **Workflow engine** — replace ad-hoc agent tool-chaining with `createWorkflow` + `createStep` for compound operations: daily log synthesis, playbook generation, task execution loops | `@mastra/core` (already installed) | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#1-workflows) |
+| 2.4 | **Done** | **Workspace integration** — wire `@mastra/core/workspace` pointed at `folio/` for native file read/write/list/grep, sandboxed CLI execution, and BM25/vector/hybrid search | `@mastra/core` (already installed), Phase 1 (1.1, 1.2) | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#4-workspace) |
+| 2.4b | **Done** | **Workspace Skills** — configure a `skills/` directory on the Workspace. Agent gains `skill` tools discovering community skills. Author first-party **`dialogue-core` skill** always loaded on Workspace for layout schemas, pipelines, and graph edges. | 2.4 | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#4-workspace) |
+| 2.5 | **Partial** | **Structured agents** — agent approval (human-in-the-loop snapshot cards wired), processors, guardrails, supervisor agents for multi-agent orchestration | 2.1–2.4 | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#6-structured-agents) |
+| 2.6 | **Pending** | **Studio integration** — use Mastra Studio for interactive dev, inspection, and debugging | — | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#2-editor) |
 
 ### Deliverable
 
