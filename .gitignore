@@ -70,6 +70,7 @@ scratch/
 
 # PocketBase data (local database, user files, generated types)
 /pb_data/
+/pocketbase/
 
 # PocketBase test database
 /test-db

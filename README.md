@@ -129,12 +129,12 @@ The agent learns deeply personal things about you. That information should belon
 
 ## Technical Architecture
 
-Dialogue is packaged as a Tauri desktop application. The Tauri shell (Rust) spawns and supervises three child processes on startup, then opens a webview pointed at the local Next.js server.
+Dialogue is packaged as an Electron desktop application. The Electron Main process spawns and supervises three background processes on startup, then opens a window pointed at the local Next.js server.
 
 | Process | Role |
 |---|---|
-| **Tauri shell (Rust)** | Lifecycle, system tray, OS notifications, on-open reminder scan, port coordination. The single binary the user downloads. |
-| **Sync Engine** | Filesystem file watcher (via `notify` crate), Markdown parser with YAML frontmatter extraction, SHA-256 change tracking, embedding generation, desync reconciliation on startup. Bridges vault files to the database cache. |
+| **Electron Main Process** | Lifecycle, system tray, OS notifications, on-open reminder scan, port coordination. The desktop app shell wrapper. |
+| **Sync Engine** | Filesystem file watcher (via `chokidar` package), Markdown parser with YAML frontmatter extraction, SHA-256 change tracking, embedding generation, desync reconciliation on startup. Bridges vault files to the database cache. |
 | **PocketBase (Go)** | Cached store, reactive subscriptions, auth, file storage, on-device DB. Single executable, no Docker. |
 | **Next.js (Node)** | UI, Mastra agent, embedding model loader (Xenova multilingual-e5-small), chat API, periodic reflection jobs. |
 
@@ -146,7 +146,7 @@ Dialogue is packaged as a Tauri desktop application. The Tauri shell (Rust) spaw
 * **Server-side embeddings, not browser-side** — the embedding model loads once in the Next.js process. The webview is lightweight, no ~120MB model in the browser bundle.
 * **In-process vector search** — embeddings and cosine similarity search run inside PocketBase/SQLite. Brute-force is fast at personal scale (sub-50ms for 10K memories). No separate vector service to install.
 * **No always-on scheduler** — periodic work (weekly reflection, daily log synthesis, behavioral profile refinement) runs on app open, not on a server clock. The relationship is present when the user is present.
-* **Native OS notifications** — Tauri uses the system notification API and a system tray icon. No web push subscription required for the desktop app.
+* **Native OS notifications** — Electron uses the system notification API and a system tray icon. No web push subscription required for the desktop app.
 
 ### Memory architecture
 
@@ -165,10 +165,10 @@ Dialogue unifies all memory writes through a single vault-first contract. The so
 
 | Layer | Technology |
 |---|---|
-| **Desktop shell** | Tauri (Rust) |
+| **Desktop shell** | Electron |
 | **Framework** | Next.js 16, React 19 |
 | **Source of truth** | Local filesystem vault (Markdown files with YAML frontmatter) |
-| **Sync engine** | Tauri file watcher (`notify` crate), AST parser, SHA-256 change tracking |
+| **Sync engine** | Node.js file watcher (`chokidar`), AST parser, SHA-256 change tracking |
 | **Database cache** | PocketBase (single Go binary, on-device) |
 | **AI orchestration** | Mastra (agent workflows, tool calling) |
 | **AI providers** | Vercel AI SDK — Gemini, OpenAI, Anthropic, Cohere, DeepSeek, Groq, Mistral, xAI, plus local models via Ollama / LM Studio |
@@ -176,7 +176,7 @@ Dialogue unifies all memory writes through a single vault-first contract. The so
 | **Embedding model** | Xenova multilingual-e5-small (384d, runs on-device) |
 | **Styling** | Tailwind CSS v4, Framer Motion |
 | **Auth** | PocketBase native (email/password) |
-| **Notifications** | Tauri OS notifications (system tray) |
+| **Notifications** | Electron OS notifications (system tray) |
 
 ---
 
@@ -185,7 +185,7 @@ Dialogue unifies all memory writes through a single vault-first contract. The so
 ### Prerequisites
 
 * Node.js v20+
-* Rust toolchain (for Tauri builds)
+* Node.js (for Electron builds)
 * macOS, Windows, or Linux
 
 ### 1. Project Initialization
@@ -210,17 +210,17 @@ Generate the encryption key with:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-See `.env.example` for the full list of supported variables. The desktop wrapper (Tauri) sets the localhost endpoints automatically — no manual service URLs to configure.
+See `.env.example` for the full list of supported variables. The desktop wrapper (Electron) sets the localhost endpoints automatically — no manual service URLs to configure.
 
 ### 3. Running Locally
 
 ```bash
-npm run tauri dev
+npm run electron:dev
 ```
 
-This single command starts the PocketBase binary, the Next.js dev server with the embedding model loaded, and opens the Tauri webview. Open the app and it works.
+This single command starts the PocketBase binary, the Next.js dev server with the embedding model loaded, and opens the Electron window. Open the app and it works.
 
-For browser-only development (no Tauri shell, useful for UI iteration):
+For browser-only development (no Electron shell, useful for UI iteration):
 
 ```bash
 # Terminal 1: Start PocketBase
@@ -235,7 +235,7 @@ Then open `http://localhost:3000` and point the app at your local PocketBase ins
 ### 4. Building the Desktop App
 
 ```bash
-npm run tauri build
+npm run electron:build
 ```
 
 Produces a `.dmg` (macOS), `.exe` (Windows), or `.AppImage` (Linux). The user double-clicks the installer and the app is ready.
@@ -246,9 +246,9 @@ Produces a `.dmg` (macOS), `.exe` (Windows), or `.AppImage` (Linux). The user do
 
 Dialogue is a long-term project organized into three sequential phases. See [`docs/PROJECT_TIMELINE.md`](docs/PROJECT_TIMELINE.md) for the full phased plan with dependency graph and work items.
 
-**Phase 1 — Mastra Orchestration:** Exploit Mastra's full capabilities — MCP sidecar lifecycle, workflow engine, Workspace integration, structured agents (approval, guardrails, supervisors).
+**Phase 1 — Vault System:** Filesystem source of truth with sync engine. Tasks, events, memories, personas, playbooks, daily logs as editable Markdown files. PB demoted to database cache.
 
-**Phase 2 — Vault System:** Filesystem source of truth with sync engine. Tasks, events, memories, personas, playbooks, daily logs as editable Markdown files. PB demoted to database cache.
+**Phase 2 — Mastra Orchestration:** Exploit Mastra's full capabilities — MCP sidecar lifecycle, workflow engine, Workspace integration, structured agents (approval, guardrails, supervisors).
 
 **Phase 3 — Add-on Features:** Notes (BlockNote editor + vault-native storage), Deep Research (GPT Researcher as Python MCP sidecar), Community Skills (last30days and the entire Agent Skills ecosystem via Workspace).
 

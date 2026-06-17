@@ -2,6 +2,7 @@
   "name": "dialogue-app",
   "version": "0.1.0",
   "private": true,
+  "main": "main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -15,9 +16,8 @@
     "test:smoke:dashboard": "node scripts/smoke-pb-dashboard.mjs",
     "test:smoke:jobs": "node scripts/smoke-pb-jobs.mjs",
     "test:e2e:backend": "node scripts/e2e-pb-backend.mjs",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "electron:dev": "electron . --dev",
+    "electron:build": "next build && electron-builder"
   },
   "dependencies": {
     "@ai-sdk/alibaba": "^1.0.25",
@@ -86,12 +86,13 @@
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
     "@tailwindcss/postcss": "^4",
-    "@tauri-apps/cli": "^2.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/web-push": "^3.6.4",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
