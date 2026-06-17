@@ -26,7 +26,7 @@ export function getFolioContext(): FolioContext {
 
 export interface EntityInfo {
   id: string;
-  collectionName: 'tasks' | 'events' | 'memories';
+  collectionName: 'tasks' | 'events' | 'memories' | 'daily_logs';
   workspaceId: string | null;
 }
 
@@ -56,6 +56,9 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
     if (parts[0] === 'tasks' || parts[0] === 'events') {
       collectionName = parts[0] as 'tasks' | 'events';
       filename = parts[1];
+    } else if (parts[0] === 'daily-logs' && parts[1].endsWith('.md')) {
+      const id = parts[1].slice(0, -3); // remove .md
+      return { id, collectionName: 'daily_logs', workspaceId: null };
     } else if (parts[0] === 'system' && parts[1] === 'memories.md') {
       return { id: 'global', collectionName: 'memories', workspaceId: null };
     } else if (parts[1] === 'workspace_memories.md') {
@@ -281,6 +284,8 @@ export async function syncFolioFileToDb(
     await ingestEventNotes(pb, id, body, outcome);
   } else if (collectionName === 'memories') {
     await syncMemoriesFileToDb(filePath, pb, folioRootPath);
+  } else if (collectionName === 'daily_logs') {
+    await syncDailyLogFileToDb(filePath, pb, id);
   }
 }
 
@@ -555,4 +560,227 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   }
 
   console.log('[Sync Engine] Folio reconciliation completed.');
+}
+
+// --- Daily Log Sync helpers and streak functions ---
+
+function parseHabitsFromMarkdown(content: string): Map<string, boolean> {
+  const habitsMap = new Map<string, boolean>();
+  const lines = content.split('\n');
+  let inHabitsSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#') && trimmed.toLowerCase().includes('habit')) {
+      inHabitsSection = true;
+      continue;
+    }
+    if (inHabitsSection && trimmed.startsWith('#') && !trimmed.toLowerCase().includes('habit')) {
+      inHabitsSection = false;
+    }
+
+    if (inHabitsSection) {
+      const match = trimmed.match(/^-\s*\[([ xX])\]\s*(.+)$/);
+      if (match) {
+        const checked = match[1].toLowerCase() === 'x';
+        const habitName = match[2].trim();
+        habitsMap.set(habitName, checked);
+      }
+    }
+  }
+  return habitsMap;
+}
+
+const dateParts = (ds: string) => {
+  const [y, m, d] = ds.split('-').map(Number);
+  return { y, m: m - 1, d };
+};
+
+const utcDate = (ds: string) => {
+  const { y, m, d } = dateParts(ds);
+  return new Date(Date.UTC(y, m, d));
+};
+
+const formatYMD = (dt: Date) =>
+  `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+
+const addDays = (ds: string, n: number): string => {
+  const { y, m, d } = dateParts(ds);
+  return formatYMD(new Date(Date.UTC(y, m, d + n)));
+};
+
+const daysBetween = (a: string, b: string): number => {
+  const aMs = Date.UTC(...(Object.values(dateParts(a)) as [number, number, number]));
+  const bMs = Date.UTC(...(Object.values(dateParts(b)) as [number, number, number]));
+  return Math.round((aMs - bMs) / (24 * 60 * 60 * 1000));
+};
+
+const getDayOfWeek = (ds: string): number => utcDate(ds).getUTCDay();
+
+function calculateNewStreak(
+  habit: {
+    frequency: 'daily' | 'custom';
+    frequencyConfig?: { daysOfWeek?: number[] };
+    currentStreak: number;
+    longestStreak: number;
+    lastLoggedDate?: string;
+  },
+  logDateString: string,
+  logStatus: 'completed' | 'skipped',
+  skippedDates: Set<string>
+): { currentStreak: number; longestStreak: number } {
+  if (!habit.lastLoggedDate) {
+    const initialStreak = logStatus === 'completed' ? 1 : 0;
+    return {
+      currentStreak: initialStreak,
+      longestStreak: Math.max(initialStreak, habit.longestStreak),
+    };
+  }
+
+  const diffDays = daysBetween(logDateString, habit.lastLoggedDate);
+
+  if (diffDays <= 0) {
+    return {
+      currentStreak: habit.currentStreak,
+      longestStreak: habit.longestStreak,
+    };
+  }
+
+  let preserved = true;
+  if (diffDays > 1) {
+    for (let i = 1; i < diffDays; i++) {
+      const cursorDateStr = addDays(habit.lastLoggedDate, i);
+
+      let isScheduled = true;
+      if (habit.frequency === 'custom' && habit.frequencyConfig?.daysOfWeek) {
+        isScheduled = habit.frequencyConfig.daysOfWeek.includes(getDayOfWeek(cursorDateStr));
+      }
+
+      if (isScheduled && !skippedDates.has(cursorDateStr)) {
+        preserved = false;
+        break;
+      }
+    }
+  }
+
+  if (logStatus === 'skipped') {
+    const nextStreak = preserved ? habit.currentStreak : 0;
+    return {
+      currentStreak: nextStreak,
+      longestStreak: Math.max(nextStreak, habit.longestStreak),
+    };
+  } else {
+    const nextStreak = preserved ? habit.currentStreak + 1 : 1;
+    return {
+      currentStreak: nextStreak,
+      longestStreak: Math.max(nextStreak, habit.longestStreak),
+    };
+  }
+}
+
+export async function syncDailyLogFileToDb(
+  filePath: string,
+  pb: PocketBase,
+  dateString: string
+): Promise<void> {
+  if (!existsSync(filePath)) return;
+
+  const content = readFileSync(filePath, 'utf8');
+  const parsedHabits = parseHabitsFromMarkdown(content);
+
+  // Resolve user ID
+  let userId = pb.authStore.record?.id;
+  if (!userId) {
+    const users = await pb.collection('users').getFullList({ limit: 1 });
+    if (users.length > 0) {
+      userId = users[0].id;
+    }
+  }
+  if (!userId) {
+    console.warn('[Sync Engine] No active user found for daily log sync:', filePath);
+    return;
+  }
+
+  // Fetch all active habits for the user
+  const habits = await pb.collection('habits').getFullList({
+    filter: `user = "${userId}" && archived = false`,
+  });
+
+  for (const habit of habits) {
+    if (!parsedHabits.has(habit.name)) continue;
+
+    const checked = parsedHabits.get(habit.name)!;
+    const status = checked ? 'completed' : 'skipped';
+
+    // Check if there is an existing log for this date and habit
+    const existingList = await pb.collection('habit_logs').getList(1, 1, {
+      filter: `habit = "${habit.id}" && dateString = "${dateString}"`,
+    });
+    const existingLog = existingList.items[0];
+
+    let updated = false;
+    if (existingLog) {
+      if (existingLog.status !== status) {
+        await pb.collection('habit_logs').update(existingLog.id, {
+          status,
+          timestamp: Date.now(),
+        });
+        updated = true;
+      }
+    } else {
+      await pb.collection('habit_logs').create({
+        user: userId,
+        habit: habit.id,
+        timestamp: Date.now(),
+        dateString,
+        status,
+      });
+      updated = true;
+    }
+
+    if (updated) {
+      // Recalculate streak
+      const logsList = await pb.collection('habit_logs').getFullList({
+        filter: `habit = "${habit.id}"`,
+      });
+      const logs = logsList.sort((a, b) => a.dateString.localeCompare(b.dateString));
+
+      let currentStreak = 0;
+      let longestStreak = 0;
+      let lastLoggedDate: string | undefined = undefined;
+
+      const skippedDates = new Set<string>(
+        logs.filter((l) => l.status === 'skipped').map((l) => l.dateString)
+      );
+
+      const freqConfig = typeof habit.frequencyConfig === 'string'
+        ? JSON.parse(habit.frequencyConfig)
+        : habit.frequencyConfig;
+
+      for (const log of logs) {
+        const result = calculateNewStreak(
+          {
+            frequency: habit.frequency as 'daily' | 'custom',
+            frequencyConfig: freqConfig,
+            currentStreak,
+            longestStreak,
+            lastLoggedDate,
+          },
+          log.dateString,
+          log.status as 'completed' | 'skipped',
+          skippedDates
+        );
+        currentStreak = result.currentStreak;
+        longestStreak = result.longestStreak;
+        lastLoggedDate = log.dateString;
+      }
+
+      await pb.collection('habits').update(habit.id, {
+        currentStreak,
+        longestStreak,
+        lastLoggedDate,
+        lastLoggedAt: Date.now(),
+      });
+    }
+  }
 }

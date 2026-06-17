@@ -48,52 +48,92 @@ To ensure the agent behaves consistently, avoids context window bloat, and prese
 
 ---
 
-## 2. Behavioral Profile Refinement (Daily Logs & App Startup)
+## 2. The 3rd-Person Watcher Agent & Cognitive Ingestion Pipeline
 
-Dialogue replaces abstract personality indexing with a concrete timeline of habits, reflections, and workspace activities.
+To prevent prompt bloat and reduce cognitive overhead on the primary conversational companion, Dialogue uses a dedicated **3rd-Person Watcher Agent** that operates above the conversation loop. 
+
+The Watcher Agent is configured using the user's preferred task model (configured in Settings) and performs two crucial roles per turn:
+
+1. **Proactive Retrieval (Pre-Turn)**: Before the primary agent generates a response, the Watcher reads the latest user message and conversation context. It decides if historical memories or user profile traits are needed, formulates targeted vector/graph queries, and injects relevant context. This prevents passive, keyword-only RAG.
+2. **Real-time Ingestion (Post-Turn)**: Once a conversation turn completes, the Watcher runs in the background. It extracts any new user facts to write to `memories.md` (checking for contradictions/overrides) and writes **Raw Behavioral Clues** directly to the current day's log file on disk.
+
+```
+       ┌────────────────────────┐
+       │          User          │
+       └───────────┬────────────┘
+                   │
+                   ▼ (1. Message Sent)
+       ┌────────────────────────┐
+       │   3rd Person Watcher   │ ◄───[Vector RAG / memories.md]
+       └───────────┬────────────┘
+                   │ (2. Proactive memory injection & context prep)
+                   ▼
+       ┌────────────────────────┐
+       │     Primary Agent      │
+       └───────────┬────────────┘
+                   │ (3. Conversational Response)
+                   ▼
+       ┌────────────────────────┐
+       │          User          │
+       └───────────┬────────────┘
+                   │
+                   ▼ (4. Turn completes)
+       ┌────────────────────────┐
+       │   3rd Person Watcher   │ ───► [Saves new semantic memories]
+       └────────────────────────┘ ───► [Writes raw behavior clues in real time]
+```
+
+---
+
+## 3. Daily Log Structure & Refinement Pipeline
+
+Dialogue replaces abstract personality indexing with a concrete timeline of habits, reflections, and raw behavioral clues.
 
 ### A. Divided Daily Log Structure
-To preserve privacy and support zero-cloud folder sharing, the daily log is split into two specialized files:
-1.  **Global Daily Log (`vault/daily-logs/YYYY-MM-DD.md`)**: Captures personal journal entries, habits, and global task/event activities.
+The daily log has **no character limit** and scales dynamically based on the day's activity level. It is split into two specialized files:
+
+1.  **Global Daily Log (`vault/daily-logs/YYYY-MM-DD.md`)**: Captures personal journal entries, habits, completed global tasks, events, and raw behavioral observations of the day.
 2.  **Workspace Activity Log (`vault/workspaces/[Workspace-Name]/activity/YYYY-MM-DD.md`)**: Tracks technical work logs, tool execution traces, playbooks, and tasks specific to that workspace.
 
-### B. Refinement Pipeline
-Dialogue refines the user's behavioral profile on a deterministic schedule driven by a startup catch-up pipeline:
+#### Global Daily Log Format (`vault/daily-logs/YYYY-MM-DD.md`)
+```markdown
+---
+date: YYYY-MM-DD
+type: daily-log
+last_modified: TIMESTAMP
+---
+
+# Daily Log - YYYY-MM-DD
+
+## Today's Habits
+- [x] Meditation
+- [ ] Workout (Skipped: rain)
+
+## Raw Behavioral Clues & Observations
+*Written in real-time by the Watcher Agent:*
+- User began deep-work debugging task-123 at 23:45. Showed high stamina but noted fatigue towards 01:15.
+- Expressed preference for minimal explanations; rejected suggestions for architectural rewrites.
+
+## Chat Activity & Reflected Thoughts
+- **Global (Session: 'Life Goals')**: Chatted about long-term productivity plans.
+
+## Tasks Completed
+- [x] task-456: Buy groceries (Completed: 18:15)
+
+## Events & Outcomes
+- [x] event-789: Weekly Team Sync (Time: 10:00 - 10:45)
+```
+
+### B. Refinement Pipeline (Weekly Refinement)
+The **Reflector Agent** refines the user's behavioral profile on a deterministic schedule:
 
 1.  **Configurable Threshold ($N$)**: The user defines a preference parameter, $N$ (defaulting to `7` daily logs).
-2.  **App Start Catch-up**: When Dialogue boots, it enters a brief initialization phase. The sync engine counts the number of daily log files created since the last profile refinement.
-    *   During this catch-up phase, the UI displays a **"Synchronizing and Refining Profile"** loader state before showing the main workspace as fully ready.
+2.  **App Start Catch-up**: When Dialogue boots, if the current calendar date has changed since the last recorded activity, the Reflector counts new daily logs since the last refinement.
 3.  **Refinement Run**: If $\text{count} \ge N$:
-    *   The agent runs a synthesis pass over the $N$ new daily logs.
+    *   The Reflector runs a pattern analysis pass over the $N$ new daily logs (analyzing the `Raw Behavioral Clues` sections for tendencies/traits).
     *   **Writes Active Profile (`user_profile.md`)**: It overwrites `vault/system/user_profile.md` with the updated N-Line Startup Profile under a strict 2,000-character limit.
     *   **Delegates Facts**: Static facts (e.g. tech stacks, hobbies) are extracted and written to `vault/system/memories.md` instead.
-    *   **Archives Digest**: It compiles a historical Markdown digest and saves it under `vault/system/digests/YYYY-W[Week].md` (e.g., `2026-W23.md`), preserving a read-only archive of the user's weekly behavior.
-
-#### Profile Refinement LLM Directives
-When refining the profile, the agent executes a structured prompt using the user's selected primary LLM. The prompt enforces separation of traits and facts while guaranteeing the character budget is respected:
-
-```markdown
-You are a context consolidation agent. Your task is to update the user's behavioral profile using a set of new Daily Logs.
-
-Inputs:
-1. Current Profile (vault/system/user_profile.md)
-2. New Daily Logs (past N days)
-
-Rules:
-1. TARGET BEHAVIOR: Focus exclusively on behavioral traits, working style preferences, stress responses, scheduling habits, and communication desires.
-2. EXCLUDE STATIC FACTS: Do not include hobbies, project names, technical stacks, or life facts (e.g., "likes green tea", "working on Dialogue-AI project", "has a cat"). Output these as a separate list of facts so they can be written to memories.md.
-3. STRICT CHARACTER LIMIT: The updated profile must NOT exceed 2,000 characters. Keep it under 7 high-density items. Merge overlapping traits. Prune old/deprecated habits if new ones override them.
-4. FORMAT: Output the new profile in clean Markdown starting with a metadata frontmatter block.
-
-Output Schema:
-{
-  "updatedProfile": "---yaml\nlast_refined_date: YYYY-MM-DD\ntotal_refinements: X\n---\n\n# User Profile & Startup Context...\n",
-  "extractedFacts": [
-    "User prefers coding in Rust on weekends.",
-    "User started a new workspace named Dialogue-App."
-  ]
-}
-```
+    *   **Archives Digest**: It compiles a weekly Markdown digest under `vault/system/digests/YYYY-W[Week].md`.
 
 #### Startup Catch-up Flow Sequence
 The startup check and consolidation sequence runs during Next.js app initialization:
@@ -141,7 +181,19 @@ Because the source of truth for declarative memory is a physical Markdown file o
     *   When working within a specific workspace, the agent loads **both** the Unified memories and the workspace's Specialized memories.
     *   If no workspace is active (general chat), specialized memories are completely isolated.
 
-### B. Memory Presence (Time-Decay & Deduplication)
+### B. Conversational Memory Modification (On-the-Fly Directives)
+In addition to the background Watcher Agent's silent observations and manual filesystem editing, the user must be able to explicitly command the companion to update its knowledge base in real time (e.g., *"Remember that my sister's dog is named Barks"* or *"Forget that I hate coffee"*).
+
+To support this, the primary companion is equipped with direct, conversational tools:
+1.  **`saveSemanticMemory`**: Saves a new fact, or updates/overwrites a conflicting fact in the active context memories file if it matches an existing entry (similarity check).
+2.  **`forgetSemanticMemory`**: Deletes a specific bullet point from `vault/system/memories.md` or `workspace_memories.md` by finding the line that semantically matches the user's forget directive.
+
+When these tools are executed:
+- The changes are written to the Markdown files immediately.
+- The sync engine instantly aligns the database cache.
+- The primary agent receives immediate feedback to confirm the update to the user.
+
+### C. Memory Presence (Time-Decay & Deduplication)
 To prevent the agent's memory from feeling static or repetitive, the retrieval engine applies two ranking filters:
 
 #### Time-Decay (Recency Weighting)
@@ -177,10 +229,12 @@ Dialogue utilizes a **Hybrid Graph Architecture** in SQLite to parse and query s
 *   **Graph Construction**: Mastra queries the vector cache to get relevant chunks, computes cosine similarity between all pairs of retrieved chunks, and draws a semantic edge if the similarity exceeds `threshold` (default `0.7`).
 
 ### C. Retrieval & Traversal Algorithms
-When the user queries the agent, the system exposes two specialized tools to the Mastra agent:
+Instead of relying on the primary companion to manually decide when and how to search the graph (which adds conversational latency and token cost), the **3rd-Person Watcher Agent** drives retrieval proactively during the **Pre-Turn** planning phase. 
 
-1.  **The Custom Graph Walker (Structured Tool)**:
-    *   Used for queries about scheduling, dependencies, and exact file scopes.
+The Watcher executes these traversal algorithms to construct a synthesized context before the companion starts generating:
+
+1.  **The Custom Graph Walker (Logical BFS)**:
+    *   Used to gather dependencies, scheduling limits, and exact project scopes.
     *   Performs a Breadth-First Search (BFS) starting from the active task/event scope or vector-matched seeds.
     *   Traverses up to 3 hops in a single recursive CTE query:
       ```sql
@@ -196,12 +250,14 @@ When the user queries the agent, the system exposes two specialized tools to the
       ```
     *   Applies score decay based on distance.
 
-2.  **The Mastra GraphRAG Tool (Semantic Tool)**:
-    *   Used for open-ended conceptual research across notes and summaries.
-    *   Runs a **Random Walk with Restart (RWR)** algorithm on the similarity graph:
+2.  **The Mastra GraphRAG (Semantic Random Walk)**:
+    *   Used for open-ended conceptual research across notes and memories.
+    *   Runs a **Random Walk with Restart (RWR)** algorithm on the in-memory similarity graph:
         1. Starts at the node closest to the user's query embedding.
         2. Walks to neighboring nodes based on edge weights (similarity scores).
         3. Has a fixed probability (e.g. `restartProb = 0.15`) of restarting from the query node on each step.
+
+The results of these traversals are combined, formatted into a high-density reference block, and injected directly into the primary agent's active system prompt.
 
 ---
 
@@ -209,4 +265,4 @@ When the user queries the agent, the system exposes two specialized tools to the
 
 1.  **No Separate Graph Database**: We avoid Neo4j or other heavy services. SQLite handles logical edges via CTEs, and Mastra handles semantic GraphRAG in-memory. This preserves Dialogue's single-binary, offline-first execution model.
 2.  **Filesystem as Authority**: Both graph representations are derived from raw `.md` files. If the user edits `memories.md` or note wiki-links, the sync engine updates the database cache accordingly.
-3.  **Decoupled Search**: By providing the agent with both tools (`getTaskGraph` and `graphQueryTool`), we let the LLM dynamically decide whether a query requires logical dependency parsing or conceptual semantic walking.
+3.  **Watcher-Driven Search**: Moving search to the pre-turn Watcher phase significantly reduces latency and ensures the primary agent has complete contextual awareness (both logical dependencies and semantic facts) from the first token. Primary companion tools (like `getTaskGraph`) remain available only as fallbacks.

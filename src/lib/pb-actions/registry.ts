@@ -38,11 +38,17 @@ export type PbActionHandler<TArgs = unknown, TResult = unknown> = (
 
 import { parseDate } from "./parseDate";
 import { ingestNotes } from "./ingestNotes";
+import { createMemory } from "./createMemory";
+import { updateMemory } from "./updateMemory";
+import { deleteMemory } from "./deleteMemory";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const handlers: Record<string, PbActionHandler<any, any>> = {
   parseDate,
   ingestNotes,
+  createMemory,
+  updateMemory,
+  deleteMemory,
   // More handlers added as B.7 migrates consumers. The 8 Convex actions
   // estimated by the migration plan mostly have Next.js API routes already
   // (chat, embeddings, graph/memory, cron/ocean, admin/memory-health) or

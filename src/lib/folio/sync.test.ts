@@ -596,3 +596,71 @@ describe('Reconcile Folio Path Migration', () => {
   });
 });
 
+describe('Daily Log Synchronization', () => {
+  const folioRoot = 'C:/Users/user/Dialogue Folio';
+
+  beforeEach(() => {
+    mockPb.reset();
+    mockPb.collections.habits = createMockCollection([
+      { id: 'habit-water', name: 'Drink Water', frequency: 'daily', frequencyConfig: {}, currentStreak: 0, longestStreak: 0, archived: false, user: 'test-user-id' },
+      { id: 'habit-gym', name: 'Gym', frequency: 'daily', frequencyConfig: {}, currentStreak: 0, longestStreak: 0, archived: false, user: 'test-user-id' },
+    ]);
+    mockPb.collections.habit_logs = createMockCollection([]);
+    for (const key of Object.keys(mockFiles)) {
+      delete mockFiles[key];
+    }
+  });
+
+  test('resolves entity path correctly for daily log files', () => {
+    const res = resolveEntityFromPath('C:/Users/user/Dialogue Folio/daily-logs/2026-06-17.md', folioRoot);
+    expect(res).toEqual({
+      id: '2026-06-17',
+      collectionName: 'daily_logs',
+      workspaceId: null,
+    });
+  });
+
+  test('ignores workspace activity logs from sync resolution', () => {
+    const res = resolveEntityFromPath('C:/Users/user/Dialogue Folio/workspaces/app-ws123/activity/2026-06-17.md', folioRoot);
+    expect(res).toBeNull();
+  });
+
+  test('syncs habit checkbox status from global daily log file', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/daily-logs/2026-06-17.md';
+    mockFiles[filePath] = `---
+date: 2026-06-17
+type: daily-log
+---
+
+# Daily Log - 2026-06-17
+
+## Today's Habits
+- [x] Drink Water
+- [ ] Gym
+`;
+
+    const { syncDailyLogFileToDb } = await import('./sync');
+    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17');
+
+    const logs = mockPb.collection('habit_logs').items;
+    expect(logs).toHaveLength(2);
+
+    const waterLog = logs.find(l => l.habit === 'habit-water');
+    expect(waterLog).toBeDefined();
+    expect(waterLog.status).toBe('completed');
+    expect(waterLog.dateString).toBe('2026-06-17');
+
+    const gymLog = logs.find(l => l.habit === 'habit-gym');
+    expect(gymLog).toBeDefined();
+    expect(gymLog.status).toBe('skipped');
+    expect(gymLog.dateString).toBe('2026-06-17');
+
+    // Check streak updates
+    const updatedWaterHabit = mockPb.collection('habits').items.find(h => h.id === 'habit-water');
+    expect(updatedWaterHabit.currentStreak).toBe(1);
+    expect(updatedWaterHabit.longestStreak).toBe(1);
+    expect(updatedWaterHabit.lastLoggedDate).toBe('2026-06-17');
+  });
+});
+
+

@@ -1,75 +1,44 @@
-import { useMutation } from "../use-mutation";
-import { useAuth } from "../auth";
-import { getPbClient } from "../client";
-import type { PbMemories } from "../_generated/dataModel";
+import { useAction, defineAction } from "../use-action";
 
 export function usePbMemoryCreate() {
-  const { user } = useAuth();
-  const mutate = useMutation<PbMemories>({ collection: "memories", kind: "create" });
-  const update = useMutation<PbMemories>({ collection: "memories", kind: "update" });
+  const runCreate = useAction<{ text: string; workspaceId?: string }, { id: string }>(
+    defineAction("createMemory")
+  );
 
   return async (args: {
     text: string;
-    embedding: number[];
+    workspaceId?: string;
+    embedding?: number[];
     hash?: string;
     createdAt?: number;
     updatedAt?: number;
   }) => {
-    if (!user) throw new Error("Unauthorized");
-    const pb = getPbClient();
-    const now = Date.now();
-
-    if (args.hash) {
-      const list = await pb.collection("memories").getList(1, 1, {
-        filter: `user = "${user.id}" && hash = "${args.hash}"`,
-      });
-      const existing = list.items[0];
-      if (existing) {
-        await update({
-          id: existing.id,
-          record: {
-            text: args.text,
-            embedding: args.embedding,
-            updatedAt: args.updatedAt || now,
-          },
-        });
-        return existing.id;
-      }
-    }
-
-    const record = await mutate({
-      user: user.id as any,
+    const res = await runCreate({
       text: args.text,
-      embedding: args.embedding,
-      hash: args.hash || undefined,
-      createdAt: args.createdAt || now,
-      updatedAt: args.updatedAt || now,
-    } as any);
-    return record.id;
+      workspaceId: args.workspaceId,
+    });
+    return res.id;
   };
 }
 
 export function usePbMemoryUpdate() {
-  const { user } = useAuth();
-  const mutate = useMutation<PbMemories>({ collection: "memories", kind: "update" });
+  const runUpdate = useAction<{ id: string; text: string }, { success: boolean }>(
+    defineAction("updateMemory")
+  );
+
   return async (args: { id: string; text: string }) => {
-    if (!user) throw new Error("Unauthorized");
-    const record = await mutate({
-      id: args.id,
-      record: {
-        text: args.text,
-        updatedAt: Date.now(),
-      },
-    });
-    return record;
+    await runUpdate({ id: args.id, text: args.text });
+    return { id: args.id, text: args.text };
   };
 }
 
 export function usePbMemoryDelete() {
-  const { user } = useAuth();
-  const mutate = useMutation({ collection: "memories", kind: "delete" });
+  const runDelete = useAction<{ id: string }, { success: boolean }>(
+    defineAction("deleteMemory")
+  );
+
   return async (args: { id: string }) => {
-    if (!user) throw new Error("Unauthorized");
-    await mutate({ id: args.id });
+    await runDelete({ id: args.id });
   };
 }
+

@@ -69,4 +69,9 @@ scratch/
 /pocketbase/
 
 # PocketBase test database
+# PocketBase test database
 /test-db
+
+# Local user folios and test directories
+/dialogue-folio/
+/test-folio-memories/
