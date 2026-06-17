@@ -23,6 +23,23 @@ let model = null;
 let context = null;
 let session = null;
 
+let idleTimer = null;
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+function resetIdleTimer() {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+  }
+  idleTimer = setTimeout(() => {
+    if (runnerStatus.status === 'ready') {
+      console.log("[LLM Runner] Model idle for 10 minutes. Auto-unloading to free memory.");
+      unloadModel().catch(err => {
+        console.error("[LLM Runner] Auto-unload failed:", err);
+      });
+    }
+  }, IDLE_TIMEOUT_MS);
+}
+
 const runnerStatus = {
   status: "unloaded", // unloaded, loading, ready, error
   modelPath: null,
@@ -32,8 +49,19 @@ const runnerStatus = {
   error: null
 };
 
+function pathsEqual(p1, p2) {
+  if (!p1 || !p2) return false;
+  const n1 = String(p1).replace(/\\/g, '/').toLowerCase();
+  const n2 = String(p2).replace(/\\/g, '/').toLowerCase();
+  return n1 === n2;
+}
+
 async function unloadModel() {
   try {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
     if (session) {
       session = null;
     }
@@ -49,6 +77,11 @@ async function unloadModel() {
     runnerStatus.modelPath = null;
     runnerStatus.error = null;
     console.log("[LLM Runner] Model unloaded successfully.");
+
+    if (global.gc) {
+      global.gc();
+      console.log("[LLM Runner] Forced garbage collection complete.");
+    }
   } catch (err) {
     runnerStatus.status = "error";
     runnerStatus.error = err.message || String(err);
@@ -59,18 +92,16 @@ async function unloadModel() {
 async function loadModel({ modelPath, contextSize = 4096, gpuLayers = 99, threads = 4 }) {
   await initNodeLlamaCpp();
 
-  runnerStatus.status = "loading";
-  runnerStatus.modelPath = modelPath;
-  runnerStatus.contextSize = contextSize;
-  runnerStatus.gpuLayers = gpuLayers;
-  runnerStatus.threads = threads;
-  runnerStatus.error = null;
-
   try {
     console.log(`[LLM Runner] Starting load: ${modelPath}`);
     await unloadModel();
 
-    runnerStatus.status = "loading"; // Reset status after unload clears it
+    runnerStatus.status = "loading";
+    runnerStatus.modelPath = modelPath;
+    runnerStatus.contextSize = contextSize;
+    runnerStatus.gpuLayers = gpuLayers;
+    runnerStatus.threads = threads;
+    runnerStatus.error = null;
 
     if (!llama) {
       llama = await getLlama();
@@ -92,6 +123,7 @@ async function loadModel({ modelPath, contextSize = 4096, gpuLayers = 99, thread
 
     runnerStatus.status = "ready";
     console.log(`[LLM Runner] Model loaded successfully on ready status.`);
+    resetIdleTimer();
   } catch (err) {
     runnerStatus.status = "error";
     runnerStatus.error = err.message || String(err);
@@ -168,6 +200,35 @@ const server = http.createServer((req, res) => {
           return;
         }
 
+        const isSameModel = pathsEqual(runnerStatus.modelPath, params.modelPath) &&
+                            runnerStatus.contextSize === Number(params.contextSize || 4096) &&
+                            runnerStatus.gpuLayers === Number(params.gpuLayers ?? 99) &&
+                            runnerStatus.threads === Number(params.threads || 4);
+
+        console.log("[LLM Runner] /load comparing configs:", {
+          runner: {
+            modelPath: runnerStatus.modelPath,
+            contextSize: runnerStatus.contextSize,
+            gpuLayers: runnerStatus.gpuLayers,
+            threads: runnerStatus.threads,
+            status: runnerStatus.status
+          },
+          incoming: {
+            modelPath: params.modelPath,
+            contextSize: params.contextSize,
+            gpuLayers: params.gpuLayers,
+            threads: params.threads
+          },
+          isSameModel
+        });
+
+        if (isSameModel && (runnerStatus.status === 'ready' || runnerStatus.status === 'loading')) {
+          console.log(`[LLM Runner] Model already loaded/loading with same config: ${params.modelPath}`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: runnerStatus.status, modelPath: runnerStatus.modelPath }));
+          return;
+        }
+
         // Respond immediately that we are loading
         res.writeHead(202, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: "loading", modelPath: params.modelPath }));
@@ -194,6 +255,7 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
+      resetIdleTimer();
       try {
         const payload = JSON.parse(body);
         const messages = payload.messages || [];
@@ -337,6 +399,8 @@ const server = http.createServer((req, res) => {
         } else {
           res.end();
         }
+      } finally {
+        resetIdleTimer();
       }
     });
     return;

@@ -39,6 +39,7 @@ interface MessageStreamProps {
   onLoadOlder?: () => void;
   canLoadOlder?: boolean;
   isLoadingOlder?: boolean;
+  provider?: string;
   children?: React.ReactNode;
 }
 
@@ -54,6 +55,7 @@ export const MessageStream = React.memo(function MessageStream({
   onLoadOlder,
   canLoadOlder,
   isLoadingOlder,
+  provider,
   children,
 }: MessageStreamProps) {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -324,6 +326,7 @@ export const MessageStream = React.memo(function MessageStream({
                       isLargeViewport={isLargeViewport}
                       agentName={agentName}
                       isStreaming={isTyping && index === messages.length - 1 && msg.author === "AI"}
+                      provider={provider}
                     />
                   ))}
 

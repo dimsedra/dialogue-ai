@@ -206,11 +206,46 @@ interface MessageBubbleProps {
   isLargeViewport: boolean;
   agentName?: string;
   isStreaming?: boolean;
+  provider?: string;
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport, agentName, isStreaming = false }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport, agentName, isStreaming = false, provider }: MessageBubbleProps) {
   const smoothedText = useSmoothText(msg.text, isStreaming);
   const timeFormat = useTimeFormat();
+
+  const [engineStatus, setEngineStatus] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!isStreaming || msg.text || msg.reasoning || provider !== 'local-gguf') {
+      return;
+    }
+
+    let isMounted = true;
+    const checkStatus = async () => {
+      try {
+        const res = await fetch("/api/local-model");
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          if (data.status === 'loading') {
+            setEngineStatus('loading');
+          } else if (data.status === 'ready') {
+            setEngineStatus('ready');
+          } else {
+            setEngineStatus('starting');
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to check local engine status in chat:", e);
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 2000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isStreaming, msg.text, msg.reasoning, provider]);
   return (
     <motion.div
       key={msg._id}
@@ -328,12 +363,21 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
             {/* Thinking placeholder — shown only when still streaming with absolutely nothing generated yet */}
             {isStreaming && !msg.text && !msg.reasoning && (
               <div className="flex items-center gap-3 py-1 mb-4">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 animate-pulse">
                   <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373]/60 animate-bounce [animation-delay:-0.32s]" />
                   <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373]/60 animate-bounce [animation-delay:-0.16s]" />
                   <div className="w-1.5 h-1.5 rounded-full bg-[#d4a373]/60 animate-bounce" />
                 </div>
-                <span className="text-[11px] text-[#a8a29e]/50 font-medium tracking-wide animate-pulse">Thinking…</span>
+                <span className="text-[11px] text-[#a8a29e]/50 font-semibold tracking-wide uppercase">
+                  {provider === 'local-gguf'
+                    ? (engineStatus === 'loading'
+                      ? 'Starting local AI engine... (this can take 30-50s)'
+                      : engineStatus === 'starting'
+                      ? 'Initializing local engine...'
+                      : 'Thinking…')
+                    : 'Thinking…'
+                  }
+                </span>
               </div>
             )}
             

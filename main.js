@@ -172,7 +172,8 @@ function startLlmRunner() {
   console.log(`[LLM Runner] Forking utility process: ${runnerPath}`);
   
   llmRunnerProcess = utilityProcess.fork(runnerPath, [], {
-    stdio: 'inherit'
+    stdio: 'inherit',
+    execArgv: ['--expose-gc']
   });
 
   llmRunnerProcess.on('exit', (code) => {

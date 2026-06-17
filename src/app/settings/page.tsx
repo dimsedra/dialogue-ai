@@ -100,9 +100,9 @@ export default function SettingsPage() {
 
   // Local GGUF states
   const [localGgufModelPath, setLocalGgufModelPath] = useState("");
-  const [localGgufGpuLayers, setLocalGgufGpuLayers] = useState(99);
-  const [localGgufContextSize, setLocalGgufContextSize] = useState(4096);
-  const [localGgufThreads, setLocalGgufThreads] = useState(4);
+  const [localGgufGpuLayers, setLocalGgufGpuLayers] = useState<number | string>(99);
+  const [localGgufContextSize, setLocalGgufContextSize] = useState<number | string>(4096);
+  const [localGgufThreads, setLocalGgufThreads] = useState<number | string>(4);
   const [engineStatus, setEngineStatus] = useState<any>({
     status: "unloaded",
     modelPath: null,
@@ -272,11 +272,23 @@ export default function SettingsPage() {
         timeFormat,
         localGguf: {
           modelPath: localGgufModelPath,
-          gpuLayers: localGgufGpuLayers,
-          contextSize: localGgufContextSize,
-          threads: localGgufThreads,
+          gpuLayers: Number(localGgufGpuLayers) || 0,
+          contextSize: Number(localGgufContextSize) || 4096,
+          threads: Number(localGgufThreads) || 4,
         },
       });
+
+      if (provider !== "local-gguf") {
+        try {
+          await fetch("/api/local-model", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "unload" }),
+          });
+        } catch (e) {
+          console.warn("Failed to auto-unload local GGUF runner on provider change:", e);
+        }
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -767,20 +779,42 @@ export default function SettingsPage() {
 
                         {/* Hardware Tuning Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="space-y-1.5">
-                            <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider flex items-center justify-between">
-                              <span>GPU Layers</span>
-                              <span className="text-[10px] text-[#d4a373] font-mono">{localGgufGpuLayers}</span>
+                          <div className="space-y-1.5 col-span-1">
+                            <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                              GPU Offload
                             </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="99"
-                              value={localGgufGpuLayers}
-                              onChange={(e) => setLocalGgufGpuLayers(Math.max(0, Math.min(99, parseInt(e.target.value) || 0)))}
-                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs text-[#f2efeb] focus:outline-none focus:border-[#d4a373]/40 transition-all"
-                            />
-                            <p className="text-[8px] text-[#a8a29e]/50">0 = CPU, 99 = Auto GPU</p>
+                            <div className="flex items-center justify-between bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 h-[34px]">
+                              <span className="text-[11px] text-[#f2efeb] select-none">
+                                Full Offload
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setLocalGgufGpuLayers(localGgufGpuLayers === 99 ? 0 : 99)}
+                                className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                  localGgufGpuLayers === 99 ? "bg-[#d4a373]" : "bg-[#2a2723]"
+                                }`}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-[#0f0e0c] shadow ring-0 transition duration-200 ease-in-out ${
+                                    localGgufGpuLayers === 99 ? "translate-x-3" : "translate-x-0"
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                            {localGgufGpuLayers !== 99 && (
+                              <div className="flex items-center justify-between gap-2 bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 h-[34px] mt-1.5">
+                                <span className="text-[9px] text-[#a8a29e] uppercase">Layers:</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="120"
+                                  value={localGgufGpuLayers}
+                                  onChange={(e) => setLocalGgufGpuLayers(e.target.value === "" ? "" : parseInt(e.target.value) || 0)}
+                                  onBlur={() => setLocalGgufGpuLayers((prev) => Math.max(0, Math.min(120, typeof prev === "number" ? prev : parseInt(prev) || 0)))}
+                                  className="w-12 bg-transparent text-right text-xs text-[#f2efeb] focus:outline-none font-mono"
+                                />
+                              </div>
+                            )}
                           </div>
                           <div className="space-y-1.5">
                             <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
@@ -789,13 +823,14 @@ export default function SettingsPage() {
                             <input
                               type="number"
                               min="512"
-                              max="32768"
+                              max="131072"
                               step="512"
                               value={localGgufContextSize}
-                              onChange={(e) => setLocalGgufContextSize(Math.max(512, parseInt(e.target.value) || 4096))}
+                              onChange={(e) => setLocalGgufContextSize(e.target.value === "" ? "" : parseInt(e.target.value) || 0)}
+                              onBlur={() => setLocalGgufContextSize((prev) => Math.max(512, Math.min(131072, typeof prev === "number" ? prev : parseInt(prev) || 4096)))}
                               className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs text-[#f2efeb] focus:outline-none focus:border-[#d4a373]/40 transition-all"
                             />
-                            <p className="text-[8px] text-[#a8a29e]/50">Tokens (e.g. 4096)</p>
+                            <p className="text-[8px] text-[#a8a29e]/50">Tokens (e.g. 60000)</p>
                           </div>
                           <div className="space-y-1.5">
                             <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
@@ -804,9 +839,10 @@ export default function SettingsPage() {
                             <input
                               type="number"
                               min="1"
-                              max="32"
+                              max="64"
                               value={localGgufThreads}
-                              onChange={(e) => setLocalGgufThreads(Math.max(1, parseInt(e.target.value) || 4))}
+                              onChange={(e) => setLocalGgufThreads(e.target.value === "" ? "" : parseInt(e.target.value) || 0)}
+                              onBlur={() => setLocalGgufThreads((prev) => Math.max(1, Math.min(64, typeof prev === "number" ? prev : parseInt(prev) || 4)))}
                               className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs text-[#f2efeb] focus:outline-none focus:border-[#d4a373]/40 transition-all"
                             />
                             <p className="text-[8px] text-[#a8a29e]/50">Inference threads</p>
@@ -1016,8 +1052,9 @@ export default function SettingsPage() {
                             handleSaveProfile()
                           }
                           placeholder={
-                            customConfigs[provider]?.modelId ||
-                            "gemini-2.0-flash"
+                            provider === "local-gguf"
+                              ? "local-model (Runs on active GGUF)"
+                              : customConfigs[provider]?.modelId || "gemini-2.0-flash"
                           }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
@@ -1045,8 +1082,9 @@ export default function SettingsPage() {
                             handleSaveProfile()
                           }
                           placeholder={
-                            customConfigs[provider]?.modelId ||
-                            "gemini-2.0-flash"
+                            provider === "local-gguf"
+                              ? "local-model (Runs on active GGUF)"
+                              : customConfigs[provider]?.modelId || "gemini-2.0-flash"
                           }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
@@ -1070,8 +1108,9 @@ export default function SettingsPage() {
                             handleSaveProfile()
                           }
                           placeholder={
-                            customConfigs[provider]?.modelId ||
-                            "gemini-2.0-flash-lite"
+                            provider === "local-gguf"
+                              ? "local-model (Runs on active GGUF)"
+                              : customConfigs[provider]?.modelId || "gemini-2.0-flash-lite"
                           }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />
@@ -1095,8 +1134,9 @@ export default function SettingsPage() {
                             handleSaveProfile()
                           }
                           placeholder={
-                            customConfigs[provider]?.modelId ||
-                            "gemini-2.0-flash-lite"
+                            provider === "local-gguf"
+                              ? "local-model (Runs on active GGUF)"
+                              : customConfigs[provider]?.modelId || "gemini-2.0-flash-lite"
                           }
                           className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                         />

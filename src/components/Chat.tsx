@@ -1108,7 +1108,7 @@ function ActiveChat({
       <MessageStream
         messages={displayMessages as any}
         activeSessionId={activeSessionId}
-        isTyping={isTyping}
+        isTyping={isTyping || isLoading}
         isSyncing={isSyncing}
         isLargeViewport={isLargeViewport}
         keyboardOffset={keyboardOffset}
@@ -1117,6 +1117,7 @@ function ActiveChat({
         onLoadOlder={loadOlderMessages}
         canLoadOlder={messagesPaginated.status === "CanLoadMore"}
         isLoadingOlder={false}
+        provider={provider}
       >
         {pendingApprovals.length > 0 && (
           <div className="space-y-2 px-4">

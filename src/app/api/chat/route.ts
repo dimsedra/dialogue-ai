@@ -178,20 +178,35 @@ export async function POST(req: Request) {
         const statusRes = await fetch(`${RUNNER_URL}/status`, { cache: 'no-store' });
         const statusData = await statusRes.json();
         
-        const needsLoad = statusData.status !== 'ready' || statusData.modelPath !== modelPath;
-        if (needsLoad) {
-          console.log(`[Chat API] Local GGUF model needs loading. Path: ${modelPath}`);
-          // Trigger load on the runner
-          await fetch(`${RUNNER_URL}/load`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              modelPath: modelPath,
-              contextSize: Number(localGguf.contextSize || 4096),
-              gpuLayers: Number(localGguf.gpuLayers ?? 99),
-              threads: Number(localGguf.threads || 4)
-            })
-          });
+        const normalizePath = (p: string) => p ? p.replace(/\\/g, '/').toLowerCase() : '';
+        const isAlreadyLoaded = statusData.status === 'ready' && normalizePath(statusData.modelPath) === normalizePath(modelPath);
+        const isCurrentlyLoading = statusData.status === 'loading' && normalizePath(statusData.modelPath) === normalizePath(modelPath);
+        
+        console.log(`[Chat API] GGUF status check:`, {
+          status: statusData.status,
+          runnerPath: statusData.modelPath,
+          targetPath: modelPath,
+          isAlreadyLoaded,
+          isCurrentlyLoading
+        });
+        
+        if (!isAlreadyLoaded) {
+          if (!isCurrentlyLoading) {
+            console.log(`[Chat API] Local GGUF model needs loading. Path: ${modelPath}`);
+            // Trigger load on the runner
+            await fetch(`${RUNNER_URL}/load`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                modelPath: modelPath,
+                contextSize: Number(localGguf.contextSize || 4096),
+                gpuLayers: Number(localGguf.gpuLayers ?? 99),
+                threads: Number(localGguf.threads || 4)
+              })
+            });
+          } else {
+            console.log(`[Chat API] Local GGUF model is already loading by another request. Waiting...`);
+          }
 
           // Poll until ready (up to 30 seconds)
           let loaded = false;
