@@ -93,7 +93,7 @@ Dialogue doesn't treat memory as a flat list of text strings in a hidden databas
 |---|---|---|---|
 | **Startup Profile** | Standing instructions, style, personality, scheduling guidelines, workspace rules | `folio/system/user_profile.md` | Compiled dynamically from Daily Logs. Strictly limited to **2,000 characters** (max 7 items). Always loaded in the system prompt on session boot. |
 | **Auditable Memory** | Explicit facts, user preferences, projects, context, and client details | `folio/system/memories.md` | Bullet points in Markdown. Edit a bullet to correct a fact; delete a line to force the agent to forget. Synced via file watcher. No character cap. |
-| **Workspace-Scoped Context** | Specialized workspace facts, project constraints, and local activity timelines | `folio/workspaces/[Workspace-Name]/workspace_memories.md` | Loaded dynamically alongside global context *only* when that workspace is active, ensuring strict context isolation. |
+| **Workspace-Scoped Context** | Specialized workspace facts, project constraints, and local activity timelines | `folio/workspaces/[slug]-[workspaceId]/workspace_memories.md` | Loaded dynamically alongside global context *only* when that workspace is active, ensuring strict context isolation. |
 
 ### The Graph Synergy: Memory Ingestion & In-Process Retrieval
 
@@ -152,7 +152,7 @@ Dialogue is packaged as an Electron desktop application. The Electron Main proce
 
 Dialogue unifies all memory writes through a single folio-first contract. The source of truth is a Markdown file on disk — the database cache is a derived index for fast retrieval:
 
-1. **The agent writes or updates** `folio/system/memories.md` (or `folio/workspaces/[Name]/workspace_memories.md` for workspace-scoped memories).
+1. **The agent writes or updates** `folio/system/memories.md` (or `folio/workspaces/[slug]-[workspaceId]/workspace_memories.md` for workspace-scoped memories).
 2. **The sync engine's file watcher** detects the change and computes a SHA-256 hash of each memory chunk.
 3. **Each changed chunk is embedded** by a local Xenova model (multilingual-e5-small, 384 dimensions, L2-normalized) and upserted into the database cache alongside the hash and file path.
 4. **Hash comparison prevents redundant embedding**. Stale entries are deleted when chunks are removed from the file.

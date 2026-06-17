@@ -29,12 +29,14 @@ Memories are scoped either globally or to a specific workspace, depending on the
 | Context Scope | File Path relative to Folio Root | Entity ID | Workspace ID |
 | :--- | :--- | :--- | :--- |
 | **Global Scope** | `system/memories.md` | `global` | `null` |
-| **Workspace Scope** | `[Workspace-Name]/workspace_memories.md` | `[Workspace-Name]` | `[Workspace-Name]` |
+| **Workspace Scope (New)** | `workspaces/[slug]-[workspaceId]/workspace_memories.md` | `[workspaceId]` | `[workspaceId]` |
+| **Workspace Scope (Legacy)** | `[workspaceId]/workspace_memories.md` | `[workspaceId]` | `[workspaceId]` |
 
 ### Path Resolver Integration
 The sync engine resolves these paths via [resolveEntityFromPath](file:///d:/Project%20Hub/Dialogue-AI/src/lib/folio/sync.ts#L36-L81), mapping them to the `memories` collection:
 - `system/memories.md` ──> `{ id: "global", collectionName: "memories", workspaceId: null }`
-- `[workspace]/workspace_memories.md` ──> `{ id: workspace, collectionName: "memories", workspaceId: workspace }`
+- `workspaces/[slug]-[workspaceId]/workspace_memories.md` ──> `{ id: workspaceId, collectionName: "memories", workspaceId: workspaceId }`
+- `[workspaceId]/workspace_memories.md` ──> `{ id: workspaceId, collectionName: "memories", workspaceId: workspaceId }`
 
 ---
 
