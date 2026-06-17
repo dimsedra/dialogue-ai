@@ -36,6 +36,7 @@ const providerMap: Record<string, any> = {
   groq: groqIcon,
   huggingface: huggingFaceIcon,
   lmstudio: lmStudioIcon,
+  "local-gguf": lmStudioIcon,
   minimax: minimaxIcon,
   mistral: mistralIcon,
   moonshotai: moonshotIcon,

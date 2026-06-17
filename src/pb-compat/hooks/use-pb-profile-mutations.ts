@@ -55,6 +55,12 @@ export function usePbUpdatePreferences() {
     taskModels?: any;
     mcpServers?: any;
     timeFormat?: "auto" | "12h" | "24h";
+    localGguf?: {
+      modelPath: string;
+      gpuLayers: number;
+      contextSize: number;
+      threads: number;
+    };
     userId?: string;
   }) => {
     if (!user) throw new Error("Unauthorized");
@@ -77,6 +83,7 @@ export function usePbUpdatePreferences() {
       ...(args.taskModels ? { taskModels: args.taskModels } : {}),
       ...(args.mcpServers ? { mcpServers: args.mcpServers } : {}),
       ...(args.timeFormat ? { timeFormat: args.timeFormat } : {}),
+      ...(args.localGguf ? { localGguf: args.localGguf } : {}),
       customConfigs: newConfigs,
     };
 

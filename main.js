@@ -9,6 +9,7 @@ const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'develo
 let mainWindow = null;
 let pbProcess = null;
 let nextProcess = null;
+let llmRunnerProcess = null;
 
 // Helper to check if a port is listening
 function isPortOpen(port) {
@@ -152,6 +153,32 @@ function cleanupProcesses() {
       console.error('[Dialogue] Error killing Next.js dev server:', e);
     }
   }
+
+  if (llmRunnerProcess) {
+    console.log('[Dialogue] Terminating LLM Runner...');
+    try {
+      llmRunnerProcess.kill();
+      llmRunnerProcess = null;
+    } catch (e) {
+      console.error('[Dialogue] Error killing LLM Runner:', e);
+    }
+  }
+}
+
+// Start local GGUF LLM Runner sidecar process
+function startLlmRunner() {
+  const { utilityProcess } = require('electron');
+  const runnerPath = path.join(__dirname, 'llm-runner.js');
+  console.log(`[LLM Runner] Forking utility process: ${runnerPath}`);
+  
+  llmRunnerProcess = utilityProcess.fork(runnerPath, [], {
+    stdio: 'inherit'
+  });
+
+  llmRunnerProcess.on('exit', (code) => {
+    console.log(`[LLM Runner] Process exited with code ${code}`);
+    llmRunnerProcess = null;
+  });
 }
 
 // Application Lifecycle
@@ -170,6 +197,8 @@ app.on('ready', async () => {
 
   // 2. Spawn databases and servers
   try {
+    startLlmRunner();
+
     const isPbRunning = await isPortOpen(8090);
     if (isPbRunning) {
       console.log('[PocketBase] Port 8090 is already active. Reusing the running instance.');

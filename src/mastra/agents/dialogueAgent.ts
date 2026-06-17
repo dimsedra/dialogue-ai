@@ -133,6 +133,13 @@ export async function createDialogueAgent(
         apiKey: apiKey || 'lm-studio',
       })(modelId || 'local-model');
       break;
+    case 'local-gguf':
+      model = createOpenAICompatible({
+        name: 'local-gguf',
+        baseURL: 'http://127.0.0.1:11430/v1',
+        apiKey: 'local-gguf',
+      })(modelId || 'local-model');
+      break;
     case 'openrouter':
       model = createOpenRouter(opts)(modelId || 'anthropic/claude-3.5-sonnet:beta');
       break;

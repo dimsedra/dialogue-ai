@@ -23,6 +23,11 @@ import {
   Bell,
   ChevronDown,
   Clock,
+  Play,
+  Square,
+  FolderOpen,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -90,8 +95,21 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [timeFormat, setTimeFormat] = useState<"auto" | "12h" | "24h">("auto");
-  type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic" | "deepseek" | "xai" | "mistral" | "groq" | "cohere" | "moonshotai" | "deepinfra" | "togetherai" | "fireworks" | "alibaba" | "baseten" | "huggingface" | "minimax" | "ollama" | "opencode" | "openrouter" | "zhipu";
+  type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic" | "deepseek" | "xai" | "mistral" | "groq" | "cohere" | "moonshotai" | "deepinfra" | "togetherai" | "fireworks" | "alibaba" | "baseten" | "huggingface" | "minimax" | "ollama" | "opencode" | "openrouter" | "zhipu" | "local-gguf";
   const [provider, setProvider] = useState<AIProvider>("gemini");
+
+  // Local GGUF states
+  const [localGgufModelPath, setLocalGgufModelPath] = useState("");
+  const [localGgufGpuLayers, setLocalGgufGpuLayers] = useState(99);
+  const [localGgufContextSize, setLocalGgufContextSize] = useState(4096);
+  const [localGgufThreads, setLocalGgufThreads] = useState(4);
+  const [engineStatus, setEngineStatus] = useState<any>({
+    status: "unloaded",
+    modelPath: null,
+    error: null,
+  });
+  const [isCopied, setIsCopied] = useState(false);
+  const [isLoadingEngine, setIsLoadingEngine] = useState(false);
   const [customConfigs, setCustomConfigs] = useState<
     Record<string, { apiKey?: string; baseUrl?: string; modelId?: string }>
   >({});
@@ -151,11 +169,95 @@ export default function SettingsPage() {
     } else {
       setTimeFormat("auto");
     }
+    if (prefs?.localGguf) {
+      const lg = prefs.localGguf as any;
+      setLocalGgufModelPath(lg.modelPath || "");
+      setLocalGgufGpuLayers(lg.gpuLayers ?? 99);
+      setLocalGgufContextSize(lg.contextSize || 4096);
+      setLocalGgufThreads(lg.threads || 4);
+    }
   }
 
   useEffect(() => {
     checkEmbeddingModel().then(setIsLocalEmbeddingReady);
   }, []);
+
+  // Poll local GGUF model runner status
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch("/api/local-model");
+        if (res.ok) {
+          const data = await res.json();
+          setEngineStatus(data);
+        }
+      } catch (err) {
+        console.warn("Failed to query local GGUF runner status:", err);
+      }
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleCopyPath = () => {
+    if (!localGgufModelPath) return;
+    navigator.clipboard.writeText(localGgufModelPath);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleBrowsePath = async () => {
+    if (typeof window !== "undefined" && (window as any).electronAPI) {
+      try {
+        const path = await (window as any).electronAPI.openFileDialog();
+        if (path) {
+          setLocalGgufModelPath(path);
+        }
+      } catch (err) {
+        console.error("Failed to select GGUF file:", err);
+      }
+    }
+  };
+
+  const handleStartEngine = async () => {
+    if (!localGgufModelPath) return;
+    setIsLoadingEngine(true);
+    try {
+      await fetch("/api/local-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "load",
+          config: {
+            modelPath: localGgufModelPath,
+            gpuLayers: localGgufGpuLayers,
+            contextSize: localGgufContextSize,
+            threads: localGgufThreads,
+          },
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to start LLM engine:", err);
+    } finally {
+      setIsLoadingEngine(false);
+    }
+  };
+
+  const handleStopEngine = async () => {
+    setIsLoadingEngine(true);
+    try {
+      await fetch("/api/local-model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unload" }),
+      });
+    } catch (err) {
+      console.error("Failed to stop LLM engine:", err);
+    } finally {
+      setIsLoadingEngine(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
@@ -168,6 +270,12 @@ export default function SettingsPage() {
         taskModels,
         mcpServers,
         timeFormat,
+        localGguf: {
+          modelPath: localGgufModelPath,
+          gpuLayers: localGgufGpuLayers,
+          contextSize: localGgufContextSize,
+          threads: localGgufThreads,
+        },
       });
     } catch (error) {
       console.error(error);
@@ -607,113 +715,277 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
-                      <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">
-                        Custom {provider} Config
-                      </h3>
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
-                          {provider === "lmstudio"
-                            ? "API Key (Ignored for local LLM)"
-                            : "API Key (Overrides Env Var)"}
-                        </label>
-                        <div className="relative flex items-center">
+                    {provider === "local-gguf" ? (
+                      <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-4">
+                        <div>
+                          <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-1">
+                            Local AI Center (Native GGUF)
+                          </h3>
+                          <p className="text-[10px] text-[#a8a29e] leading-normal mb-3">
+                            Dialogue will load and run this model in an isolated background process to prevent memory leaks and crashes.
+                          </p>
+                        </div>
+
+                        {/* Model Path Picker */}
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                            GGUF Model File Path
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={localGgufModelPath}
+                              placeholder="No model file selected. Click Browse to select a .gguf model..."
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs text-[#f2efeb] focus:outline-none cursor-default truncate"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleBrowsePath}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2a2723] hover:border-[#d4a373]/50 text-xs font-semibold text-[#f2efeb] bg-[#1a1814] hover:bg-[#201d19] transition-all whitespace-nowrap focus:outline-none"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5 text-[#d4a373]" />
+                              Browse
+                            </button>
+                            {localGgufModelPath && (
+                              <button
+                                type="button"
+                                onClick={handleCopyPath}
+                                className="p-1.5 rounded-lg border border-[#2a2723] hover:border-[#d4a373]/50 text-[#f2efeb] bg-[#1a1814] hover:bg-[#201d19] transition-all focus:outline-none"
+                                title="Copy Path"
+                              >
+                                {isCopied ? (
+                                  <Check className="w-3.5 h-3.5 text-green-500" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5 text-[#a8a29e]" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Hardware Tuning Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider flex items-center justify-between">
+                              <span>GPU Layers</span>
+                              <span className="text-[10px] text-[#d4a373] font-mono">{localGgufGpuLayers}</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="99"
+                              value={localGgufGpuLayers}
+                              onChange={(e) => setLocalGgufGpuLayers(Math.max(0, Math.min(99, parseInt(e.target.value) || 0)))}
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs text-[#f2efeb] focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                            />
+                            <p className="text-[8px] text-[#a8a29e]/50">0 = CPU, 99 = Auto GPU</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                              Context Size
+                            </label>
+                            <input
+                              type="number"
+                              min="512"
+                              max="32768"
+                              step="512"
+                              value={localGgufContextSize}
+                              onChange={(e) => setLocalGgufContextSize(Math.max(512, parseInt(e.target.value) || 4096))}
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs text-[#f2efeb] focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                            />
+                            <p className="text-[8px] text-[#a8a29e]/50">Tokens (e.g. 4096)</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                              CPU Threads
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="32"
+                              value={localGgufThreads}
+                              onChange={(e) => setLocalGgufThreads(Math.max(1, parseInt(e.target.value) || 4))}
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs text-[#f2efeb] focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                            />
+                            <p className="text-[8px] text-[#a8a29e]/50">Inference threads</p>
+                          </div>
+                        </div>
+
+                        {/* Engine Live Status Indicator Card */}
+                        <div className={`mt-2 p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
+                          engineStatus.status === 'ready' 
+                            ? 'bg-green-500/5 border-green-500/20' 
+                            : engineStatus.status === 'loading'
+                            ? 'bg-yellow-500/5 border-yellow-500/20'
+                            : engineStatus.status === 'error'
+                            ? 'bg-red-500/5 border-red-500/20'
+                            : 'bg-[#12110e] border-[#2a2723]'
+                        }`}>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] uppercase font-bold text-[#a8a29e] tracking-wider">Engine Status:</span>
+                              <span className={`text-[11px] font-bold ${
+                                engineStatus.status === 'ready'
+                                  ? 'text-green-400'
+                                  : engineStatus.status === 'loading'
+                                  ? 'text-yellow-400'
+                                  : engineStatus.status === 'error'
+                                  ? 'text-red-400'
+                                  : 'text-neutral-400'
+                              }`}>
+                                {engineStatus.status === 'ready' && '🟢 Ready (Listening on port 11430)'}
+                                {engineStatus.status === 'loading' && '🟡 Loading GGUF Model...'}
+                                {engineStatus.status === 'unloaded' && '⚪ Unloaded (Saves VRAM & RAM)'}
+                                {engineStatus.status === 'error' && '🔴 Error loading GGUF model'}
+                              </span>
+                            </div>
+                            {engineStatus.status === 'ready' && engineStatus.modelPath && (
+                              <p className="text-[9px] text-[#a8a29e] truncate max-w-md">
+                                Loaded: {engineStatus.modelPath.split(/[\\/]/).pop()}
+                              </p>
+                            )}
+                            {engineStatus.status === 'error' && engineStatus.error && (
+                              <p className="text-[9px] text-red-400 max-w-md leading-tight">
+                                {engineStatus.error}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {engineStatus.status === 'unloaded' || engineStatus.status === 'error' ? (
+                              <button
+                                type="button"
+                                disabled={!localGgufModelPath || isLoadingEngine}
+                                onClick={handleStartEngine}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-500/30 hover:border-green-500/60 text-green-400 bg-green-500/5 hover:bg-green-500/10 text-xs font-bold transition-all disabled:opacity-50 disabled:pointer-events-none focus:outline-none"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                                Start Engine
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isLoadingEngine}
+                                onClick={handleStopEngine}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 hover:border-red-500/60 text-red-400 bg-red-500/5 hover:bg-red-500/10 text-xs font-bold transition-all disabled:opacity-50 disabled:pointer-events-none focus:outline-none"
+                              >
+                                <Square className="w-3.5 h-3.5 fill-current" />
+                                Stop Engine
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
+                        <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">
+                          Custom {provider} Config
+                        </h3>
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                            {provider === "lmstudio"
+                              ? "API Key (Ignored for local LLM)"
+                              : "API Key (Overrides Env Var)"}
+                          </label>
+                          <div className="relative flex items-center">
+                            <input
+                              type={showApiKey ? "text" : "password"}
+                              value={customConfigs[provider]?.apiKey || ""}
+                              onChange={(e) =>
+                                setCustomConfigs((prev) => ({
+                                  ...prev,
+                                  [provider]: {
+                                    ...prev[provider],
+                                    apiKey: e.target.value,
+                                  },
+                                }))
+                              }
+                              onCopy={(e) => !showApiKey && e.preventDefault()}
+                              onCut={(e) => !showApiKey && e.preventDefault()}
+                              placeholder={
+                                provider === "lmstudio"
+                                  ? showApiKey
+                                    ? "lm-studio"
+                                    : "••••••••••••"
+                                  : showApiKey
+                                    ? "sk-..."
+                                    : "••••••••••••"
+                              }
+                              className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg pl-3 pr-9 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowApiKey(!showApiKey)}
+                              className="absolute right-2.5 text-[#a8a29e] hover:text-[#f2efeb] focus:outline-none transition-colors"
+                              title={showApiKey ? "Hide API Key" : "Show API Key"}
+                            >
+                              {showApiKey ? (
+                                <EyeOff className="w-3.5 h-3.5" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                            {provider === "lmstudio"
+                              ? "Base URL (Defaults to http://localhost:1234/v1)"
+                              : "Base URL (Optional)"}
+                          </label>
                           <input
-                            type={showApiKey ? "text" : "password"}
-                            value={customConfigs[provider]?.apiKey || ""}
+                            type="text"
+                            value={customConfigs[provider]?.baseUrl || ""}
                             onChange={(e) =>
                               setCustomConfigs((prev) => ({
                                 ...prev,
                                 [provider]: {
                                   ...prev[provider],
-                                  apiKey: e.target.value,
+                                  baseUrl: e.target.value,
                                 },
                               }))
                             }
-                            onCopy={(e) => !showApiKey && e.preventDefault()}
-                            onCut={(e) => !showApiKey && e.preventDefault()}
                             placeholder={
-                              provider === "lmstudio"
-                                ? showApiKey
-                                  ? "lm-studio"
-                                  : "••••••••••••"
-                                : showApiKey
-                                  ? "sk-..."
-                                  : "••••••••••••"
+                              provider === "openai"
+                                ? "https://api.openai.com/v1"
+                                : provider === "lmstudio"
+                                  ? "http://localhost:1234/v1"
+                                  : ""
                             }
-                            className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg pl-3 pr-9 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                            className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                           />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            className="absolute right-2.5 text-[#a8a29e] hover:text-[#f2efeb] focus:outline-none transition-colors"
-                            title={showApiKey ? "Hide API Key" : "Show API Key"}
-                          >
-                            {showApiKey ? (
-                              <EyeOff className="w-3.5 h-3.5" />
-                            ) : (
-                              <Eye className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                            Model ID (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={customConfigs[provider]?.modelId || ""}
+                            onChange={(e) =>
+                              setCustomConfigs((prev) => ({
+                                ...prev,
+                                [provider]: {
+                                  ...prev[provider],
+                                  modelId: e.target.value,
+                                },
+                              }))
+                            }
+                            placeholder={
+                              provider === "openai"
+                                ? "gpt-4o"
+                                : provider === "anthropic"
+                                  ? "claude-3-5-sonnet-latest"
+                                  : provider === "lmstudio"
+                                    ? "e.g. llama-3.2-3b-instruct"
+                                    : "gemini-1.5-pro"
+                            }
+                            className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
+                          />
                         </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
-                          {provider === "lmstudio"
-                            ? "Base URL (Defaults to http://localhost:1234/v1)"
-                            : "Base URL (Optional)"}
-                        </label>
-                        <input
-                          type="text"
-                          value={customConfigs[provider]?.baseUrl || ""}
-                          onChange={(e) =>
-                            setCustomConfigs((prev) => ({
-                              ...prev,
-                              [provider]: {
-                                ...prev[provider],
-                                baseUrl: e.target.value,
-                              },
-                            }))
-                          }
-                          placeholder={
-                            provider === "openai"
-                              ? "https://api.openai.com/v1"
-                              : provider === "lmstudio"
-                                ? "http://localhost:1234/v1"
-                                : ""
-                          }
-                          className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
-                          Model ID (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          value={customConfigs[provider]?.modelId || ""}
-                          onChange={(e) =>
-                            setCustomConfigs((prev) => ({
-                              ...prev,
-                              [provider]: {
-                                ...prev[provider],
-                                modelId: e.target.value,
-                              },
-                            }))
-                          }
-                          placeholder={
-                            provider === "openai"
-                              ? "gpt-4o"
-                              : provider === "anthropic"
-                                ? "claude-3-5-sonnet-latest"
-                                : provider === "lmstudio"
-                                  ? "e.g. llama-3.2-3b-instruct"
-                                  : "gemini-1.5-pro"
-                          }
-                          className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
-                        />
-                      </div>
-                    </div>
+                    )}
 
                     <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
                       <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">

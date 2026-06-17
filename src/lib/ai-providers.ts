@@ -26,6 +26,7 @@ export const PROVIDER_CAPABILITIES: Record<string, { multimodal: boolean }> = {
   openai: { multimodal: false },
   anthropic: { multimodal: false },
   lmstudio: { multimodal: false },
+  "local-gguf": { multimodal: false },
 };
 
 export interface ChatEngineOptions {
@@ -172,6 +173,12 @@ export function getVercelModel(provider: string, customConfigs: any, modelId?: s
         name: 'lmstudio',
         baseURL: baseUrl || 'http://localhost:1234/v1',
         apiKey: apiKey || 'lm-studio',
+      })(resolvedModelId || 'local-model');
+    case 'local-gguf':
+      return createOpenAICompatible({
+        name: 'local-gguf',
+        baseURL: 'http://127.0.0.1:11430/v1',
+        apiKey: 'local-gguf',
       })(resolvedModelId || 'local-model');
     default:
       return createOpenAI(opts)(resolvedModelId || 'gpt-4o-mini');

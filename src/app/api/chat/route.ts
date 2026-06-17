@@ -162,6 +162,65 @@ export async function POST(req: Request) {
       }
     });
 
+    // Auto-load local GGUF model if provider is local-gguf and model is not ready
+    if (provider === 'local-gguf') {
+      const localGguf = (userPreferences as any)?.localGguf || {};
+      const modelPath = localGguf.modelPath;
+      if (!modelPath) {
+        return new Response(JSON.stringify({ error: "Local GGUF model path is not configured. Please go to Settings to select your local GGUF model." }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      try {
+        const RUNNER_URL = "http://127.0.0.1:11430";
+        const statusRes = await fetch(`${RUNNER_URL}/status`, { cache: 'no-store' });
+        const statusData = await statusRes.json();
+        
+        const needsLoad = statusData.status !== 'ready' || statusData.modelPath !== modelPath;
+        if (needsLoad) {
+          console.log(`[Chat API] Local GGUF model needs loading. Path: ${modelPath}`);
+          // Trigger load on the runner
+          await fetch(`${RUNNER_URL}/load`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              modelPath: modelPath,
+              contextSize: Number(localGguf.contextSize || 4096),
+              gpuLayers: Number(localGguf.gpuLayers ?? 99),
+              threads: Number(localGguf.threads || 4)
+            })
+          });
+
+          // Poll until ready (up to 30 seconds)
+          let loaded = false;
+          for (let i = 0; i < 60; i++) {
+            await new Promise(r => setTimeout(r, 500));
+            const checkRes = await fetch(`${RUNNER_URL}/status`, { cache: 'no-store' });
+            const checkData = await checkRes.json();
+            if (checkData.status === 'ready') {
+              loaded = true;
+              break;
+            }
+            if (checkData.status === 'error') {
+              throw new Error(`Runner loading error: ${checkData.error}`);
+            }
+          }
+          if (!loaded) {
+            throw new Error("Timeout waiting for local model to load.");
+          }
+          console.log('[Chat API] Local GGUF model loaded successfully.');
+        }
+      } catch (err: any) {
+        console.error("[Chat API] Local model load failed:", err);
+        return new Response(JSON.stringify({ error: `Local LLM Engine failed to initialize: ${err.message}` }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // Create a dynamic agent configured with the user's provider settings, profile, and persona
     const dynamicAgent = await createDialogueAgent(
       provider, 
