@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   buildDashboardFilter,
   getAttentionNeededQuery,
-  getReflectionReadyQuery,
   getTaskTriageQuery,
   getMorningBriefQuery,
   getEventPrepQuery,
@@ -26,9 +25,7 @@ describe("dashboard: descriptors shape", () => {
     expect(getAttentionNeededQuery._pb.collection).toBe("tasks");
     expect(getAttentionNeededQuery._pb.kind).toBe("first");
     
-    expect(getReflectionReadyQuery._pb.collection).toBe("reflections");
-    expect(getReflectionReadyQuery._pb.kind).toBe("first");
-    
+
     expect(getTaskTriageQuery._pb.collection).toBe("tasks");
     expect(getTaskTriageQuery._pb.kind).toBe("first");
     

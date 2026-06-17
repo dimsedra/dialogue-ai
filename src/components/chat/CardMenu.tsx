@@ -7,7 +7,6 @@ import { MoreHorizontal, Clock, Moon, Sunrise, BellOff, X, ChevronLeft } from "l
 
 type CardType =
   | "attention_needed"
-  | "reflection_ready"
   | "task_triage"
   | "habit_check"
   | "morning_brief"
@@ -52,14 +51,12 @@ const TIME_BUCKETED: ReadonlySet<CardType> = new Set([
 
 const DISMISSABLE: ReadonlySet<CardType> = new Set([
   "attention_needed",
-  "reflection_ready",
   "task_triage",
   "event_prep",
 ]);
 
 const HUMAN_LABELS: Record<CardType, string> = {
   attention_needed: "attention prompts",
-  reflection_ready: "Weekly Wrap",
   task_triage: "Task Triage",
   habit_check: "Habit Check-In",
   morning_brief: "Morning Brief",

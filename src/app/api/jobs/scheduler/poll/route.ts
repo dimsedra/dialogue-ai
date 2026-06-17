@@ -90,24 +90,6 @@ export async function GET(req: NextRequest) {
         const { generateDailySummary } = await import("@/lib/jobs/generateDailySummary");
         await generateDailySummary(pb, { userId: user.id, timezone });
       }
-
-      // Weekly OCEAN
-      if (await checkCron("weekly-ocean", 7 * 24 * 60 * 60 * 1000)) {
-        const { generateWeeklyOCEAN } = await import("@/lib/jobs/generateWeeklyOCEAN");
-        await generateWeeklyOCEAN(pb, { userId: user.id, timezone, timezoneOffset });
-      }
-
-      // Monthly OCEAN
-      if (await checkCron("monthly-ocean", 30 * 24 * 60 * 60 * 1000)) {
-        const { generateMonthlyOCEAN } = await import("@/lib/jobs/generateMonthlyOCEAN");
-        await generateMonthlyOCEAN(pb, { userId: user.id, timezone });
-      }
-      
-      // Cron Reflection (Weekly/Monthly/Yearly combined check)
-      if (await checkCron("periodic-reflection", 7 * 24 * 60 * 60 * 1000)) {
-        const { generateCronReflection } = await import("@/lib/jobs/generateCronReflection");
-        await generateCronReflection(pb, { userId: user.id, type: "weekly", timezone });
-      }
     }
 
     return NextResponse.json({ ok: true, notifications: notificationsToFire });

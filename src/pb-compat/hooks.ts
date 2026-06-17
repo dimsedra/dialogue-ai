@@ -148,7 +148,6 @@ export { usePbEventsList, usePbEvent, usePbEventsSearchHistory } from "./hooks/u
 export { usePbHabitsList, usePbHabit, usePbHabitConsistency } from "./hooks/use-pb-habits";
 export { usePbMemoriesList } from "./hooks/use-pb-memories";
 export { usePbUserImagesList } from "./hooks/use-pb-images";
-export { usePbReflection, usePbPublicReflection } from "./hooks/use-pb-reflections";
 
 // Mutations
 export { usePbWorkspaceCreate, usePbWorkspaceUpdate } from "./hooks/use-pb-workspace-mutations";
@@ -162,7 +161,6 @@ export { usePbUpdateProfile, usePbUpdatePreferences, usePbAddSubscription, usePb
 export { usePbMemoryCreate, usePbMemoryUpdate, usePbMemoryDelete } from "./hooks/use-pb-memory-mutations";
 export { usePbMessageSend, usePbMessageUpdate } from "./hooks/use-pb-message-mutations";
 export { usePbImageSave, usePbImageDelete } from "./hooks/use-pb-image-mutations";
-export { usePbReflectionSaveComment, usePbReflectionToggleShare } from "./hooks/use-pb-reflection-mutations";
 
 // =============================================================================
 // Re-exports for convenience.

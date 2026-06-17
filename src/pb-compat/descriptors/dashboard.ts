@@ -1,6 +1,6 @@
 import { getPbClient } from "../client";
 import { defineQuery } from "../use-query";
-import type { PbId, PbTasks, PbHabits, PbHabitLogs, PbEvents, PbReflections, PbCardState } from "../_generated/dataModel";
+import type { PbId, PbTasks, PbHabits, PbHabitLogs, PbEvents, PbCardState } from "../_generated/dataModel";
 
 export type DashboardTimeArgs = {
   timezone?: string;
@@ -25,21 +25,10 @@ export type ProactiveState =
     }
   | {
       type: "attention_needed";
-      priority: "pending_reflection";
-      reflectionId: PbId<"reflections">;
-      periodLabel: string;
-    }
-  | {
-      type: "attention_needed";
       priority: "oldest_task";
       taskId: PbId<"tasks">;
       taskTitle: string;
       ageInDays: number;
-    }
-  | {
-      type: "reflection_ready";
-      reflectionId: PbId<"reflections">;
-      periodLabel: string;
     }
   | {
       type: "task_triage";
@@ -301,7 +290,6 @@ const buildAttentionNeededState = async (
   userId: string,
   tasks: PbTasks[],
   activeHabits: PbHabits[],
-  pendingReflection: PbReflections | undefined,
   todayDateString: string,
   now: number,
 ): Promise<ProactiveState | null> => {
@@ -352,14 +340,6 @@ const buildAttentionNeededState = async (
     }
   }
 
-  if (pendingReflection) {
-    return {
-      type: "attention_needed",
-      priority: "pending_reflection",
-      reflectionId: pendingReflection.id as unknown as PbId<"reflections">,
-      periodLabel: pendingReflection.periodLabel,
-    };
-  }
 
   const tier4Oldest = tasks
     .filter((task) => !task.completed)
@@ -411,15 +391,6 @@ async function getAttentionNeededImpl(
     pb.collection("habits").getList(1, 200, { filter: `user = "${userId}"` }),
   ]);
 
-  const reflectionsList = await pb.collection("reflections").getList(1, 20, {
-    filter: `user = "${userId}"`,
-    sort: "-createdAt",
-  });
-
-  const pendingReflection = reflectionsList.items
-    .filter((r: any) => r.userReflection === undefined || r.userReflection === "")
-    .sort((a: any, b: any) => b.createdAt - a.createdAt)[0] as unknown as PbReflections | undefined;
-
   const activeHabits = (habitsList.items as unknown as PbHabits[]).filter((h) => !h.archived);
 
   return await buildAttentionNeededState(
@@ -427,33 +398,11 @@ async function getAttentionNeededImpl(
     userId,
     tasksList.items as unknown as PbTasks[],
     activeHabits,
-    pendingReflection,
     todayDateString,
     now,
   );
 }
 
-async function getReflectionReadyImpl(
-  args: DashboardTimeArgs,
-): Promise<ProactiveState | null> {
-  const pb = getPbClient();
-  const userId = args?.userId ?? pb.authStore.record?.id;
-  if (!userId) return null;
-
-  const list = await pb.collection("reflections").getList(1, 20, {
-    filter: `user = "${userId}"`,
-    sort: "-createdAt",
-  });
-
-  const pending = list.items.find((r: any) => r.userReflection === undefined || r.userReflection === "") as unknown as PbReflections | undefined;
-  if (!pending) return null;
-
-  return {
-    type: "reflection_ready",
-    reflectionId: pending.id as unknown as PbId<"reflections">,
-    periodLabel: pending.periodLabel,
-  };
-}
 
 async function getTaskTriageImpl(
   args: DashboardTimeArgs,
@@ -680,17 +629,6 @@ export const getAttentionNeededQuery = defineQuery<
   getAttentionNeededImpl,
 );
 
-export const getReflectionReadyQuery = defineQuery<
-  DashboardTimeArgs,
-  ProactiveState | null
->(
-  {
-    collection: "reflections",
-    kind: "first",
-    buildFilter: buildDashboardFilter,
-  },
-  getReflectionReadyImpl,
-);
 
 export const getTaskTriageQuery = defineQuery<
   DashboardTimeArgs,

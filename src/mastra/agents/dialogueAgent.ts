@@ -57,7 +57,6 @@ export async function createDialogueAgent(
   baseUrl?: string | null,
   userName?: string | null,
   userBio?: string | null,
-  behavioralProfile?: string | null,
   monthlyDigest?: string | null,
   latestWeeklyDigest?: string | null,
   timezone: string = 'UTC',
@@ -186,9 +185,8 @@ export async function createDialogueAgent(
     if (userBio) instructions += `- Bio/Facts: ${userBio}\n`;
   }
   
-  if (behavioralProfile || monthlyDigest || latestWeeklyDigest) {
-    instructions += `\n\n## Current Behavioral Context (OCEAN)\n`;
-    if (behavioralProfile) instructions += `**Stable Baseline Profile:**\n${behavioralProfile}\n\n`;
+  if (monthlyDigest || latestWeeklyDigest) {
+    instructions += `\n\n## Context\n`;
     if (monthlyDigest) instructions += `**Latest Monthly Synthesis:**\n${monthlyDigest}\n\n`;
     if (latestWeeklyDigest) instructions += `**Latest Weekly Trend:**\n${latestWeeklyDigest}\n`;
   }

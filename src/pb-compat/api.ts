@@ -37,7 +37,6 @@ import { eventsListQuery, eventsGetQuery, eventsSearchHistoryQuery } from "./des
 import { habitsListRawQuery, habitsGetQuery, habitsGetHabitConsistencyQuery } from "./descriptors/habits";
 import {
   getAttentionNeededQuery,
-  getReflectionReadyQuery,
   getTaskTriageQuery,
   getMorningBriefQuery,
   getEventPrepQuery,
@@ -100,7 +99,6 @@ export const api = {
     get: eventsGetQuery,
     searchHistory: eventsSearchHistoryQuery,
   },
-  reflections: {} as StubNamespace,
   userImages: {} as StubNamespace,
   habits: {
     getHabits: habitsListRawQuery,
@@ -117,7 +115,6 @@ export const api = {
   cardState: {} as StubNamespace,
   dashboard: {
     getAttentionNeeded: getAttentionNeededQuery,
-    getReflectionReady: getReflectionReadyQuery,
     getTaskTriage: getTaskTriageQuery,
     getMorningBrief: getMorningBriefQuery,
     getEventPrep: getEventPrepQuery,
@@ -131,14 +128,12 @@ export const api = {
 
   // System
   migrations: {} as StubNamespace,
-  ocean: {} as StubNamespace,
-  oceanQueries: {} as StubNamespace,
+
   encryption: {} as StubNamespace,
   aiProviders: {} as StubNamespace,
   ai: {} as StubNamespace,
   backgroundJobs: {} as StubNamespace,
   weeklyDigestsJobs: {} as StubNamespace,
-  reflectionsJobs: {} as StubNamespace,
 
   // Cron / scheduled
   crons: {} as StubNamespace,

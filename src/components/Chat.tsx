@@ -33,7 +33,6 @@ import {
   PbTasks,
   PbEvents,
   PbMemories,
-  PbReflections,
   PbUserProfile,
 } from "@/pb-compat";
 import { api } from "@/pb-compat/api";
@@ -60,21 +59,6 @@ const Dashboard = dynamic(
   () => import("./chat/Dashboard").then((m) => m.Dashboard),
   { ssr: false, loading: () => null },
 );
-const ReflectionWrappedModal = dynamic(
-  () =>
-    import("./chat/ReflectionWrappedModal").then(
-      (m) => m.ReflectionWrappedModal,
-    ),
-  { ssr: false, loading: () => null },
-);
-// Image export is invoked from a button click — no need to ship the SVG/Canvas
-// pipeline in the initial bundle.
-const exportReflectionAsImage = async (
-  ...args: Parameters<typeof import("../utils/exportReflectionImage").exportReflectionAsImage>
-) => {
-  const mod = await import("../utils/exportReflectionImage");
-  return mod.exportReflectionAsImage(...args);
-};
 type AIProvider = string;
 type ProviderConfig = { apiKey?: string; baseUrl?: string; modelId?: string };
 type ProviderConfigs = Record<string, ProviderConfig>;
@@ -269,7 +253,6 @@ export function Chat({
     id: string;
     title: string;
   } | null>(null);
-  const [openReflectionId, setOpenReflectionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (
@@ -281,19 +264,6 @@ export function Chat({
       setActiveSessionIdAction(sessions[0]._id);
     }
   }, [sessions, activeSessionId, setActiveSessionIdAction, activeWorkspaceId]);
-
-  // OCEAN Heartbeat: Automatically trigger background OCEAN digest generation if pending
-  useEffect(() => {
-    const p = profile as { userId?: string } | undefined;
-    if (p?.userId) {
-      // Fire and forget
-      fetch('/api/cron/ocean', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: p.userId })
-      }).catch(err => console.error("OCEAN heartbeat failed", err));
-    }
-  }, [profile]);
 
   // ---- Sync handler (used by both the sidebar button and TaskPanel) ----
   const handleSync = async () => {
@@ -458,7 +428,6 @@ export function Chat({
             onSelectSession={handleDashboardSelectSession}
             onShowHistory={() => setShowHistoryAction(true)}
             onShowTasks={onShowTasksAction}
-            onOpenReflection={setOpenReflectionId}
           />
         ) : (
           <ActiveChat
@@ -516,26 +485,6 @@ export function Chat({
         onConfirm={(id) => executeDeleteChat(id)}
         onCancel={() => setConfirmDeleteSession(null)}
         isLargeViewport={isLargeViewport}
-      />
-      <ReflectionWrappedModal
-        reflectionId={openReflectionId}
-        onClose={() => setOpenReflectionId(null)}
-        onExportImage={async (id) => {
-          let data: any;
-          try {
-            const pb = (await import("@/pb-compat/client")).getPbClient();
-            const rec = await pb.collection("reflections").getOne(id);
-            data = {
-              ...rec,
-              _id: rec.id,
-              userId: rec.user,
-              workspaceId: rec.workspace,
-            };
-          } catch (e) {
-            console.error("Failed to fetch reflection from PB for export:", e);
-          }
-          if (data) await exportReflectionAsImage(data);
-        }}
       />
     </div>
   );

@@ -52,7 +52,6 @@ export async function POST(req: Request) {
     let userName = null;
     let userBio = null;
     let userPreferences = null;
-    let behavioralProfile = null;
     let monthlyDigest = null;
     let latestWeeklyDigest = null;
     let timeFormat: "auto" | "12h" | "24h" = "auto";
@@ -76,8 +75,7 @@ export async function POST(req: Request) {
               if (!userName) userName = profile.name;
               userBio = profile.bio;
               userPreferences = profile.preferences;
-              behavioralProfile = profile.behavioralProfile;
-              
+
               if (userPreferences && typeof userPreferences === 'object') {
                 const prefs = userPreferences as any;
                 if (prefs.timeFormat) {
@@ -244,7 +242,6 @@ export async function POST(req: Request) {
       baseUrl, 
       userName, 
       userBio,
-      behavioralProfile,
       monthlyDigest,
       latestWeeklyDigest,
       timezone,

@@ -12,7 +12,6 @@ import {
   PbAgentPersonas,
   PbHabits,
   PbTasks,
-  PbReflections,
   PbEvents,
 } from "@/pb-compat";
 import type { ProactiveState } from "@/pb-compat/descriptors/dashboard";
@@ -52,11 +51,8 @@ function getCardIdForState(state: ProactiveState): string | undefined {
         return state.taskId;
       case "unchecked_habit":
         return state.habitId;
-      case "pending_reflection":
-        return state.reflectionId;
     }
   }
-  if (state.type === "reflection_ready") return state.reflectionId;
   if (state.type === "habit_check") return state.habitId;
   return undefined;
 }
@@ -222,10 +218,6 @@ export function Dashboard({
     pbApi.dashboard.getAttentionNeeded,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
   );
-  const splitReflectionReady = usePbQuery(
-    pbApi.dashboard.getReflectionReady,
-    USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
-  );
   const splitTaskTriage = usePbQuery(
     pbApi.dashboard.getTaskTriage,
     USE_SPLIT_PROACTIVE_STATE ? timeArgs : "skip",
@@ -259,7 +251,6 @@ export function Dashboard({
     // Loading state: any of the split queries still resolving on first mount.
     if (
       splitAttention === undefined ||
-      splitReflectionReady === undefined ||
       splitTaskTriage === undefined ||
       splitEventPrep === undefined ||
       splitHabitCheck === undefined ||
@@ -271,7 +262,6 @@ export function Dashboard({
     }
     const candidates: ProactiveState[] = [
       ...(splitAttention ? [splitAttention as ProactiveState] : []),
-      ...(splitReflectionReady ? [splitReflectionReady as ProactiveState] : []),
       ...(splitTaskTriage ? [splitTaskTriage as ProactiveState] : []),
       ...(splitEventPrep ? [splitEventPrep as ProactiveState] : []),
       ...(splitHabitCheck ? [splitHabitCheck as ProactiveState] : []),
@@ -308,7 +298,6 @@ export function Dashboard({
   }, [
     legacyProactiveState,
     splitAttention,
-    splitReflectionReady,
     splitTaskTriage,
     splitEventPrep,
     splitHabitCheck,
@@ -426,7 +415,6 @@ export function Dashboard({
       const priorityLabel: Record<typeof priority, string> = {
         overdue_task: "Dialogue • Overdue",
         unchecked_habit: "Dialogue • Habit",
-        pending_reflection: "Dialogue • Reflection",
         oldest_task: "Dialogue • Oldest Open",
       };
 
@@ -461,19 +449,6 @@ export function Dashboard({
                   : "."}
               </p>
             );
-          case "pending_reflection":
-            return (
-              <p
-                className="text-sm leading-relaxed"
-                style={{ color: bgSettings.primaryText }}
-              >
-                Your{" "}
-                <span className="font-semibold">
-                  {proactiveState.periodLabel}
-                </span>{" "}
-                wrap is ready.
-              </p>
-            );
           case "oldest_task":
             return (
               <p
@@ -505,13 +480,6 @@ export function Dashboard({
           case "unchecked_habit":
             return (
               <Flame
-                className="w-3.5 h-3.5"
-                style={{ color: bgSettings.accentColor }}
-              />
-            );
-          case "pending_reflection":
-            return (
-              <Sparkles
                 className="w-3.5 h-3.5"
                 style={{ color: bgSettings.accentColor }}
               />
@@ -569,59 +537,44 @@ export function Dashboard({
                   {priority === "overdue_task" ? "Resolve" : "Open Task"}
                 </button>
               )
-            ) : priority === "unchecked_habit" ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void handleLogHabit(
-                      proactiveState.habitId,
-                      todayDateString,
-                      "completed",
-                    )
-                  }
-                  className="px-3 py-2 rounded-lg text-[11px] font-bold transition-all"
-                  style={{
-                    backgroundColor: bgSettings.accentColor,
-                    color: "#0f0e0c",
-                  }}
-                >
-                  Log Completed
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void handleLogHabit(
-                      proactiveState.habitId,
-                      todayDateString,
-                      "skipped",
-                    )
-                  }
-                  className="px-3 py-2 rounded-lg text-[11px] font-bold border transition-all"
-                  style={{
-                    borderColor: `${bgSettings.accentColor}55`,
-                    color: bgSettings.primaryText,
-                  }}
-                >
-                  Skip Today
-                </button>
-              </>
             ) : (
-              priority === "pending_reflection" &&
-              onOpenReflection && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onOpenReflection(proactiveState.reflectionId)
-                  }
-                  className="px-3 py-2 rounded-lg text-[11px] font-bold transition-all"
-                  style={{
-                    backgroundColor: bgSettings.accentColor,
-                    color: "#0f0e0c",
-                  }}
-                >
-                  Reflect
-                </button>
+              priority === "unchecked_habit" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleLogHabit(
+                        proactiveState.habitId,
+                        todayDateString,
+                        "completed",
+                      )
+                    }
+                    className="px-3 py-2 rounded-lg text-[11px] font-bold transition-all"
+                    style={{
+                      backgroundColor: bgSettings.accentColor,
+                      color: "#0f0e0c",
+                    }}
+                  >
+                    Log Completed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleLogHabit(
+                        proactiveState.habitId,
+                        todayDateString,
+                        "skipped",
+                      )
+                    }
+                    className="px-3 py-2 rounded-lg text-[11px] font-bold border transition-all"
+                    style={{
+                      borderColor: `${bgSettings.accentColor}55`,
+                      color: bgSettings.primaryText,
+                    }}
+                  >
+                    Skip Today
+                  </button>
+                </>
               )
             )}
           </div>
@@ -629,59 +582,7 @@ export function Dashboard({
       );
     }
 
-    if (proactiveState.type === "reflection_ready") {
-      return (
-        <motion.div
-          key="reflection_ready"
-          layoutId="proactive-card"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.25, ease: "easeOut" }}
-          className="relative rounded-xl border p-5 space-y-4"
-          style={cardBgStyle}
-        >
-          <CardMenu
-            cardType="reflection_ready"
-            cardId={proactiveState.reflectionId}
-            {...cardMenuProps}
-          />
-          <div className="flex items-center gap-2">
-            <Sparkles
-              className="w-3.5 h-3.5"
-              style={{ color: bgSettings.accentColor }}
-            />
-            <span
-              className="text-[9px] font-black uppercase tracking-[0.2em]"
-              style={{ color: bgSettings.secondaryText }}
-            >
-              Dialogue • Weekly Wrap
-            </span>
-          </div>
-          <p
-            className="text-sm leading-relaxed"
-            style={{ color: bgSettings.primaryText }}
-          >
-            Your{" "}
-            <span className="font-semibold">{proactiveState.periodLabel}</span>{" "}
-            wrap is ready.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => onOpenReflection?.(proactiveState.reflectionId)}
-              className="px-3 py-2 rounded-lg text-[11px] font-bold transition-all"
-              style={{
-                backgroundColor: bgSettings.accentColor,
-                color: "#0f0e0c",
-              }}
-            >
-              Reveal My Wrap
-            </button>
-          </div>
-        </motion.div>
-      );
-    }
+
 
     if (proactiveState.type === "task_triage") {
       return (

@@ -123,7 +123,7 @@ export async function generateDailySummary(
 
   const messagesText = userMessages.map((m) => m.text).join("\n---\n");
 
-  const prompt = `You are a behavioral analyst for a productivity app. Read the user's messages from today and write a 2-line session summary that captures behavioral signals relevant to the Big 5 (OCEAN) personality traits. Do not explain the reasoning, just output the summary.
+  const prompt = `You are a helpful AI productivity assistant. Read the user's messages from today and write a 2-line session summary that captures the main topics discussed, tasks accomplished, or plans made. Do not explain the reasoning, just output the summary.
 
 Messages:
 ${messagesText}`;
