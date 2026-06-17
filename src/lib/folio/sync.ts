@@ -4,6 +4,8 @@ import { AsyncLocalStorage } from 'async_hooks';
 import PocketBase from 'pocketbase';
 import { parseMarkdownFile } from './parser';
 import { ingestTaskNotes, ingestEventNotes, deleteSourceMemories } from '../graph/ingest';
+import crypto from 'crypto';
+import { getLocalEmbedding } from '../graph/embedding';
 
 export interface FolioContext {
   folioRootPath: string;
@@ -24,7 +26,7 @@ export function getFolioContext(): FolioContext {
 
 export interface EntityInfo {
   id: string;
-  collectionName: 'tasks' | 'events';
+  collectionName: 'tasks' | 'events' | 'memories';
   workspaceId: string | null;
 }
 
@@ -46,7 +48,7 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
   // 1. Global: tasks/task-[id].md -> parts = ['tasks', 'task-[id].md']
   // 2. Workspace: [workspaceId]/tasks/task-[id].md -> parts = ['[workspaceId]', 'tasks', 'task-[id].md']
   
-  let collectionName: 'tasks' | 'events' | null = null;
+  let collectionName: 'tasks' | 'events' | 'memories' | null = null;
   let workspaceId: string | null = null;
   let filename = '';
   
@@ -54,6 +56,10 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
     if (parts[0] === 'tasks' || parts[0] === 'events') {
       collectionName = parts[0] as 'tasks' | 'events';
       filename = parts[1];
+    } else if (parts[0] === 'system' && parts[1] === 'memories.md') {
+      return { id: 'global', collectionName: 'memories', workspaceId: null };
+    } else if (parts[1] === 'workspace_memories.md') {
+      return { id: parts[0], collectionName: 'memories', workspaceId: parts[0] };
     }
   } else if (parts.length === 3) {
     if (parts[1] === 'tasks' || parts[1] === 'events') {
@@ -256,6 +262,98 @@ export async function syncFolioFileToDb(
 
     // Run RAG ingestion for event
     await ingestEventNotes(pb, id, body, outcome);
+  } else if (collectionName === 'memories') {
+    await syncMemoriesFileToDb(filePath, pb, folioRootPath);
+  }
+}
+
+/**
+ * Syncs memories Markdown files to the PocketBase memories collection,
+ * extracting bullet point chunks, embedding them, and pruning deleted ones.
+ */
+export async function syncMemoriesFileToDb(
+  filePath: string,
+  pb: PocketBase,
+  folioRootPath: string
+): Promise<void> {
+  const info = resolveEntityFromPath(filePath, folioRootPath);
+  if (!info || info.collectionName !== 'memories') return;
+
+  if (!existsSync(filePath)) {
+    return;
+  }
+
+  // Resolve user ID
+  let userId = pb.authStore.record?.id;
+  if (!userId) {
+    const users = await pb.collection('users').getFullList({ limit: 1 });
+    if (users.length > 0) {
+      userId = users[0].id;
+    }
+  }
+  if (!userId) {
+    console.warn('[Sync Engine] No active user found for memories file sync:', filePath);
+    return;
+  }
+
+  // Read file and parse bullet points
+  const content = readFileSync(filePath, 'utf8');
+  const { body } = parseMarkdownFile(content);
+  const bodyLines = body.split('\n');
+  const bullets: string[] = [];
+  for (const line of bodyLines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      const bulletText = trimmed.slice(2).trim();
+      if (bulletText) {
+        bullets.push(bulletText);
+      }
+    }
+  }
+
+  // Calculate hashes of bullet points in the file
+  const activeHashes = new Set<string>();
+  const sourceId = relative(folioRootPath, filePath).replace(/\\/g, '/');
+
+  // Fetch all existing DB memories synced from this file
+  const existingMemories = await pb.collection('memories').getFullList({
+    filter: `user = "${userId}" && source_type = "File" && source_id = "${sourceId}"`,
+  });
+  const existingByHash = new Map(existingMemories.map((m) => [m.hash, m]));
+
+  for (const text of bullets) {
+    const hash = crypto.createHash('sha256').update(text).digest('hex');
+    activeHashes.add(hash);
+
+    const existing = existingByHash.get(hash);
+    if (existing) {
+      if (existing.text !== text) {
+        await pb.collection('memories').update(existing.id, {
+          text,
+          updatedAt: Date.now(),
+        });
+      }
+    } else {
+      const embedding = await getLocalEmbedding(text);
+      await pb.collection('memories').create({
+        user: userId,
+        text,
+        embedding,
+        hash,
+        source_type: 'File',
+        source_id: sourceId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+  }
+
+  // Prune memories no longer in the file
+  for (const existing of existingMemories) {
+    if (!activeHashes.has(existing.hash)) {
+      console.log(`[Sync Engine] Pruning deleted memory from file:`, existing.text);
+      await pb.collection('memories').delete(existing.id);
+    }
   }
 }
 
@@ -285,14 +383,26 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   // Global folders
   scanFolder(join(folioRootPath, 'tasks'));
   scanFolder(join(folioRootPath, 'events'));
+  
+  // Global memories file
+  const globalMemoriesPath = join(folioRootPath, 'system', 'memories.md');
+  if (existsSync(globalMemoriesPath)) {
+    filesToSync.push(globalMemoriesPath);
+  }
 
   // Workspace folders
   const rootItems = readdirSync(folioRootPath);
   for (const item of rootItems) {
+    if (item === 'tasks' || item === 'events' || item === 'system') continue;
     const fullPath = join(folioRootPath, item);
-    if (statSync(fullPath).isDirectory() && item !== 'tasks' && item !== 'events') {
+    if (statSync(fullPath).isDirectory()) {
       scanFolder(join(fullPath, 'tasks'));
       scanFolder(join(fullPath, 'events'));
+      
+      const wsMemoriesPath = join(fullPath, 'workspace_memories.md');
+      if (existsSync(wsMemoriesPath)) {
+        filesToSync.push(wsMemoriesPath);
+      }
     }
   }
 
@@ -333,6 +443,29 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
 
   await pruneDeleted('tasks', 'Task');
   await pruneDeleted('events', 'Event');
+
+  // Prune deleted file memories
+  try {
+    const fileMemories = await pb.collection('memories').getFullList({
+      filter: 'source_type = "File"',
+    });
+    const checkedPaths = new Set<string>();
+    for (const mem of fileMemories) {
+      if (checkedPaths.has(mem.source_id)) continue;
+      checkedPaths.add(mem.source_id);
+      
+      const expectedPath = join(folioRootPath, mem.source_id);
+      if (!existsSync(expectedPath)) {
+        console.log(`[Sync Engine] Pruning deleted memories file from DB:`, mem.source_id);
+        const toDelete = fileMemories.filter((m) => m.source_id === mem.source_id);
+        for (const d of toDelete) {
+          await pb.collection('memories').delete(d.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Sync Engine] Error pruning deleted memories files:', err);
+  }
 
   console.log('[Sync Engine] Folio reconciliation completed.');
 }
