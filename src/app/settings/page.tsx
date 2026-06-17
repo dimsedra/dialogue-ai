@@ -125,6 +125,7 @@ export default function SettingsPage() {
     "profile",
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavedSuccessfully, setIsSavedSuccessfully] = useState(false);
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(
     null,
   );
@@ -261,6 +262,8 @@ export default function SettingsPage() {
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
+    setIsSavedSuccessfully(false);
+    const startTime = Date.now();
     try {
       await updateProfile({ name, bio, preferences: { pushEnabled } });
       await updatePreferences({
@@ -289,6 +292,17 @@ export default function SettingsPage() {
           console.warn("Failed to auto-unload local GGUF runner on provider change:", e);
         }
       }
+
+      // Enforce a minimum saving loader duration of 800ms to prevent quick micro-flicker
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 800) {
+        await new Promise((resolve) => setTimeout(resolve, 800 - elapsed));
+      }
+
+      setIsSavedSuccessfully(true);
+      setTimeout(() => {
+        setIsSavedSuccessfully(false);
+      }, 2000);
     } catch (error) {
       console.error(error);
     } finally {
@@ -456,15 +470,21 @@ export default function SettingsPage() {
             <div className="hidden md:flex flex-col gap-2 pt-4 border-t border-[#2a2723]">
               <button
                 onClick={handleSaveProfile}
-                disabled={isSaving}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] font-black uppercase tracking-widest text-[9px] transition-all shadow-xl shadow-[#d4a373]/10 disabled:opacity-50 active:scale-[0.98]"
+                disabled={isSaving || isSavedSuccessfully}
+                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black uppercase tracking-widest text-[9px] transition-all shadow-xl active:scale-[0.98] ${
+                  isSavedSuccessfully
+                    ? "bg-[#588157] hover:bg-[#588157] text-[#f2efeb] shadow-[#588157]/10"
+                    : "bg-[#d4a373] hover:bg-[#c39262] text-[#0f0e0c] shadow-[#d4a373]/10"
+                }`}
               >
                 {isSaving ? (
-                  <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                  <Sparkles className="w-3.5 h-3.5 animate-spin text-current" />
+                ) : isSavedSuccessfully ? (
+                  <Check className="w-3.5 h-3.5 text-current animate-bounce" />
                 ) : (
-                  <Save className="w-3.5 h-3.5" />
+                  <Save className="w-3.5 h-3.5 text-current" />
                 )}
-                Apply Settings
+                {isSaving ? "Saving..." : isSavedSuccessfully ? "Settings Applied!" : "Apply Settings"}
               </button>
 
               <button
@@ -1671,15 +1691,21 @@ export default function SettingsPage() {
         </button>
         <button
           onClick={handleSaveProfile}
-          disabled={isSaving}
-          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#d4a373] text-[#0f0e0c] font-bold text-[10px] uppercase tracking-wider"
+          disabled={isSaving || isSavedSuccessfully}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all ${
+            isSavedSuccessfully
+              ? "bg-[#588157] text-[#f2efeb]"
+              : "bg-[#d4a373] text-[#0f0e0c]"
+          }`}
         >
           {isSaving ? (
             <Sparkles className="w-3.5 h-3.5 animate-spin" />
+          ) : isSavedSuccessfully ? (
+            <Check className="w-3.5 h-3.5 animate-bounce" />
           ) : (
             <Save className="w-3.5 h-3.5" />
           )}
-          Apply Changes
+          {isSaving ? "Saving..." : isSavedSuccessfully ? "Changes Applied!" : "Apply Changes"}
         </button>
       </div>
 
