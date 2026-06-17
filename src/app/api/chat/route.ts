@@ -109,9 +109,12 @@ export async function POST(req: Request) {
       try {
         if (isPb && pbClient?.authStore.isValid) {
           const session = await pbClient.collection('chat_sessions').getOne(sessionId as string);
-          if (session?.personaName) {
-            personaName = session.personaName;
-            personaPrompt = session.personaPrompt;
+          if (session?.agentPersona) {
+            const persona = await pbClient.collection('agent_personas').getOne(session.agentPersona);
+            if (persona) {
+              personaName = persona.name;
+              personaPrompt = persona.prompt;
+            }
           }
         }
       } catch (err) {
