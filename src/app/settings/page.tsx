@@ -388,6 +388,7 @@ export default function SettingsPage() {
     { id: "openrouter", name: "OpenRouter", desc: "Unified API for many AI models." },
     { id: "zhipu", name: "Zhipu AI (GLM)", desc: "GLM series models by Zhipu AI." },
     { id: "lmstudio", name: "LM Studio", desc: "Local execution for maximum privacy." },
+    { id: "local-gguf", name: "Local GGUF (Dialogue Native)", desc: "Load and run GGUF models directly within Dialogue." },
   ] as const;
 
   return (
