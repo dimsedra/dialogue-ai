@@ -21,8 +21,8 @@ export const addTaskTool = createTool({
   }),
   execute: async (input) => {
     const { getPbClient } = await import('../../lib/pb-server');
-    const { getVaultContext, syncVaultFileToDb } = await import('../../lib/vault/sync');
-    const { serializeMarkdownFile } = await import('../../lib/vault/parser');
+    const { getFolioContext, syncFolioFileToDb } = await import('../../lib/folio/sync');
+    const { serializeMarkdownFile } = await import('../../lib/folio/parser');
     const { parseDateTime } = await import('../../lib/jobs/dateUtils');
     const { existsSync, mkdirSync, writeFileSync } = await import('fs');
     const { join } = await import('path');
@@ -31,7 +31,7 @@ export const addTaskTool = createTool({
     const user = pb.authStore.record?.id;
     if (!user) throw new Error("Unauthorized");
     
-    const { vaultRootPath, basePath } = getVaultContext();
+    const { folioRootPath, basePath } = getFolioContext();
 
     // Generate a new stable 15-character alphanumeric ID
     const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -67,7 +67,7 @@ export const addTaskTool = createTool({
     writeFileSync(filePath, fileContent, 'utf8');
 
     // Sync to DB cache (which handles RAG embedding)
-    await syncVaultFileToDb(filePath, pb, vaultRootPath);
+    await syncFolioFileToDb(filePath, pb, folioRootPath);
 
     // Schedule notification in DB if due date and reminder offset are set
     if (dueDateMs && input.reminderOffset !== undefined && input.reminderOffset >= 0) {

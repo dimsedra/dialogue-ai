@@ -13,13 +13,13 @@ export const deleteTaskTool = createTool({
     console.log('[deleteTask Tool] Executing with input:', input);
     const { getPbClient } = await import('../../lib/pb-server');
     const { deleteSourceMemories } = await import('../../lib/graph/ingest');
-    const { getVaultContext } = await import('../../lib/vault/sync');
+    const { getFolioContext } = await import('../../lib/folio/sync');
     const { existsSync, unlinkSync } = await import('fs');
     const { join } = await import('path');
 
     try {
       const pb = getPbClient();
-      const { basePath } = getVaultContext();
+      const { basePath } = getFolioContext();
 
       // Normalize taskId by stripping any redundant "task-" prefix
       let cleanTaskId = input.taskId;

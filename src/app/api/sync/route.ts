@@ -3,7 +3,8 @@ import { join } from 'path';
 import PocketBase from 'pocketbase';
 import { verifyPbToken } from '@/lib/pb-actions/auth';
 import { getPbAdmin } from '@/lib/pb-server-admin';
-import { syncVaultFileToDb, resolveEntityFromPath } from '@/lib/vault/sync';
+import { syncFolioFileToDb, resolveEntityFromPath } from '@/lib/folio/sync';
+import { DEFAULT_FOLIO_DIR } from '@/lib/folio/constants';
 import { existsSync } from 'fs';
 import { deleteSourceMemories } from '@/lib/graph/ingest';
 
@@ -48,21 +49,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: 'Missing filePath in body' }, { status: 400 });
   }
 
-  // Resolve vaultRootPath
+  // Resolve folioRootPath
   let devFallbackPath = process.env.NODE_ENV === 'development' ? process.env.DEV_LOCAL_PATH : null;
   if (devFallbackPath && devFallbackPath.startsWith('"') && devFallbackPath.endsWith('"')) {
     devFallbackPath = devFallbackPath.slice(1, -1);
   }
-  const vaultRootPath = req.headers.get('x-vault-path') || devFallbackPath || join(process.cwd(), 'dialogue-vault');
+  const folioRootPath = req.headers.get('x-folio-path') || devFallbackPath || join(process.cwd(), DEFAULT_FOLIO_DIR);
 
   try {
-    const info = resolveEntityFromPath(filePath, vaultRootPath);
+    const info = resolveEntityFromPath(filePath, folioRootPath);
     if (!info) {
-      return NextResponse.json({ ok: true, status: 'ignored', reason: 'Path outside vault or invalid collection' });
+      return NextResponse.json({ ok: true, status: 'ignored', reason: 'Path outside folio or invalid collection' });
     }
 
     if (existsSync(filePath)) {
-      await syncVaultFileToDb(filePath, pb, vaultRootPath);
+      await syncFolioFileToDb(filePath, pb, folioRootPath);
       return NextResponse.json({ ok: true, status: 'synced', entity: info });
     } else {
       // File deleted, let's prune it

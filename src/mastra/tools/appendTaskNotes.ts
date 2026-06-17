@@ -16,14 +16,14 @@ export const appendTaskNotesTool = createTool({
     const newEntry = `[${timestamp}]\n- ${input.notes.trim()}`;
 
     const { getPbClient } = await import('../../lib/pb-server');
-    const { getVaultContext, syncVaultFileToDb } = await import('../../lib/vault/sync');
-    const { parseMarkdownFile, serializeMarkdownFile } = await import('../../lib/vault/parser');
+    const { getFolioContext, syncFolioFileToDb } = await import('../../lib/folio/sync');
+    const { parseMarkdownFile, serializeMarkdownFile } = await import('../../lib/folio/parser');
     const { existsSync, readFileSync, writeFileSync } = await import('fs');
     const { join } = await import('path');
 
     try {
       const pb = getPbClient();
-      const { vaultRootPath, basePath } = getVaultContext();
+      const { folioRootPath, basePath } = getFolioContext();
 
       // Normalize taskId by stripping any redundant "task-" prefix
       let cleanTaskId = input.taskId;
@@ -50,7 +50,7 @@ export const appendTaskNotesTool = createTool({
       console.log('[appendTaskNotes Tool] Updated file content on disk.');
 
       // Sync to DB
-      await syncVaultFileToDb(filePath, pb, vaultRootPath);
+      await syncFolioFileToDb(filePath, pb, folioRootPath);
       console.log('[appendTaskNotes Tool] Synced with DB successfully.');
 
       return { success: true, taskId: cleanTaskId };

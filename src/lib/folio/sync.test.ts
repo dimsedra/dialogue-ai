@@ -52,12 +52,12 @@ It has multiple lines.
 });
 
 describe('Path to Entity Resolver', () => {
-  const vaultRoot = 'C:/Users/user/Dialogue Vault';
+  const folioRoot = 'C:/Users/user/Dialogue Folio';
 
   test('resolves global tasks', () => {
     const resolved = resolveEntityFromPath(
-      'C:/Users/user/Dialogue Vault/tasks/task-lh7p5oqw2n8xxyz.md',
-      vaultRoot
+      'C:/Users/user/Dialogue Folio/tasks/task-lh7p5oqw2n8xxyz.md',
+      folioRoot
     );
     expect(resolved).toEqual({
       id: 'lh7p5oqw2n8xxyz',
@@ -68,8 +68,8 @@ describe('Path to Entity Resolver', () => {
 
   test('resolves workspace events', () => {
     const resolved = resolveEntityFromPath(
-      'C:/Users/user/Dialogue Vault/work-123/events/event-lh7p5oqw2n8xxyz.md',
-      vaultRoot
+      'C:/Users/user/Dialogue Folio/work-123/events/event-lh7p5oqw2n8xxyz.md',
+      folioRoot
     );
     expect(resolved).toEqual({
       id: 'lh7p5oqw2n8xxyz',
@@ -80,8 +80,8 @@ describe('Path to Entity Resolver', () => {
 
   test('ignores files outside tasks/events', () => {
     const resolved = resolveEntityFromPath(
-      'C:/Users/user/Dialogue Vault/notes/note-123.md',
-      vaultRoot
+      'C:/Users/user/Dialogue Folio/notes/note-123.md',
+      folioRoot
     );
     expect(resolved).toBeNull();
   });

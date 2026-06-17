@@ -94,6 +94,7 @@ export default function SettingsPage() {
 
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
+  const [folioName, setFolioName] = useState("");
   const [timeFormat, setTimeFormat] = useState<"auto" | "12h" | "24h">("auto");
   type AIProvider = "gemini" | "lmstudio" | "openai" | "anthropic" | "deepseek" | "xai" | "mistral" | "groq" | "cohere" | "moonshotai" | "deepinfra" | "togetherai" | "fireworks" | "alibaba" | "baseten" | "huggingface" | "minimax" | "ollama" | "opencode" | "openrouter" | "zhipu" | "local-gguf";
   const [provider, setProvider] = useState<AIProvider>("gemini");
@@ -176,6 +177,11 @@ export default function SettingsPage() {
       setLocalGgufGpuLayers(lg.gpuLayers ?? 99);
       setLocalGgufContextSize(lg.contextSize || 4096);
       setLocalGgufThreads(lg.threads || 4);
+    }
+    if (typeof prefs?.folioName === 'string') {
+      setFolioName(prefs.folioName);
+    } else {
+      setFolioName("");
     }
   }
 
@@ -273,6 +279,7 @@ export default function SettingsPage() {
         taskModels,
         mcpServers,
         timeFormat,
+        folioName: folioName || undefined,
         localGguf: {
           modelPath: localGgufModelPath,
           gpuLayers: Number(localGgufGpuLayers) || 0,
@@ -552,6 +559,26 @@ export default function SettingsPage() {
                           placeholder="Tell Dialogue about your role, goals, and communication style..."
                           className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all resize-none"
                         />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">
+                          Folio Name
+                        </label>
+                        <input
+                          name="settings-folio-name"
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
+                          value={folioName}
+                          onChange={(e) => setFolioName(e.target.value)}
+                          placeholder="Leave blank for default"
+                          className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                        />
+                        <p className="text-[#a8a29e] text-[9px]">
+                          This is how your personal data directory will be referred to throughout the app.
+                        </p>
                       </div>
                     </div>
                   </section>

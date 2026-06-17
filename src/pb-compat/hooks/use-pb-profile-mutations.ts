@@ -55,6 +55,7 @@ export function usePbUpdatePreferences() {
     taskModels?: any;
     mcpServers?: any;
     timeFormat?: "auto" | "12h" | "24h";
+    folioName?: string;
     localGguf?: {
       modelPath: string;
       gpuLayers: number;
@@ -83,6 +84,7 @@ export function usePbUpdatePreferences() {
       ...(args.taskModels ? { taskModels: args.taskModels } : {}),
       ...(args.mcpServers ? { mcpServers: args.mcpServers } : {}),
       ...(args.timeFormat ? { timeFormat: args.timeFormat } : {}),
+      ...(args.folioName !== undefined ? { folioName: args.folioName } : {}),
       ...(args.localGguf ? { localGguf: args.localGguf } : {}),
       customConfigs: newConfigs,
     };

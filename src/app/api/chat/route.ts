@@ -11,7 +11,8 @@ import { verifyPbToken } from '@/lib/pb-actions/auth';
 import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { parseMcpServers, createMcpClient, getToolsets } from '@/mastra/mcp/client';
-import { reconcileVault, vaultRequestContext } from '@/lib/vault/sync';
+import { reconcileFolio, folioRequestContext } from '@/lib/folio/sync';
+import { DEFAULT_FOLIO_DIR } from '@/lib/folio/constants';
 
 
 export async function POST(req: Request) {
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
     let monthlyDigest = null;
     let latestWeeklyDigest = null;
     let timeFormat: "auto" | "12h" | "24h" = "auto";
+    let folioName: string | null = null;
     let personaName = "Dialogue";
     let personaPrompt = "You build relationships through concrete behaviors, not prescribed tones.";
     
@@ -80,6 +82,9 @@ export async function POST(req: Request) {
                 const prefs = userPreferences as any;
                 if (prefs.timeFormat) {
                   timeFormat = prefs.timeFormat;
+                }
+                if (typeof prefs.folioName === 'string') {
+                  folioName = prefs.folioName;
                 }
               }
 
@@ -119,20 +124,20 @@ export async function POST(req: Request) {
     const mcpClient = createMcpClient(mcpServerDefs);
     const mcpToolsets = await getToolsets(mcpClient);
 
-    // Resolve user vault path or use DEV_LOCAL_PATH fallback
+    // Resolve user folio path or use DEV_LOCAL_PATH fallback
     let devFallbackPath = process.env.NODE_ENV === 'development' ? process.env.DEV_LOCAL_PATH : null;
     if (devFallbackPath && devFallbackPath.startsWith('"') && devFallbackPath.endsWith('"')) {
       devFallbackPath = devFallbackPath.slice(1, -1);
     }
-    const vaultRootPath = req.headers.get('x-vault-path') || devFallbackPath || join(process.cwd(), 'dialogue-vault');
+    const folioRootPath = req.headers.get('x-folio-path') || devFallbackPath || join(process.cwd(), DEFAULT_FOLIO_DIR);
 
     // Make sure the root directory exists
-    if (!existsSync(vaultRootPath)) {
-      mkdirSync(vaultRootPath, { recursive: true });
+    if (!existsSync(folioRootPath)) {
+      mkdirSync(folioRootPath, { recursive: true });
     }
 
     const activeWorkspace = req.headers.get('x-active-workspace') || '';
-    const basePath = activeWorkspace ? join(vaultRootPath, activeWorkspace) : vaultRootPath;
+    const basePath = activeWorkspace ? join(folioRootPath, activeWorkspace) : folioRootPath;
 
     // Make sure the active workspace folder exists
     if (!existsSync(basePath)) {
@@ -142,21 +147,21 @@ export async function POST(req: Request) {
     const filesystem = new LocalFilesystem({
       basePath,
       contained: true,
-      allowedPaths: [vaultRootPath],
+      allowedPaths: [folioRootPath],
     });
 
     const userWorkspace = new Workspace({
       id: `dialogue-workspace-${sessionId || 'default'}`,
       filesystem,
       tools: {
-        mastra_workspace_read_file: { name: 'readVaultFile' },
+        mastra_workspace_read_file: { name: 'readFolioFile' },
         mastra_workspace_write_file: { 
-          name: 'writeVaultFile', 
+          name: 'writeFolioFile', 
           requireApproval: true,
           requireReadBeforeWrite: true,
         },
-        mastra_workspace_list_files: { name: 'listVaultDirectory' },
-        mastra_workspace_grep: { name: 'searchVaultContent' },
+        mastra_workspace_list_files: { name: 'listFolioDirectory' },
+        mastra_workspace_grep: { name: 'searchFolioContent' },
       }
     });
 
@@ -250,7 +255,8 @@ export async function POST(req: Request) {
       scope,
       mcpToolsets,
       timeFormat,
-      userWorkspace
+      userWorkspace,
+      folioName,
     );
     
     // File-based LibSQL ensures approval snapshots survive across HTTP requests
@@ -280,14 +286,14 @@ export async function POST(req: Request) {
     
     // Trigger background reconciliation on boot/API hit
     if (isPb && pbClient) {
-      reconcileVault(vaultRootPath, pbClient).catch((err) => {
+      reconcileFolio(folioRootPath, pbClient).catch((err) => {
         console.error('[Sync Engine] Background reconciliation failed:', err);
       });
     }
 
     // Run agent execution within the PB authenticated context
     const executeStream = async () => {
-      return vaultRequestContext.run({ vaultRootPath, activeWorkspace, basePath }, () => {
+      return folioRequestContext.run({ folioRootPath, activeWorkspace, basePath }, () => {
         return handleChatStream({
           mastra: tempMastra,
           agentId: 'dialogueAgent',

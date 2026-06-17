@@ -21,8 +21,8 @@ export const updateTaskTool = createTool({
   execute: async (input) => {
     console.log('[updateTask Tool] Executing with input:', input);
     const { getPbClient } = await import('../../lib/pb-server');
-    const { getVaultContext, syncVaultFileToDb } = await import('../../lib/vault/sync');
-    const { parseMarkdownFile, serializeMarkdownFile } = await import('../../lib/vault/parser');
+    const { getFolioContext, syncFolioFileToDb } = await import('../../lib/folio/sync');
+    const { parseMarkdownFile, serializeMarkdownFile } = await import('../../lib/folio/parser');
     const { parseDateTime } = await import('../../lib/jobs/dateUtils');
     const { existsSync, readFileSync, writeFileSync } = await import('fs');
     const { join } = await import('path');
@@ -32,7 +32,7 @@ export const updateTaskTool = createTool({
       const user = pb.authStore.record?.id;
       if (!user) throw new Error("Unauthorized");
 
-      const { vaultRootPath, basePath } = getVaultContext();
+      const { folioRootPath, basePath } = getFolioContext();
 
       // Normalize taskId by stripping any redundant "task-" prefix
       let cleanTaskId = input.taskId;
@@ -90,7 +90,7 @@ export const updateTaskTool = createTool({
       console.log('[updateTask Tool] Updated file content on disk.');
 
       // Sync to DB cache (which updates index and schedules notifications)
-      await syncVaultFileToDb(filePath, pb, vaultRootPath);
+      await syncFolioFileToDb(filePath, pb, folioRootPath);
       console.log('[updateTask Tool] Synced with DB successfully.');
 
       // Reschedule notifications in PB

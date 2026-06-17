@@ -11,28 +11,28 @@ Dialogue's development is organized into three sequential phases:
 
 | Phase | Focus | Why this order |
 |---|---|---|
-| **1. Vault System** | Filesystem source of truth + sync engine + database cache | The data foundation. The sync engine and layout boundaries must be established first so agent tools and sandbox runtimes can securely write vault-first from day one. |
-| **2. Mastra Orchestration** | Exploit Mastra's full agent orchestration capabilities | Move from a single-agent model to a multi-agent, workflow-driven execution model, connecting sandboxed workspace access scopes directly to the established vault system. |
-| **3. Add-on Features** | Notes, Deep Research, Community Skills | Clean integration on top of a settled agent layer and a vault-native data layer |
+| **1. Folio System** | Filesystem source of truth + sync engine + database cache | The data foundation. The sync engine and layout boundaries must be established first so agent tools and sandbox runtimes can securely write folio-first from day one. |
+| **2. Mastra Orchestration** | Exploit Mastra's full agent orchestration capabilities | Move from a single-agent model to a multi-agent, workflow-driven execution model, connecting sandboxed workspace access scopes directly to the established folio system. |
+| **3. Add-on Features** | Notes, Deep Research, Community Skills | Clean integration on top of a settled agent layer and a folio-native data layer |
 
 > Previous work (Convex → PocketBase migration) is considered complete. See [`docs/MIGRATION_POCKETBASE.md`](MIGRATION_POCKETBASE.md) for the migration record.
 
 ---
 
-## Phase 1: Vault System
+## Phase 1: Folio System
 
-**Goal**: Replace PocketBase as the source of truth with a local filesystem vault. PB becomes a derived database cache.
+**Goal**: Replace PocketBase as the source of truth with a local filesystem folio. PB becomes a derived database cache.
 
 ### Design Docs
 
-All vault design blueprints live in `docs/future-impl/`. The index document is:
+All folio design blueprints live in `docs/future-impl/`. The index document is:
 
-- **[`filesystem_notes_workspace_architecture.md`](future-impl/vault-system/filesystem_notes_workspace_architecture.md)** — entry point linking all modular guides
+- **[`filesystem_notes_workspace_architecture.md`](future-impl/folio-system/filesystem_notes_workspace_architecture.md)** — entry point linking all modular guides
 
-### Vault Layout
+### Folio Layout
 
 ```
-dialogue-vault/
+dialogue-folio/
 ├── tasks/                    # Task files with YAML frontmatter
 ├── events/                   # Event files, archive subfolder
 ├── notes/                    # Note files
@@ -51,23 +51,23 @@ dialogue-vault/
 
 | Item | What | Reference |
 |---|---|---|
-| 1.1 | **Sync engine** (Rust, `notify` crate) — file watcher, YAML frontmatter parser, SHA-256 change tracking, SQLite cache upsert | [`sync_ingestion_engine.md`](future-impl/vault-system/sync_ingestion_engine.md) |
-| 1.2 | **Workspace isolation** — per-workspace vault subdirectories, scope-pinned memory lookup, zero-cloud collaboration via folder sync (Dropbox / Syncthing / Git) | [`workspace_vault_layout.md`](future-impl/vault-system/workspace_vault_layout.md) |
-| 1.3 | **Auditable memory** — `vault/system/memories.md` as editable source of truth, time-decay ranking, semantic deduplication | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
-| 1.4 | **Dynamic agent personas** — `vault/personas/` as editable Markdown, length-capped prompt refinement on updates | [`dynamic_agent_personas.md`](future-impl/agent-orchestration/dynamic_agent_personas.md) |
-| 1.5 | **Daily log synthesis** — `vault/daily-logs/YYYY-MM-DD.md`, N-log behavioral profile refinement on app open | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
-| 1.6 | **Self-improving playbooks** — agent compiles multi-step traces into `vault/playbooks/`, retrieved via vector search | [`task_playbook_synthesis.md`](future-impl/vault-system/task_playbook_synthesis.md) |
+| 1.1 | **Sync engine** (Rust, `notify` crate) — file watcher, YAML frontmatter parser, SHA-256 change tracking, SQLite cache upsert | [`sync_ingestion_engine.md`](future-impl/folio-system/sync_ingestion_engine.md) |
+| 1.2 | **Workspace isolation** — per-workspace folio subdirectories, scope-pinned memory lookup, zero-cloud collaboration via folder sync (Dropbox / Syncthing / Git) | [`workspace_folio_layout.md`](future-impl/folio-system/workspace_folio_layout.md) |
+| 1.3 | **Auditable memory** — `folio/system/memories.md` as editable source of truth, time-decay ranking, semantic deduplication | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
+| 1.4 | **Dynamic agent personas** — `folio/personas/` as editable Markdown, length-capped prompt refinement on updates | [`dynamic_agent_personas.md`](future-impl/agent-orchestration/dynamic_agent_personas.md) |
+| 1.5 | **Daily log synthesis** — `folio/daily-logs/YYYY-MM-DD.md`, N-log behavioral profile refinement on app open | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
+| 1.6 | **Self-improving playbooks** — agent compiles multi-step traces into `folio/playbooks/`, retrieved via vector search | [`task_playbook_synthesis.md`](future-impl/folio-system/task_playbook_synthesis.md) |
 | 1.7 | **Build & deploy** — bundle PocketBase + Node + Python sidecars into single Electron installer | — |
 
 ### Migration Path
 
-Existing PB data migrates to vault files via an export-on-upgrade script: read each PB collection, write vault files with matching YAML frontmatter, then start the sync engine pointed at the new vault root. PB stays as a read-only cache.
+Existing PB data migrates to folio files via an export-on-upgrade script: read each PB collection, write folio files with matching YAML frontmatter, then start the sync engine pointed at the new folio root. PB stays as a read-only cache.
 
 ---
 
 ## Phase 2: Mastra Orchestration Enhancement
 
-**Goal**: Move from a single-agent-with-19-tools pattern to a full multi-agent, workflow-driven, MCP-connected architecture operating securely on top of the local-first vault.
+**Goal**: Move from a single-agent-with-19-tools pattern to a full multi-agent, workflow-driven, MCP-connected architecture operating securely on top of the local-first folio.
 
 ### Current State
 
@@ -83,8 +83,8 @@ Existing PB data migrates to vault files via an export-on-upgrade script: read e
 | 2.1 | **MCP Client infrastructure** — connect to external MCP servers (STDIO sidecars, HTTP) with lifecycle management (spawn, health-check, kill) | `@mastra/mcp` install | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#3-mcp) |
 | 2.2 | **MCP Sidecar lifecycle** — Electron manages Python/Node child processes alongside PocketBase; health-check, restart, graceful shutdown | 2.1 | — |
 | 2.3 | **Workflow engine** — replace ad-hoc agent tool-chaining with `createWorkflow` + `createStep` for compound operations: daily log synthesis, playbook generation, task execution loops | `@mastra/core` (already installed) | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#1-workflows) |
-| 2.4 | **Workspace integration** — wire `@mastra/core/workspace` pointed at `vault/` for native file read/write/list/grep, sandboxed CLI execution, and BM25/vector/hybrid search | `@mastra/core` (already installed), Phase 1 (1.1, 1.2) | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#4-workspace) |
-| 2.4b | **Workspace Skills** — configure a `skills/` directory on the Workspace. Agent gains `skill`, `skill_read`, `skill_search` tools automatically, discovering any community skill installed as a folder with `SKILL.md` + scripts. Follows the [Agent Skills](https://agentskills.io) open standard. Includes authoring **`dialogue-core` skill** — a first-party skill always loaded on the Workspace that teaches the agent vault conventions (directory layout, YAML frontmatter schemas, memory ingestion pipeline, graph edge wiring). Community skills return raw results; `dialogue-core` shows the agent how to store them properly in Dialogue's ecosystem. | 2.4 | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#4-workspace) |
+| 2.4 | **Workspace integration** — wire `@mastra/core/workspace` pointed at `folio/` for native file read/write/list/grep, sandboxed CLI execution, and BM25/vector/hybrid search | `@mastra/core` (already installed), Phase 1 (1.1, 1.2) | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#4-workspace) |
+| 2.4b | **Workspace Skills** — configure a `skills/` directory on the Workspace. Agent gains `skill`, `skill_read`, `skill_search` tools automatically, discovering any community skill installed as a folder with `SKILL.md` + scripts. Follows the [Agent Skills](https://agentskills.io) open standard. Includes authoring **`dialogue-core` skill** — a first-party skill always loaded on the Workspace that teaches the agent folio conventions (directory layout, YAML frontmatter schemas, memory ingestion pipeline, graph edge wiring). Community skills return raw results; `dialogue-core` shows the agent how to store them properly in Dialogue's ecosystem. | 2.4 | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#4-workspace) |
 | 2.5 | **Structured agents** — agent approval (human-in-the-loop), processors (message intercept/transform), guardrails, supervisor agents for multi-agent orchestration | 2.1–2.4 | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#6-structured-agents) |
 | 2.6 | **Studio integration** — use Mastra Studio for interactive dev, inspection, and debugging | — | [`mastra_orchestration_upgrade.md`](future-impl/agent-orchestration/mastra_orchestration_upgrade.md#2-editor) |
 
@@ -96,19 +96,19 @@ Dialogue's agent layer becomes a proper Mastra application: a persistent agent s
 
 ## Phase 3: Add-on Features
 
-**Goal**: Ship value-added features on top of a settled agent layer (Phase 2) and vault-native storage (Phase 1).
+**Goal**: Ship value-added features on top of a settled agent layer (Phase 2) and folio-native storage (Phase 1).
 
 ### 3a: Notes
 
 | Item | What | Reference |
 |---|---|---|
-| 3a.1 | BlockNote editor component with auto-save | [`notes_memory_vault_integration.md`](future-impl/addons-and-skills/notes_memory_vault_integration.md) |
+| 3a.1 | BlockNote editor component with auto-save | [`notes_memory_folio_integration.md`](future-impl/addons-and-skills/notes_memory_folio_integration.md) |
 | 3a.2 | NoteList panel tab (alongside Tasks/Events/Habits) | same |
 | 3a.3 | Mastra tools: `createNote`, `updateNote`, `getNote`, `searchNotes`, `deleteNote` | same |
 | 3a.4 | `ingestNoteNotes` memory pipeline — chunk, embed, hash, upsert into memories | same |
-| 3a.5 | Vault-native storage: dual-format (BlockNote JSON + Markdown), `vault/notes/` | same |
+| 3a.5 | Folio-native storage: dual-format (BlockNote JSON + Markdown), `folio/notes/` | same |
 
-Notes are stored vault-first from day one, following the same file format and directory layout defined in [`workspace_vault_layout.md`](future-impl/vault-system/workspace_vault_layout.md).
+Notes are stored folio-first from day one, following the same file format and directory layout defined in [`workspace_folio_layout.md`](future-impl/folio-system/workspace_folio_layout.md).
 
 ### 3b: Deep Research (GPT Researcher)
 
@@ -116,7 +116,7 @@ Notes are stored vault-first from day one, following the same file format and di
 |---|---|---|
 | 3b.1 | **Python sidecar** — Electron spawns `gptr-mcp` (Python MCP server) on app startup, health-checks, reaps on shutdown | Phase 2: MCP sidecar lifecycle (2.2) |
 | 3b.2 | **`deep_research` MCP tool** — agent calls `deep_research(query, depth, breadth)` → Python multi-agent pipeline → cited report returned via MCP | 3b.1 |
-| 3b.3 | **Research report storage** — `vault/research/YYYY-MM-DD-topic.md` with YAML frontmatter, inline citations, source list | Phase 1: vault layout |
+| 3b.3 | **Research report storage** — `folio/research/YYYY-MM-DD-topic.md` with YAML frontmatter, inline citations, source list | Phase 1: folio layout |
 | 3b.4 | **Research → memory pipeline** — `ingestResearchNotes()` indexes report chunks into memories, same pattern as notes | Phase 1: memory system |
 
 GPT Researcher is a Python 3.10+ process. It runs as an Electron-managed sidecar — the same pattern as PocketBase and the Next.js server. The MCP protocol hides the language boundary; Dialogue's agent sees it as just another tool.
@@ -179,28 +179,16 @@ Phase 2: Mastra Orchestration                          │         │
 Phase 3: Add-on Features                                                    │        │
     │                                                                       │        │
     ├── 3a Notes                                                            │        │
-    │   └── 3a.5 Vault-native storage ──────────────────────────────────────┘        │
+    │   └── 3a.5 Folio-native storage ──────────────────────────────────────┘        │
     │                                                                                │
     ├── 3b Deep Research (GPT Researcher)                                            │
     │   ├── 3b.1 Python sidecar ─────────────────────────────────────────────────────┤
     │   ├── 3b.2 deep_research MCP tool ─────────────────────────────────────────────┤
-    │   ├── 3b.3 vault/research/ storage                                             │
+    │   ├── 3b.3 folio/research/ storage                                             │
     │   └── 3b.4 Research → memory                                                   │
     │                                                                                │
     └── 3c Community Skills (last30days, etc.)                                       │
         └── Workspace Skills already done in 2.4b ───────────────────────────────────┘
 ```
 
-Each phase depends on the one before it. Notes, Deep Research, and Community Skills are vault-native from the start — no PB intermediate, no migration later.��
-    │                                                    │          │
-    ├── 3b Deep Research (GPT Researcher)
-    │   ├── 3b.1 Python sidecar ─────────────────────────┤
-    │   ├── 3b.2 deep_research MCP tool ─────────────────┤
-    │   ├── 3b.3 vault/research/ storage ────────────────┼──────────┘
-    │   └── 3b.4 Research → memory ──────────────────────┼────────────
-    │
-    └── 3c Community Skills (last30days, etc.)
-        └── Workspace Skills already done in 1.4b ───────┘
-```
-
-Each phase depends on the one before it. Notes, Deep Research, and Community Skills are vault-native from the start — no PB intermediate, no migration later.
+Each phase depends on the one before it. Notes, Deep Research, and Community Skills are folio-native from the start — no PB intermediate, no migration later.

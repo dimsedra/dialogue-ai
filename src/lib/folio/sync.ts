@@ -5,18 +5,18 @@ import PocketBase from 'pocketbase';
 import { parseMarkdownFile } from './parser';
 import { ingestTaskNotes, ingestEventNotes, deleteSourceMemories } from '../graph/ingest';
 
-export interface VaultContext {
-  vaultRootPath: string;
+export interface FolioContext {
+  folioRootPath: string;
   activeWorkspace: string;
   basePath: string;
 }
 
-export const vaultRequestContext = new AsyncLocalStorage<VaultContext>();
+export const folioRequestContext = new AsyncLocalStorage<FolioContext>();
 
-export function getVaultContext(): VaultContext {
-  const ctx = vaultRequestContext.getStore();
+export function getFolioContext(): FolioContext {
+  const ctx = folioRequestContext.getStore();
   if (!ctx) {
-    throw new Error('getVaultContext() must be called within vaultRequestContext.run()');
+    throw new Error('getFolioContext() must be called within folioRequestContext.run()');
   }
   return ctx;
 }
@@ -31,8 +31,8 @@ export interface EntityInfo {
 /**
  * Resolves collection, entity ID, and workspace ID from a given file path.
  */
-export function resolveEntityFromPath(filePath: string, vaultRootPath: string): EntityInfo | null {
-  const normRoot = vaultRootPath.replace(/\\/g, '/');
+export function resolveEntityFromPath(filePath: string, folioRootPath: string): EntityInfo | null {
+  const normRoot = folioRootPath.replace(/\\/g, '/');
   const normFile = filePath.replace(/\\/g, '/');
   
   if (!normFile.startsWith(normRoot)) {
@@ -75,15 +75,15 @@ export function resolveEntityFromPath(filePath: string, vaultRootPath: string): 
 }
 
 /**
- * Syncs a single markdown file from the vault to the PocketBase cache database.
+ * Syncs a single markdown file from the folio to the PocketBase cache database.
  * Prevents redundant writes/embeddings by comparing values before writing.
  */
-export async function syncVaultFileToDb(
+export async function syncFolioFileToDb(
   filePath: string,
   pb: PocketBase,
-  vaultRootPath: string
+  folioRootPath: string
 ): Promise<void> {
-  const info = resolveEntityFromPath(filePath, vaultRootPath);
+  const info = resolveEntityFromPath(filePath, folioRootPath);
   if (!info) return;
 
   const { id, collectionName, workspaceId } = info;
@@ -260,15 +260,15 @@ export async function syncVaultFileToDb(
 }
 
 /**
- * Reconciles the local vault markdown files with the database cache on startup.
+ * Reconciles the local folio markdown files with the database cache on startup.
  * Syncs new/updated files and prunes database records for deleted files.
  */
-export async function reconcileVault(vaultRootPath: string, pb: PocketBase): Promise<void> {
-  if (!existsSync(vaultRootPath)) return;
+export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Promise<void> {
+  if (!existsSync(folioRootPath)) return;
 
-  console.log('[Sync Engine] Starting vault reconciliation...');
+  console.log('[Sync Engine] Starting folio reconciliation...');
 
-  // 1. Gather all files in the vault under tasks/ and events/ directories
+  // 1. Gather all files in the folio under tasks/ and events/ directories
   const filesToSync: string[] = [];
 
   const scanFolder = (folderPath: string) => {
@@ -283,13 +283,13 @@ export async function reconcileVault(vaultRootPath: string, pb: PocketBase): Pro
   };
 
   // Global folders
-  scanFolder(join(vaultRootPath, 'tasks'));
-  scanFolder(join(vaultRootPath, 'events'));
+  scanFolder(join(folioRootPath, 'tasks'));
+  scanFolder(join(folioRootPath, 'events'));
 
   // Workspace folders
-  const rootItems = readdirSync(vaultRootPath);
+  const rootItems = readdirSync(folioRootPath);
   for (const item of rootItems) {
-    const fullPath = join(vaultRootPath, item);
+    const fullPath = join(folioRootPath, item);
     if (statSync(fullPath).isDirectory() && item !== 'tasks' && item !== 'events') {
       scanFolder(join(fullPath, 'tasks'));
       scanFolder(join(fullPath, 'events'));
@@ -299,7 +299,7 @@ export async function reconcileVault(vaultRootPath: string, pb: PocketBase): Pro
   // Sync files to DB
   for (const file of filesToSync) {
     try {
-      await syncVaultFileToDb(file, pb, vaultRootPath);
+      await syncFolioFileToDb(file, pb, folioRootPath);
     } catch (err) {
       console.error('[Sync Engine] Error syncing file during reconciliation:', file, err);
     }
@@ -315,8 +315,8 @@ export async function reconcileVault(vaultRootPath: string, pb: PocketBase): Pro
         const expectedFilename = `${filePrefix}${rec.id}.md`;
         
         const expectedPath = rec.workspace
-          ? join(vaultRootPath, rec.workspace, collectionName, expectedFilename)
-          : join(vaultRootPath, collectionName, expectedFilename);
+          ? join(folioRootPath, rec.workspace, collectionName, expectedFilename)
+          : join(folioRootPath, collectionName, expectedFilename);
 
         if (!existsSync(expectedPath)) {
           console.log(`[Sync Engine] Pruning deleted ${sourceType} from DB:`, rec.id);
@@ -334,5 +334,5 @@ export async function reconcileVault(vaultRootPath: string, pb: PocketBase): Pro
   await pruneDeleted('tasks', 'Task');
   await pruneDeleted('events', 'Event');
 
-  console.log('[Sync Engine] Vault reconciliation completed.');
+  console.log('[Sync Engine] Folio reconciliation completed.');
 }

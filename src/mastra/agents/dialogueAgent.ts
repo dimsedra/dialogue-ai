@@ -23,6 +23,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { zhipu } from 'zhipu-ai-provider';
 import * as tools from '../tools';
 import { filterToolsByScope } from '../tools/categories';
+import { getFolioDisplayName } from '@/lib/folio/constants';
 
 const customFetch = (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   if (init && init.body && typeof init.body === 'string') {
@@ -65,7 +66,8 @@ export async function createDialogueAgent(
   scope?: { type: string; id: string; title: string } | null,
   mcpToolsets?: Record<string, Record<string, unknown>> | null,
   timeFormat: "auto" | "12h" | "24h" = "auto",
-  workspace?: Workspace
+  workspace?: Workspace,
+  folioName?: string | null,
 ) {
   let model;
   const opts = {
@@ -250,12 +252,13 @@ Before answering questions about the user's history, preferences, or past conver
 - If a tool call fails, tell the user honestly`;
 
   if (workspace) {
-    instructions += `\n\n## Vault Filesystem Tools
-You have access to the user's local vault files:
-- \`readVaultFile\`: View content of a file
-- \`writeVaultFile\`: Save/modify a file (YAML frontmatter + Markdown body)
-- \`listVaultDirectory\`: Browse folders
-- \`searchVaultContent\`: Search text in files
+    const folioDisplay = getFolioDisplayName(folioName, userName);
+    instructions += `\n\n## ${folioDisplay} Filesystem Tools
+You have access to the user's local ${folioDisplay}:
+- \`readFolioFile\`: View content of a file
+- \`writeFolioFile\`: Save/modify a file (YAML frontmatter + Markdown body)
+- \`listFolioDirectory\`: Browse folders
+- \`searchFolioContent\`: Search text in files
 
 All paths are relative to your active workspace base path. Do NOT output raw file content paths in responses unless requested.`;
   }
