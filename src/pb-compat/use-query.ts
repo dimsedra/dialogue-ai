@@ -232,6 +232,13 @@ export function useQuery<T>(
   // Stable key for args — re-run the effect when args content changes.
   const key = args === "skip" ? "skip" : argsKey(args);
 
+  const [lastKey, setLastKey] = useState<string | null>(null);
+
+  if (key !== lastKey) {
+    setLastKey(key);
+    setData(undefined);
+  }
+
   useEffect(() => {
     if (args === "skip") return;
     let cancelled = false;

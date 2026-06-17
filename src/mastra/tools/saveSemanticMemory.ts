@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import crypto from 'crypto';
 import fs from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { getLocalEmbedding } from '../../lib/graph/embedding';
 import { wireMentionsEdges } from '../../lib/graph/edges';
 import { folioRequestContext, syncFolioFileToDb } from '../../lib/folio/sync';
@@ -53,6 +53,36 @@ export const saveSemanticMemoryTool = createTool({
     }
     const folioRootPath = ctx?.folioRootPath || devFallbackPath || join(process.cwd(), DEFAULT_FOLIO_DIR);
     const activeWorkspace = ctx?.activeWorkspace || '';
+
+    let targetAbsPath: string;
+    if (activeWorkspace) {
+      if (ctx?.basePath) {
+        targetAbsPath = join(ctx.basePath, 'workspace_memories.md');
+      } else {
+        const legacyPath = join(folioRootPath, activeWorkspace);
+        if (fs.existsSync(legacyPath) && fs.statSync(legacyPath).isDirectory()) {
+          targetAbsPath = join(legacyPath, 'workspace_memories.md');
+        } else {
+          const workspacesParent = join(folioRootPath, 'workspaces');
+          let matchedFolder: string | null = null;
+          if (fs.existsSync(workspacesParent)) {
+            const folders = fs.readdirSync(workspacesParent);
+            const matched = folders.find((f) => f.endsWith(`-${activeWorkspace}`));
+            if (matched) {
+              matchedFolder = matched;
+            }
+          }
+          if (matchedFolder) {
+            targetAbsPath = join(workspacesParent, matchedFolder, 'workspace_memories.md');
+          } else {
+            targetAbsPath = join(workspacesParent, `workspace-${activeWorkspace}`, 'workspace_memories.md');
+          }
+        }
+      }
+    } else {
+      targetAbsPath = join(folioRootPath, 'system', 'memories.md');
+    }
+    const targetRelPath = relative(folioRootPath, targetAbsPath).replace(/\\/g, '/');
 
     // Fetch all existing memories for this user to check similarity
     const memories = await pbClient.collection('memories').getFullList({
@@ -132,8 +162,6 @@ export const saveSemanticMemoryTool = createTool({
           }
         } else {
           // File not found (e.g. deleted), we write to the current target file instead
-          const targetRelPath = activeWorkspace ? `${activeWorkspace}/workspace_memories.md` : 'system/memories.md';
-          const targetAbsPath = join(folioRootPath, targetRelPath);
           fs.mkdirSync(dirname(targetAbsPath), { recursive: true });
           
           const existingContent = fs.existsSync(targetAbsPath) ? fs.readFileSync(targetAbsPath, 'utf8') : '';
@@ -163,9 +191,6 @@ export const saveSemanticMemoryTool = createTool({
       }
     } else {
       // No duplicate found, we append to the current context's memory file
-      const targetRelPath = activeWorkspace ? `${activeWorkspace}/workspace_memories.md` : 'system/memories.md';
-      const targetAbsPath = join(folioRootPath, targetRelPath);
-      
       fs.mkdirSync(dirname(targetAbsPath), { recursive: true });
       const existingContent = fs.existsSync(targetAbsPath) ? fs.readFileSync(targetAbsPath, 'utf8') : '';
       const { metadata, body } = parseMarkdownFile(existingContent);

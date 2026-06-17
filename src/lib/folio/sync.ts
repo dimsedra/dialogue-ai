@@ -59,13 +59,30 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
     } else if (parts[0] === 'system' && parts[1] === 'memories.md') {
       return { id: 'global', collectionName: 'memories', workspaceId: null };
     } else if (parts[1] === 'workspace_memories.md') {
+      // Old style: [workspaceId]/workspace_memories.md
       return { id: parts[0], collectionName: 'memories', workspaceId: parts[0] };
     }
   } else if (parts.length === 3) {
-    if (parts[1] === 'tasks' || parts[1] === 'events') {
+    if (parts[0] === 'workspaces' && parts[2] === 'workspace_memories.md') {
+      // New style: workspaces/[name-id]/workspace_memories.md
+      const folderName = parts[1];
+      const dashIndex = folderName.lastIndexOf('-');
+      const parsedId = dashIndex !== -1 ? folderName.slice(dashIndex + 1) : folderName;
+      return { id: parsedId, collectionName: 'memories', workspaceId: parsedId };
+    } else if (parts[1] === 'tasks' || parts[1] === 'events') {
+      // Old style: [workspaceId]/[tasks|events]/task-[id].md
       workspaceId = parts[0];
       collectionName = parts[1] as 'tasks' | 'events';
       filename = parts[2];
+    }
+  } else if (parts.length === 4) {
+    if (parts[0] === 'workspaces' && (parts[2] === 'tasks' || parts[2] === 'events')) {
+      // New style: workspaces/[name-id]/[tasks|events]/task-[id].md
+      const folderName = parts[1];
+      const dashIndex = folderName.lastIndexOf('-');
+      workspaceId = dashIndex !== -1 ? folderName.slice(dashIndex + 1) : folderName;
+      collectionName = parts[2] as 'tasks' | 'events';
+      filename = parts[3];
     }
   }
   
@@ -366,6 +383,37 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
 
   console.log('[Sync Engine] Starting folio reconciliation...');
 
+  // Migrate existing memories' source_id if their workspace folder is now in workspaces/
+  const wsParentPath = join(folioRootPath, 'workspaces');
+  if (existsSync(wsParentPath)) {
+    try {
+      const wsFolders = readdirSync(wsParentPath);
+      for (const folder of wsFolders) {
+        const fullPath = join(wsParentPath, folder);
+        if (statSync(fullPath).isDirectory()) {
+          const dashIndex = folder.lastIndexOf('-');
+          const workspaceId = dashIndex !== -1 ? folder.slice(dashIndex + 1) : folder;
+          
+          const oldSourceId = `${workspaceId}/workspace_memories.md`;
+          const newSourceId = `workspaces/${folder}/workspace_memories.md`;
+          
+          const oldMemories = await pb.collection('memories').getFullList({
+            filter: `source_type = "File" && source_id = "${oldSourceId}"`,
+          });
+          
+          for (const mem of oldMemories) {
+            console.log(`[Sync Engine] Migrating memory path from ${oldSourceId} to ${newSourceId}`);
+            await pb.collection('memories').update(mem.id, {
+              source_id: newSourceId,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Sync Engine] Failed migrating memory paths during reconciliation:', err);
+    }
+  }
+
   // 1. Gather all files in the folio under tasks/ and events/ directories
   const filesToSync: string[] = [];
 
@@ -391,9 +439,28 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   }
 
   // Workspace folders
+  // 1. New style workspaces folder
+  const workspacesParentPath = join(folioRootPath, 'workspaces');
+  if (existsSync(workspacesParentPath)) {
+    const wsFolders = readdirSync(workspacesParentPath);
+    for (const folder of wsFolders) {
+      const fullPath = join(workspacesParentPath, folder);
+      if (statSync(fullPath).isDirectory()) {
+        scanFolder(join(fullPath, 'tasks'));
+        scanFolder(join(fullPath, 'events'));
+        
+        const wsMemoriesPath = join(fullPath, 'workspace_memories.md');
+        if (existsSync(wsMemoriesPath)) {
+          filesToSync.push(wsMemoriesPath);
+        }
+      }
+    }
+  }
+
+  // 2. Old style workspaces directly under root (for backward compatibility)
   const rootItems = readdirSync(folioRootPath);
   for (const item of rootItems) {
-    if (item === 'tasks' || item === 'events' || item === 'system') continue;
+    if (item === 'tasks' || item === 'events' || item === 'system' || item === 'workspaces') continue;
     const fullPath = join(folioRootPath, item);
     if (statSync(fullPath).isDirectory()) {
       scanFolder(join(fullPath, 'tasks'));
@@ -424,9 +491,29 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
         const filePrefix = collectionName === 'tasks' ? 'task-' : 'event-';
         const expectedFilename = `${filePrefix}${rec.id}.md`;
         
-        const expectedPath = rec.workspace
-          ? join(folioRootPath, rec.workspace, collectionName, expectedFilename)
-          : join(folioRootPath, collectionName, expectedFilename);
+        let expectedPath: string;
+        if (rec.workspace) {
+          // Look up folder ending with -rec.workspace in workspaces/ first
+          let workspaceFolder = rec.workspace;
+          const wsParent = join(folioRootPath, 'workspaces');
+          let foundNewStyle = false;
+          if (existsSync(wsParent)) {
+            const folders = readdirSync(wsParent);
+            const matched = folders.find((f) => f.endsWith(`-${rec.workspace}`));
+            if (matched) {
+              workspaceFolder = matched;
+              foundNewStyle = true;
+            }
+          }
+          if (foundNewStyle) {
+            expectedPath = join(folioRootPath, 'workspaces', workspaceFolder, collectionName, expectedFilename);
+          } else {
+            // Fallback to old style directly under root
+            expectedPath = join(folioRootPath, rec.workspace, collectionName, expectedFilename);
+          }
+        } else {
+          expectedPath = join(folioRootPath, collectionName, expectedFilename);
+        }
 
         if (!existsSync(expectedPath)) {
           console.log(`[Sync Engine] Pruning deleted ${sourceType} from DB:`, rec.id);

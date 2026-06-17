@@ -7,11 +7,11 @@ export function mapWorkspace(pb: PbWorkspaces): PbWorkspaces {
   return pb;
 }
 
-export function usePbWorkspacesList(): PbWorkspaces[] | undefined {
+export function usePbWorkspacesList(args?: { includeArchived?: boolean }): PbWorkspaces[] | undefined {
   const { user } = useAuth();
   const workspaces = useQuery(
     workspacesListQuery,
-    user ? { userId: user.id } : undefined,
+    user ? { userId: user.id, ...args } : undefined,
   );
   if (!workspaces) return undefined;
   return workspaces.map(mapWorkspace);

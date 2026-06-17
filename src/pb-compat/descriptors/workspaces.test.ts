@@ -8,7 +8,11 @@ import {
 
 describe("workspaces: buildWorkspacesListFilter", () => {
   it("returns `user = <id>` for a valid user id in args", () => {
-    expect(buildWorkspacesListFilter({ userId: "abc123" })).toBe('user = "abc123"');
+    expect(buildWorkspacesListFilter({ userId: "abc123" })).toBe('user = "abc123" && archived != true');
+  });
+
+  it("includes archived workspaces when includeArchived is true", () => {
+    expect(buildWorkspacesListFilter({ userId: "abc123", includeArchived: true })).toBe('user = "abc123"');
   });
 
   it("returns a no-match filter when user is missing or empty", () => {

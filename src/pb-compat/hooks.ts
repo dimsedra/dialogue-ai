@@ -150,7 +150,7 @@ export { usePbMemoriesList } from "./hooks/use-pb-memories";
 export { usePbUserImagesList } from "./hooks/use-pb-images";
 
 // Mutations
-export { usePbWorkspaceCreate, usePbWorkspaceUpdate } from "./hooks/use-pb-workspace-mutations";
+export { usePbWorkspaceCreate, usePbWorkspaceUpdate, usePbWorkspaceDelete } from "./hooks/use-pb-workspace-mutations";
 export { usePbPersonaCreate, usePbPersonaUpdate, usePbPersonaDelete } from "./hooks/use-pb-persona-mutations";
 export { usePbSessionCreate, usePbSessionDelete, usePbSessionRename, usePbSessionTogglePin } from "./hooks/use-pb-session-mutations";
 export { usePbTaskCreate, usePbTaskUpdate, usePbTaskToggleCompleted, usePbTaskDelete, usePbTasksRollOver } from "./hooks/use-pb-task-mutations";

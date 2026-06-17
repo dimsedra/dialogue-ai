@@ -117,6 +117,17 @@ export function usePaginatedQuery<
   // ---- Hooks below this line. Same order on every render. ----
 
   const [rawResults, setRawResults] = useState<TResult[]>([]);
+  const [status, setStatus] = useState<PaginationStatus>(
+    isSkip ? "Exhausted" : "LoadingFirstPage",
+  );
+  const [lastKey, setLastKey] = useState<string | null>(null);
+
+  if (argsKey !== lastKey) {
+    setLastKey(argsKey);
+    setRawResults([]);
+    setStatus(isSkip ? "Exhausted" : "LoadingFirstPage");
+  }
+
   const setResults = (updater: TResult[] | ((prev: TResult[]) => TResult[])) => {
     setRawResults((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
@@ -124,9 +135,6 @@ export function usePaginatedQuery<
     });
   };
   const results = rawResults;
-  const [status, setStatus] = useState<PaginationStatus>(
-    isSkip ? "Exhausted" : "LoadingFirstPage",
-  );
   // Refs for values that change but shouldn't trigger re-render or
   // re-subscribe. Read at call time inside the subscribe callback.
   const lastIdRef = useRef<string | null>(null);

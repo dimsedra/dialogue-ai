@@ -78,6 +78,7 @@ export interface PbWorkspaces extends PbRecord {
   agentName?: string;
   defaultAgentPersona?: PbId<"agent_personas">;
   createdAt: number;
+  archived?: boolean;
 }
 
 export interface PbChatSessions extends PbRecord {

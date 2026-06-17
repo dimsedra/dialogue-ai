@@ -4,6 +4,7 @@ import type { PbWorkspaces } from "../_generated/dataModel";
 
 export type WorkspacesListArgs = {
   userId?: string;
+  includeArchived?: boolean;
 } | undefined;
 
 export type WorkspacesGetArgs = {
@@ -20,7 +21,11 @@ export function buildWorkspacesListFilter(
     return "1 = 2";
   }
   const escaped = userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  return `user = "${escaped}"`;
+  let filter = `user = "${escaped}"`;
+  if (!args?.includeArchived) {
+    filter += ` && archived != true`;
+  }
+  return filter;
 }
 
 export function buildWorkspacesGetFilter(

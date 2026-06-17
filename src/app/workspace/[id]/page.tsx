@@ -1,12 +1,12 @@
 "use client";
 
-import { usePbWorkspace, usePbPersonasList, usePbWorkspaceUpdate } from "@/pb-compat";
+import { usePbWorkspace, usePbPersonasList, usePbWorkspaceUpdate, usePbWorkspaceDelete } from "@/pb-compat";
 import type { PbId } from "@/pb-compat/_generated/dataModel";
-import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check } from "lucide-react";
+import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check, Archive, ArchiveRestore, Trash2, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function WorkspaceSettingsPage() {
   const params = useParams();
@@ -16,10 +16,14 @@ export default function WorkspaceSettingsPage() {
   const workspace = usePbWorkspace(workspaceId);
   const personas = usePbPersonasList();
   const updateSettings = usePbWorkspaceUpdate();
+  const deleteWorkspace = usePbWorkspaceDelete();
 
   const [defaultAgentPersonaId, setDefaultAgentPersonaId] = useState<string | "default_dialogue">("default_dialogue");
   const [workspaceColor, setWorkspaceColor] = useState("#d4a373");
+  const [isArchived, setIsArchived] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [prevId, setPrevId] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -49,6 +53,7 @@ export default function WorkspaceSettingsPage() {
     setPrevId(workspace.id);
     setDefaultAgentPersonaId(workspace.defaultAgentPersona || "default_dialogue");
     setWorkspaceColor(workspace.color || "#d4a373");
+    setIsArchived(!!workspace.archived);
   }
 
   const isSpecialView = typeof workspaceId === "string" && ["calendar", "tasks", "events", "habits"].includes(workspaceId);
@@ -66,11 +71,29 @@ export default function WorkspaceSettingsPage() {
         id: workspaceId,
         color: workspaceColor,
         defaultAgentPersonaId: defaultAgentPersonaId === "default_dialogue" ? null : defaultAgentPersonaId,
+        archived: isArchived,
       });
+      if (isArchived) {
+        router.push("/");
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteWorkspace(workspaceId);
+      router.push("/");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete workspace: " + (err as Error).message);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -199,6 +222,75 @@ export default function WorkspaceSettingsPage() {
                 </div>
               </motion.section>
 
+              {/* Archive Workspace */}
+              <motion.section
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.05 }}
+                className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Archive className="w-4 h-4 text-[#d4a373]" />
+                      <h2 className="text-base font-bold text-[#f2efeb]">Archive Workspace</h2>
+                    </div>
+                    <p className="text-[#a8a29e] text-[10px] mt-1 pr-6">
+                      Archiving hides the workspace from the sidebar list but keeps all tasks, events, and notes intact.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsArchived(!isArchived)}
+                    className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
+                      isArchived
+                        ? "bg-[#d4a373] text-[#0f0e0c] hover:bg-[#c39262]"
+                        : "bg-[#2a2723] text-[#a8a29e] hover:bg-[#322f2b] hover:text-[#f2efeb]"
+                    }`}
+                  >
+                    {isArchived ? (
+                      <>
+                        <ArchiveRestore className="w-3.5 h-3.5" />
+                        Archived
+                      </>
+                    ) : (
+                      <>
+                        <Archive className="w-3.5 h-3.5" />
+                        Archive
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.section>
+
+              {/* Danger Zone (Workspace Deletion) */}
+              <motion.section
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.075 }}
+                className="bg-[#140b08]/80 p-5 rounded-xl border border-red-500/20 shadow-lg"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-400" />
+                      <h2 className="text-base font-bold text-red-400">Danger Zone</h2>
+                    </div>
+                    <p className="text-[#a8a29e] text-[10px] mt-1 pr-6">
+                      Deleting this workspace is a permanent action. Its directory on disk will be moved to the trash folder, and all related tasks, events, habits, and chat sessions in PocketBase will be deleted.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border border-red-500/20 hover:border-transparent active:scale-[0.98]"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete Workspace
+                  </button>
+                </div>
+              </motion.section>
+
               {/* Save Button / Actions */}
               <div className="flex items-center justify-end gap-3 pt-4">
                 <Link
@@ -223,6 +315,57 @@ export default function WorkspaceSettingsPage() {
             </div>
           </div>
         </div>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f0e0c]/85 backdrop-blur-xs p-6"
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[340px] bg-[#1a1814] border border-red-500/20 rounded-2xl p-6 shadow-2xl"
+            >
+              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                <AlertTriangle className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-[#f2efeb] mb-2 leading-tight">
+                Delete Workspace?
+              </h3>
+              <p className="text-xs text-[#a8a29e] mb-6 leading-relaxed">
+                Are you sure you want to delete <span className="text-[#f2efeb] font-semibold italic">&quot;{workspace?.name}&quot;</span>? This will move its files on disk to the trash folder and permanently delete all associated tasks, events, habits, and chat sessions. This action cannot be undone.
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="w-full py-3 bg-red-500 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2"
+                >
+                  {isDeleting ? (
+                    <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  Delete Workspace
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="w-full py-3 bg-transparent text-[#a8a29e] rounded-xl text-[10px] font-bold uppercase tracking-widest hover:text-[#f2efeb] transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

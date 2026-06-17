@@ -207,6 +207,31 @@ vi.mock('fs', async (importOriginal) => {
       actual.writeFileSync(p, data, options);
     },
     mkdirSync: () => undefined,
+    readdirSync: (p: any) => {
+      const norm = String(p).replace(/\\/g, '/');
+      const prefix = norm + '/';
+      const results = new Set<string>();
+      for (const k of Object.keys(mockFiles)) {
+        if (k.startsWith(prefix)) {
+          const rest = k.slice(prefix.length);
+          const slashIdx = rest.indexOf('/');
+          if (slashIdx === -1) {
+            results.add(rest);
+          } else {
+            results.add(rest.slice(0, slashIdx));
+          }
+        }
+      }
+      return Array.from(results);
+    },
+    statSync: (p: any) => {
+      const norm = String(p).replace(/\\/g, '/');
+      const isFile = norm.endsWith('.md');
+      return {
+        isFile: () => isFile,
+        isDirectory: () => !isFile,
+      } as any;
+    },
   };
   return {
     ...mocked,
@@ -332,6 +357,30 @@ describe('Path to Entity Resolver', () => {
       workspaceId: 'work-123',
     });
   });
+
+  test('resolves new-style workspace events', () => {
+    const resolved = resolveEntityFromPath(
+      'C:/Users/user/Dialogue Folio/workspaces/my-new-workspace-lh7p5oqw2n8xxyz/events/event-lh7p5oqw2n8xxyz.md',
+      folioRoot
+    );
+    expect(resolved).toEqual({
+      id: 'lh7p5oqw2n8xxyz',
+      collectionName: 'events',
+      workspaceId: 'lh7p5oqw2n8xxyz',
+    });
+  });
+
+  test('resolves new-style workspace memories file path', () => {
+    const resolved = resolveEntityFromPath(
+      'C:/Users/user/Dialogue Folio/workspaces/my-new-workspace-lh7p5oqw2n8xxyz/workspace_memories.md',
+      folioRoot
+    );
+    expect(resolved).toEqual({
+      id: 'lh7p5oqw2n8xxyz',
+      collectionName: 'memories',
+      workspaceId: 'lh7p5oqw2n8xxyz',
+    });
+  });
 });
 
 describe('Sync memories file to DB', () => {
@@ -410,6 +459,25 @@ describe('saveSemanticMemory Tool', () => {
       const dbItems = mockPb.collection('memories').items;
       expect(dbItems).toHaveLength(1);
       expect(dbItems[0].source_id).toBe('project-x/workspace_memories.md');
+    });
+  });
+
+  test('appends to workspace memories when active workspace is set with new style folder', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-project-x/workspace_memories.md';
+    mockFiles[filePath] = `# Memories\n\n`;
+
+    await folioRequestContext.run({ folioRootPath: folioRoot, activeWorkspace: 'project-x', basePath: `${folioRoot}/workspaces/my-workspace-project-x` }, async () => {
+      const result = (await saveSemanticMemoryTool.execute!({
+        text: 'I prefer coffee',
+      }, {} as any)) as any;
+      expect(result.status).toBe('Memory saved.');
+      
+      const fileContent = mockFiles[filePath];
+      expect(fileContent).toContain('- I prefer coffee');
+
+      const dbItems = mockPb.collection('memories').items;
+      expect(dbItems).toHaveLength(1);
+      expect(dbItems[0].source_id).toBe('workspaces/my-workspace-project-x/workspace_memories.md');
     });
   });
 
@@ -492,6 +560,39 @@ describe('saveSemanticMemory Tool', () => {
       expect(edges[0].to_id).toBe('task-123');
       expect(edges[0].target_type).toBe('Task');
     });
+  });
+});
+
+describe('Reconcile Folio Path Migration', () => {
+  const folioRoot = 'C:/Users/user/Dialogue Folio';
+
+  test('migrates legacy workspace memory source_id to new nested path on reconciliation', async () => {
+    // Seed database with an old style file memory record
+    await mockPb.collection('memories').create({
+      id: 'mem-legacy-id',
+      user: 'test-user-id',
+      text: 'Fact about workspace',
+      hash: crypto.createHash('sha256').update('Fact about workspace').digest('hex'),
+      source_type: 'File',
+      source_id: 'ws123/workspace_memories.md',
+    });
+
+    // Mock folder layout on disk (new layout: workspaces/my-workspace-ws123)
+    mockFiles['C:/Users/user/Dialogue Folio'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws123'] = 'directory';
+    const newWorkspaceMemoriesPath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws123/workspace_memories.md';
+    mockFiles[newWorkspaceMemoriesPath] = `# Memories\n\n- Fact about workspace\n`;
+
+    const { reconcileFolio } = await import('./sync');
+    await reconcileFolio(folioRoot, mockPb);
+
+    // Verify that the memory's source_id in the database was updated
+    const dbItems = mockPb.collection('memories').items;
+    expect(dbItems).toHaveLength(1);
+    expect(dbItems[0].source_id).toBe('workspaces/my-workspace-ws123/workspace_memories.md');
+    // Ensure it was NOT pruned
+    expect(dbItems[0].id).toBe('mem-legacy-id');
   });
 });
 

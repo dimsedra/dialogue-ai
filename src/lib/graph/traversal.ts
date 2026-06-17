@@ -68,8 +68,31 @@ export async function retrieveGraphContext(
     filter: `user = "${userId}"`,
   });
 
+  // Filter memories by active workspace context if present
+  let filteredMemories = memories;
+  let activeWorkspace = '';
+  try {
+    const { folioRequestContext } = require('../folio/sync');
+    const ctx = folioRequestContext.getStore();
+    if (ctx && ctx.activeWorkspace) {
+      activeWorkspace = ctx.activeWorkspace;
+    }
+  } catch {}
+
+  if (activeWorkspace) {
+    filteredMemories = memories.filter((m) => {
+      // If it's a file-sourced memory, only keep it if it is global or belongs to the active workspace
+      if (m.source_type === 'File' && m.source_id) {
+        const isGlobal = m.source_id.startsWith('system/');
+        const isCurrentWorkspace = m.source_id.includes(activeWorkspace);
+        return isGlobal || isCurrentWorkspace;
+      }
+      return true;
+    });
+  }
+
   // 2. Compute similarity and sort matches
-  const matches = memories
+  const matches = filteredMemories
     .map((m) => {
       const emb = Array.isArray(m.embedding) ? m.embedding : [];
       const similarity = dotProduct(emb, queryEmbedding);
@@ -114,9 +137,21 @@ export async function retrieveGraphContext(
 
   const [tasks, events, habits] = await Promise.all([tasksPromise, eventsPromise, habitsPromise]);
 
-  const tasksMap = new Map(tasks.map((t) => [t.id, t]));
-  const eventsMap = new Map((events).map((e) => [e.id, e]));
-  const habitsMap = new Map((habits).map((h) => [h.id, h]));
+  const tasksMap = new Map(
+    tasks
+      .filter((t) => !activeWorkspace || !t.workspace || t.workspace === activeWorkspace)
+      .map((t) => [t.id, t])
+  );
+  const eventsMap = new Map(
+    events
+      .filter((e) => !activeWorkspace || !e.workspace || e.workspace === activeWorkspace)
+      .map((e) => [e.id, e])
+  );
+  const habitsMap = new Map(
+    habits
+      .filter((h) => !activeWorkspace || !h.workspace || h.workspace === activeWorkspace)
+      .map((h) => [h.id, h])
+  );
 
   const toEntity = (record: any): GraphContextEntity => ({
     id: record.id,

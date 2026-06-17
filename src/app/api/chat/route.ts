@@ -8,7 +8,7 @@ import { isPbBackend } from '@/pb-compat/env';
 import PocketBase from 'pocketbase';
 import { pbRequestContext } from '@/lib/pb-server';
 import { verifyPbToken } from '@/lib/pb-actions/auth';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { parseMcpServers, createMcpClient, getToolsets } from '@/mastra/mcp/client';
 import { reconcileFolio, folioRequestContext } from '@/lib/folio/sync';
@@ -137,7 +137,41 @@ export async function POST(req: Request) {
     }
 
     const activeWorkspace = req.headers.get('x-active-workspace') || '';
-    const basePath = activeWorkspace ? join(folioRootPath, activeWorkspace) : folioRootPath;
+    let basePath = folioRootPath;
+    if (activeWorkspace) {
+      const legacyPath = join(folioRootPath, activeWorkspace);
+      if (existsSync(legacyPath) && statSync(legacyPath).isDirectory()) {
+        basePath = legacyPath;
+      } else {
+        const workspacesParent = join(folioRootPath, 'workspaces');
+        let matchedFolder: string | null = null;
+        if (existsSync(workspacesParent)) {
+          const folders = readdirSync(workspacesParent);
+          const matched = folders.find((f) => f.endsWith(`-${activeWorkspace}`));
+          if (matched) {
+            matchedFolder = matched;
+          }
+        }
+
+        if (matchedFolder) {
+          basePath = join(workspacesParent, matchedFolder);
+        } else {
+          let slug = 'workspace';
+          if (isPb && pbClient) {
+            try {
+              const wsRec = await pbClient.collection('workspaces').getOne(activeWorkspace);
+              if (wsRec && wsRec.name) {
+                slug = wsRec.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'workspace';
+              }
+            } catch (err) {
+              console.warn(`[Chat API] Could not fetch workspace record for ${activeWorkspace}:`, err);
+            }
+          }
+          const folderName = `${slug}-${activeWorkspace}`;
+          basePath = join(workspacesParent, folderName);
+        }
+      }
+    }
 
     // Make sure the active workspace folder exists
     if (!existsSync(basePath)) {
