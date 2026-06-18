@@ -32,7 +32,7 @@ export const createMemory: PbActionHandler<CreateMemoryArgs, { id: string }> = a
   if (activeWorkspace) {
     const legacyPath = join(folioRootPath, activeWorkspace);
     if (fs.existsSync(legacyPath) && fs.statSync(legacyPath).isDirectory()) {
-      targetAbsPath = join(legacyPath, "workspace_memories.md");
+      targetAbsPath = join(legacyPath, "MEMORIES.md");
     } else {
       const workspacesParent = join(folioRootPath, "workspaces");
       let matchedFolder: string | null = null;
@@ -44,13 +44,13 @@ export const createMemory: PbActionHandler<CreateMemoryArgs, { id: string }> = a
         }
       }
       if (matchedFolder) {
-        targetAbsPath = join(workspacesParent, matchedFolder, "workspace_memories.md");
+        targetAbsPath = join(workspacesParent, matchedFolder, "MEMORIES.md");
       } else {
-        targetAbsPath = join(workspacesParent, `workspace-${activeWorkspace}`, "workspace_memories.md");
+        targetAbsPath = join(workspacesParent, `workspace-${activeWorkspace}`, "MEMORIES.md");
       }
     }
   } else {
-    targetAbsPath = join(folioRootPath, "system", "memories.md");
+    targetAbsPath = join(folioRootPath, "system", "MEMORIES.md");
   }
 
   // 1. Ensure directory exists

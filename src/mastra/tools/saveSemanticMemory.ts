@@ -57,11 +57,11 @@ export const saveSemanticMemoryTool = createTool({
     let targetAbsPath: string;
     if (activeWorkspace) {
       if (ctx?.basePath) {
-        targetAbsPath = join(ctx.basePath, 'workspace_memories.md');
+        targetAbsPath = join(ctx.basePath, 'MEMORIES.md');
       } else {
         const legacyPath = join(folioRootPath, activeWorkspace);
         if (fs.existsSync(legacyPath) && fs.statSync(legacyPath).isDirectory()) {
-          targetAbsPath = join(legacyPath, 'workspace_memories.md');
+          targetAbsPath = join(legacyPath, 'MEMORIES.md');
         } else {
           const workspacesParent = join(folioRootPath, 'workspaces');
           let matchedFolder: string | null = null;
@@ -73,14 +73,14 @@ export const saveSemanticMemoryTool = createTool({
             }
           }
           if (matchedFolder) {
-            targetAbsPath = join(workspacesParent, matchedFolder, 'workspace_memories.md');
+            targetAbsPath = join(workspacesParent, matchedFolder, 'MEMORIES.md');
           } else {
-            targetAbsPath = join(workspacesParent, `workspace-${activeWorkspace}`, 'workspace_memories.md');
+            targetAbsPath = join(workspacesParent, `workspace-${activeWorkspace}`, 'MEMORIES.md');
           }
         }
       }
     } else {
-      targetAbsPath = join(folioRootPath, 'system', 'memories.md');
+      targetAbsPath = join(folioRootPath, 'system', 'MEMORIES.md');
     }
     const targetRelPath = relative(folioRootPath, targetAbsPath).replace(/\\/g, '/');
 

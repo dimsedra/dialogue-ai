@@ -1,5 +1,5 @@
 import { join, relative, basename, dirname } from 'path';
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
 import PocketBase from 'pocketbase';
 import { parseMarkdownFile } from './parser';
@@ -88,18 +88,18 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
     } else if (parts[0] === 'daily-logs' && parts[1].endsWith('.md')) {
       const id = parts[1].slice(0, -3); // remove .md
       return { id, collectionName: 'daily_logs', workspaceId: null };
-    } else if (parts[0] === 'system' && parts[1] === 'memories.md') {
+    } else if (parts[0] === 'system' && (parts[1] === 'memories.md' || parts[1] === 'MEMORIES.md')) {
       return { id: 'global', collectionName: 'memories', workspaceId: null };
-    } else if (parts[1] === 'workspace_memories.md') {
-      // Old style: [workspaceId]/workspace_memories.md
+    } else if (parts[1] === 'workspace_memories.md' || parts[1] === 'MEMORIES.md') {
+      // Old style: [workspaceId]/MEMORIES.md
       return { id: parts[0], collectionName: 'memories', workspaceId: parts[0] };
     } else if (parts[1] === '.workspace.yaml') {
       // Old style workspace config
       return { id: parts[0], collectionName: 'workspaces', workspaceId: parts[0] };
     }
   } else if (parts.length === 3) {
-    if (parts[0] === 'workspaces' && parts[2] === 'workspace_memories.md') {
-      // New style: workspaces/[name-id]/workspace_memories.md
+    if (parts[0] === 'workspaces' && (parts[2] === 'workspace_memories.md' || parts[2] === 'MEMORIES.md')) {
+      // New style: workspaces/[name-id]/MEMORIES.md
       const folderName = parts[1];
       const dashIndex = folderName.lastIndexOf('-');
       const parsedId = dashIndex !== -1 ? folderName.slice(dashIndex + 1) : folderName;
@@ -617,6 +617,29 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
 
   console.log('[Sync Engine] Starting folio reconciliation...');
 
+  // Migrate existing global memories file to UPPERCASE system/MEMORIES.md
+  const oldGlobalMemories = join(folioRootPath, 'system', 'memories.md');
+  const newGlobalMemories = join(folioRootPath, 'system', 'MEMORIES.md');
+  if (existsSync(oldGlobalMemories)) {
+    console.log(`[Sync Engine] Renaming legacy global memories to ${newGlobalMemories}`);
+    try {
+      if (!existsSync(dirname(newGlobalMemories))) {
+        mkdirSync(dirname(newGlobalMemories), { recursive: true });
+      }
+      renameSync(oldGlobalMemories, newGlobalMemories);
+      const dbMemories = await pb.collection('memories').getFullList({
+        filter: `source_type = "File" && source_id = "system/memories.md"`,
+      });
+      for (const mem of dbMemories) {
+        await pb.collection('memories').update(mem.id, {
+          source_id: 'system/MEMORIES.md',
+        });
+      }
+    } catch (err) {
+      console.error('[Sync Engine] Failed migrating global memories file:', err);
+    }
+  }
+
   // Migrate existing memories' source_id if their workspace folder is now in workspaces/
   const wsParentPath = join(folioRootPath, 'workspaces');
   if (existsSync(wsParentPath)) {
@@ -628,15 +651,29 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
           const dashIndex = folder.lastIndexOf('-');
           const workspaceId = dashIndex !== -1 ? folder.slice(dashIndex + 1) : folder;
           
-          const oldSourceId = `${workspaceId}/workspace_memories.md`;
-          const newSourceId = `workspaces/${folder}/workspace_memories.md`;
+          // 1. Rename workspace_memories.md on disk if it exists
+          const oldWsMemories = join(fullPath, 'workspace_memories.md');
+          const newWsMemories = join(fullPath, 'MEMORIES.md');
+          if (existsSync(oldWsMemories)) {
+            console.log(`[Sync Engine] Renaming legacy workspace memories for ${folder} to ${newWsMemories}`);
+            try {
+              renameSync(oldWsMemories, newWsMemories);
+            } catch (err) {
+              console.error(`[Sync Engine] Failed renaming workspace memories file on disk for ${folder}:`, err);
+            }
+          }
+
+          // 2. Migrate database source_id references to new workspaces/[folder]/MEMORIES.md format
+          const oldSourceId1 = `${workspaceId}/workspace_memories.md`;
+          const oldSourceId2 = `workspaces/${folder}/workspace_memories.md`;
+          const newSourceId = `workspaces/${folder}/MEMORIES.md`;
           
           const oldMemories = await pb.collection('memories').getFullList({
-            filter: `source_type = "File" && source_id = "${oldSourceId}"`,
+            filter: `source_type = "File" && (source_id = "${oldSourceId1}" || source_id = "${oldSourceId2}")`,
           });
           
           for (const mem of oldMemories) {
-            console.log(`[Sync Engine] Migrating memory path from ${oldSourceId} to ${newSourceId}`);
+            console.log(`[Sync Engine] Migrating memory source_id from ${mem.source_id} to ${newSourceId}`);
             await pb.collection('memories').update(mem.id, {
               source_id: newSourceId,
             });
@@ -668,7 +705,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   scanFolder(join(folioRootPath, 'daily-logs'));
   
   // Global memories file
-  const globalMemoriesPath = join(folioRootPath, 'system', 'memories.md');
+  const globalMemoriesPath = join(folioRootPath, 'system', 'MEMORIES.md');
   if (existsSync(globalMemoriesPath)) {
     filesToSync.push(globalMemoriesPath);
   }
@@ -684,7 +721,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
         scanFolder(join(fullPath, 'tasks'));
         scanFolder(join(fullPath, 'events'));
         
-        const wsMemoriesPath = join(fullPath, 'workspace_memories.md');
+        const wsMemoriesPath = join(fullPath, 'MEMORIES.md');
         if (existsSync(wsMemoriesPath)) {
           filesToSync.push(wsMemoriesPath);
         }
@@ -746,9 +783,30 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
       scanFolder(join(fullPath, 'tasks'));
       scanFolder(join(fullPath, 'events'));
       
-      const wsMemoriesPath = join(fullPath, 'workspace_memories.md');
-      if (existsSync(wsMemoriesPath)) {
-        filesToSync.push(wsMemoriesPath);
+      const oldRootWsMemories = join(fullPath, 'workspace_memories.md');
+      const newRootWsMemories = join(fullPath, 'MEMORIES.md');
+      if (existsSync(oldRootWsMemories)) {
+        try {
+          console.log(`[Sync Engine] Renaming root workspace memories for ${item} to ${newRootWsMemories}`);
+          renameSync(oldRootWsMemories, newRootWsMemories);
+          
+          const oldSourceId = `${item}/workspace_memories.md`;
+          const newSourceId = `${item}/MEMORIES.md`;
+          const oldMemories = await pb.collection('memories').getFullList({
+            filter: `source_type = "File" && source_id = "${oldSourceId}"`,
+          });
+          for (const mem of oldMemories) {
+            await pb.collection('memories').update(mem.id, {
+              source_id: newSourceId,
+            });
+          }
+        } catch (err) {
+          console.error(`[Sync Engine] Failed to rename root workspace memories for ${item}:`, err);
+        }
+      }
+
+      if (existsSync(newRootWsMemories)) {
+        filesToSync.push(newRootWsMemories);
       }
 
       const wsConfigPath = join(fullPath, '.workspace.yaml');

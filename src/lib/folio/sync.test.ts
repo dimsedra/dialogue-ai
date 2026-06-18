@@ -210,6 +210,15 @@ vi.mock('fs', async (importOriginal) => {
       }
       actual.writeFileSync(p, data, options);
     },
+    renameSync: (oldPath: any, newPath: any) => {
+      const normOld = String(oldPath).replace(/\\/g, '/');
+      const normNew = String(newPath).replace(/\\/g, '/');
+      if (mockFiles[normOld]) {
+        mockFiles[normNew] = mockFiles[normOld];
+        delete mockFiles[normOld];
+        return;
+      }
+    },
     mkdirSync: () => undefined,
     readdirSync: (p: any) => {
       const norm = String(p).replace(/\\/g, '/');
@@ -340,10 +349,20 @@ describe('Path to Entity Resolver', () => {
 
   test('resolves global memories file path', () => {
     const resolved = resolveEntityFromPath(
-      'C:/Users/user/Dialogue Folio/system/memories.md',
+      'C:/Users/user/Dialogue Folio/system/MEMORIES.md',
       folioRoot
     );
     expect(resolved).toEqual({
+      id: 'global',
+      collectionName: 'memories',
+      workspaceId: null,
+    });
+
+    const resolvedLegacy = resolveEntityFromPath(
+      'C:/Users/user/Dialogue Folio/system/memories.md',
+      folioRoot
+    );
+    expect(resolvedLegacy).toEqual({
       id: 'global',
       collectionName: 'memories',
       workspaceId: null,
@@ -352,10 +371,20 @@ describe('Path to Entity Resolver', () => {
 
   test('resolves workspace memories file path', () => {
     const resolved = resolveEntityFromPath(
-      'C:/Users/user/Dialogue Folio/work-123/workspace_memories.md',
+      'C:/Users/user/Dialogue Folio/work-123/MEMORIES.md',
       folioRoot
     );
     expect(resolved).toEqual({
+      id: 'work-123',
+      collectionName: 'memories',
+      workspaceId: 'work-123',
+    });
+
+    const resolvedLegacy = resolveEntityFromPath(
+      'C:/Users/user/Dialogue Folio/work-123/workspace_memories.md',
+      folioRoot
+    );
+    expect(resolvedLegacy).toEqual({
       id: 'work-123',
       collectionName: 'memories',
       workspaceId: 'work-123',
@@ -376,7 +405,7 @@ describe('Path to Entity Resolver', () => {
 
   test('resolves new-style workspace memories file path', () => {
     const resolved = resolveEntityFromPath(
-      'C:/Users/user/Dialogue Folio/workspaces/my-new-workspace-lh7p5oqw2n8xxyz/workspace_memories.md',
+      'C:/Users/user/Dialogue Folio/workspaces/my-new-workspace-lh7p5oqw2n8xxyz/MEMORIES.md',
       folioRoot
     );
     expect(resolved).toEqual({
@@ -391,7 +420,7 @@ describe('Sync memories file to DB', () => {
   const folioRoot = 'C:/Users/user/Dialogue Folio';
 
   test('parses bullets, computes hashes, and upserts memories to DB cache', async () => {
-    const filePath = 'C:/Users/user/Dialogue Folio/system/memories.md';
+    const filePath = 'C:/Users/user/Dialogue Folio/system/MEMORIES.md';
     mockFiles[filePath] = `# Memories\n\n- Fact number one\n* Fact number two\n`;
 
     await syncMemoriesFileToDb(filePath, mockPb, folioRoot);
@@ -401,11 +430,11 @@ describe('Sync memories file to DB', () => {
     expect(dbItems.map((m: any) => m.text)).toContain('Fact number one');
     expect(dbItems.map((m: any) => m.text)).toContain('Fact number two');
     expect(dbItems[0].source_type).toBe('File');
-    expect(dbItems[0].source_id).toBe('system/memories.md');
+    expect(dbItems[0].source_id).toBe('system/MEMORIES.md');
   });
 
   test('prunes deleted memories from DB cache', async () => {
-    const filePath = 'C:/Users/user/Dialogue Folio/system/memories.md';
+    const filePath = 'C:/Users/user/Dialogue Folio/system/MEMORIES.md';
     
     // First sync
     mockFiles[filePath] = `# Memories\n\n- Fact number one\n- Fact number two\n`;
@@ -428,7 +457,7 @@ describe('saveSemanticMemory Tool', () => {
   const folioRoot = 'C:/Users/user/Dialogue Folio';
 
   test('appends new bullet point to global memories when no duplicate is found', async () => {
-    const filePath = 'C:/Users/user/Dialogue Folio/system/memories.md';
+    const filePath = 'C:/Users/user/Dialogue Folio/system/MEMORIES.md';
     mockFiles[filePath] = `# Memories\n\n- Fact number one\n`;
 
     await folioRequestContext.run({ folioRootPath: folioRoot, activeWorkspace: '', basePath: folioRoot }, async () => {
@@ -448,7 +477,7 @@ describe('saveSemanticMemory Tool', () => {
   });
 
   test('appends to workspace memories when active workspace is set', async () => {
-    const filePath = 'C:/Users/user/Dialogue Folio/project-x/workspace_memories.md';
+    const filePath = 'C:/Users/user/Dialogue Folio/project-x/MEMORIES.md';
     mockFiles[filePath] = `# Memories\n\n`;
 
     await folioRequestContext.run({ folioRootPath: folioRoot, activeWorkspace: 'project-x', basePath: `${folioRoot}/project-x` }, async () => {
@@ -462,12 +491,12 @@ describe('saveSemanticMemory Tool', () => {
 
       const dbItems = mockPb.collection('memories').items;
       expect(dbItems).toHaveLength(1);
-      expect(dbItems[0].source_id).toBe('project-x/workspace_memories.md');
+      expect(dbItems[0].source_id).toBe('project-x/MEMORIES.md');
     });
   });
 
   test('appends to workspace memories when active workspace is set with new style folder', async () => {
-    const filePath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-project-x/workspace_memories.md';
+    const filePath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-project-x/MEMORIES.md';
     mockFiles[filePath] = `# Memories\n\n`;
 
     await folioRequestContext.run({ folioRootPath: folioRoot, activeWorkspace: 'project-x', basePath: `${folioRoot}/workspaces/my-workspace-project-x` }, async () => {
@@ -481,12 +510,12 @@ describe('saveSemanticMemory Tool', () => {
 
       const dbItems = mockPb.collection('memories').items;
       expect(dbItems).toHaveLength(1);
-      expect(dbItems[0].source_id).toBe('workspaces/my-workspace-project-x/workspace_memories.md');
+      expect(dbItems[0].source_id).toBe('workspaces/my-workspace-project-x/MEMORIES.md');
     });
   });
 
   test('updates original file line when semantic duplicate (>0.85 similarity) resides in a File', async () => {
-    const filePath = 'C:/Users/user/Dialogue Folio/system/memories.md';
+    const filePath = 'C:/Users/user/Dialogue Folio/system/MEMORIES.md';
     mockFiles[filePath] = `# Memories\n\n- I prefer coffee\n`;
 
     // Seed the database cache with the exact/duplicate record
@@ -499,7 +528,7 @@ describe('saveSemanticMemory Tool', () => {
       hash,
       embedding: mockEmbedding,
       source_type: 'File',
-      source_id: 'system/memories.md',
+      source_id: 'system/MEMORIES.md',
     });
 
     await folioRequestContext.run({ folioRootPath: folioRoot, activeWorkspace: '', basePath: folioRoot }, async () => {
@@ -522,7 +551,7 @@ describe('saveSemanticMemory Tool', () => {
   });
 
   test('wires mentions and skips file write when semantic duplicate resides in a Task/Event note', async () => {
-    const filePath = 'C:/Users/user/Dialogue Folio/system/memories.md';
+    const filePath = 'C:/Users/user/Dialogue Folio/system/MEMORIES.md';
     mockFiles[filePath] = `# Memories\n\n`;
 
     // Seed task so that wireMentionsEdges target validation succeeds
@@ -585,8 +614,8 @@ describe('Reconcile Folio Path Migration', () => {
     mockFiles['C:/Users/user/Dialogue Folio'] = 'directory';
     mockFiles['C:/Users/user/Dialogue Folio/workspaces'] = 'directory';
     mockFiles['C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws123'] = 'directory';
-    const newWorkspaceMemoriesPath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws123/workspace_memories.md';
-    mockFiles[newWorkspaceMemoriesPath] = `# Memories\n\n- Fact about workspace\n`;
+    const legacyWorkspaceMemoriesPath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws123/workspace_memories.md';
+    mockFiles[legacyWorkspaceMemoriesPath] = `# Memories\n\n- Fact about workspace\n`;
 
     const { reconcileFolio } = await import('./sync');
     await reconcileFolio(folioRoot, mockPb);
@@ -594,9 +623,12 @@ describe('Reconcile Folio Path Migration', () => {
     // Verify that the memory's source_id in the database was updated
     const dbItems = mockPb.collection('memories').items;
     expect(dbItems).toHaveLength(1);
-    expect(dbItems[0].source_id).toBe('workspaces/my-workspace-ws123/workspace_memories.md');
+    expect(dbItems[0].source_id).toBe('workspaces/my-workspace-ws123/MEMORIES.md');
     // Ensure it was NOT pruned
     expect(dbItems[0].id).toBe('mem-legacy-id');
+    // Ensure old path is deleted and new path exists in mockFiles
+    expect(mockFiles[legacyWorkspaceMemoriesPath]).toBeUndefined();
+    expect(mockFiles['C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws123/MEMORIES.md']).toBe(`# Memories\n\n- Fact about workspace\n`);
   });
 });
 

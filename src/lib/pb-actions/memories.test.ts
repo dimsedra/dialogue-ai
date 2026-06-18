@@ -96,7 +96,7 @@ vi.mock("../folio/sync", () => ({
           text: bullet,
           hash,
           source_type: "File",
-          source_id: "system/memories.md",
+          source_id: "system/MEMORIES.md",
           user: "test-user-id"
         });
       }
@@ -119,7 +119,7 @@ describe("PocketBase Custom Actions: Memories (Mocked)", () => {
     originalEnv = process.env.DEV_LOCAL_PATH;
     process.env.DEV_LOCAL_PATH = join(process.cwd(), "test-folio-memories");
     folioRootPath = process.env.DEV_LOCAL_PATH;
-    targetAbsPath = join(folioRootPath, "system", "memories.md");
+    targetAbsPath = join(folioRootPath, "system", "MEMORIES.md");
     
     // Clean up test folder if it exists
     if (fs.existsSync(folioRootPath)) {
@@ -134,7 +134,7 @@ describe("PocketBase Custom Actions: Memories (Mocked)", () => {
     }
   });
 
-  test("createMemory appends to memories.md file and syncs to DB", async () => {
+  test("createMemory appends to MEMORIES.md file and syncs to DB", async () => {
     const text = "Fact one: I prefer dark chocolate.";
     const res = await createMemory({ text }, ctx);
     
