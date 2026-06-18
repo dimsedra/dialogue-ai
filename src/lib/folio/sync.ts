@@ -2,6 +2,7 @@ import { join, relative, basename, dirname } from 'path';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
 import PocketBase from 'pocketbase';
+import { getActiveUserId } from '../pb-server';
 import { parseMarkdownFile } from './parser';
 import { ingestTaskNotes, ingestEventNotes, deleteSourceMemories } from '../graph/ingest';
 import crypto from 'crypto';
@@ -13,7 +14,11 @@ export interface FolioContext {
   basePath: string;
 }
 
-export const folioRequestContext = new AsyncLocalStorage<FolioContext>();
+const globalAny = global as any;
+if (!globalAny.folioRequestContext) {
+  globalAny.folioRequestContext = new AsyncLocalStorage<FolioContext>();
+}
+export const folioRequestContext: AsyncLocalStorage<FolioContext> = globalAny.folioRequestContext;
 
 export function getFolioContext(): FolioContext {
   const ctx = folioRequestContext.getStore();
@@ -157,13 +162,7 @@ export async function syncFolioFileToDb(
   const { metadata, body } = parseMarkdownFile(fileContent);
 
   // Resolve user ID
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    const users = await pb.collection('users').getFullList({ limit: 1 });
-    if (users.length > 0) {
-      userId = users[0].id;
-    }
-  }
+  const userId = await getActiveUserId(pb);
   if (!userId) {
     console.warn('[Sync Engine] No active user found for file sync:', filePath);
     return;
@@ -341,13 +340,7 @@ export async function syncWorkspaceFileToDb(
   const metadata = parseWorkspaceYaml(content);
 
   // Resolve user ID
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    const users = await pb.collection('users').getFullList({ limit: 1 });
-    if (users.length > 0) {
-      userId = users[0].id;
-    }
-  }
+  const userId = await getActiveUserId(pb);
   if (!userId) {
     console.warn('[Sync Engine] No active user found for workspace sync:', filePath);
     return;
@@ -411,13 +404,7 @@ export async function syncMemoriesFileToDb(
   }
 
   // Resolve user ID
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    const users = await pb.collection('users').getFullList({ limit: 1 });
-    if (users.length > 0) {
-      userId = users[0].id;
-    }
-  }
+  const userId = await getActiveUserId(pb);
   if (!userId) {
     console.warn('[Sync Engine] No active user found for memories file sync:', filePath);
     return;
@@ -620,7 +607,13 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   // Migrate existing global memories file to UPPERCASE system/MEMORIES.md
   const oldGlobalMemories = join(folioRootPath, 'system', 'memories.md');
   const newGlobalMemories = join(folioRootPath, 'system', 'MEMORIES.md');
-  if (existsSync(oldGlobalMemories)) {
+  const systemDir = join(folioRootPath, 'system');
+  let hasLowercaseMemories = false;
+  if (existsSync(systemDir)) {
+    const files = readdirSync(systemDir);
+    hasLowercaseMemories = files.includes('memories.md');
+  }
+  if (hasLowercaseMemories && existsSync(oldGlobalMemories)) {
     console.log(`[Sync Engine] Renaming legacy global memories to ${newGlobalMemories}`);
     try {
       if (!existsSync(dirname(newGlobalMemories))) {
@@ -1039,13 +1032,7 @@ export async function syncDailyLogFileToDb(
   const parsedHabits = parseHabitsFromMarkdown(content);
 
   // Resolve user ID
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    const users = await pb.collection('users').getFullList({ limit: 1 });
-    if (users.length > 0) {
-      userId = users[0].id;
-    }
-  }
+  const userId = await getActiveUserId(pb);
   if (!userId) {
     console.warn('[Sync Engine] No active user found for daily log sync:', filePath);
     return;

@@ -1,4 +1,5 @@
 import PocketBase from 'pocketbase';
+import { getActiveUserId } from '../pb-server';
 
 export type EdgeType = 'MENTIONS_TASK' | 'MENTIONS_EVENT' | 'MENTIONS_HABIT';
 
@@ -25,16 +26,7 @@ const ALL_EDGE_TYPES: EdgeType[] = ['MENTIONS_TASK', 'MENTIONS_EVENT', 'MENTIONS
  * with no outgoing edges in the graph_edges collection).
  */
 export async function getMemoryHealth(pb: PocketBase): Promise<MemoryHealth> {
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    try {
-      // Bypasses to get the first user if run as admin (e.g. from the admin API route)
-      const firstUser = await pb.collection("users").getFirstListItem("");
-      userId = firstUser?.id;
-    } catch (e) {
-      console.warn("getMemoryHealth: No user found in PB", e);
-    }
-  }
+  const userId = await getActiveUserId(pb);
 
   if (!userId) {
     return {

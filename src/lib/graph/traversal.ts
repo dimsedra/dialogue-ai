@@ -1,4 +1,5 @@
 import PocketBase from 'pocketbase';
+import { getActiveUserId } from '../pb-server';
 
 export interface GraphContextEntity {
   id: string;
@@ -20,7 +21,7 @@ export interface RetrieveOptions {
 }
 
 const DEFAULT_LIMIT = 5;
-const DEFAULT_THRESHOLD = 0.6;
+const DEFAULT_THRESHOLD = 0.5;
 
 /**
  * Computes the dot product of two vectors. Since our Xenova embeddings
@@ -48,16 +49,7 @@ export async function retrieveGraphContext(
   const limit = options.limit ?? DEFAULT_LIMIT;
   const threshold = options.threshold ?? DEFAULT_THRESHOLD;
 
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    try {
-      // Bypasses to get the first user if run in admin or testing environment
-      const firstUser = await pb.collection("users").getFirstListItem("");
-      userId = firstUser?.id;
-    } catch {
-      return [];
-    }
-  }
+  const userId = await getActiveUserId(pb);
 
   if (!userId) {
     return [];

@@ -19,6 +19,7 @@ import PocketBase from "pocketbase";
 export interface PbAuthUser {
   id: string;
   email: string;
+  collectionName?: string;
 }
 
 let _serverPb: PocketBase | null = null;
@@ -39,7 +40,11 @@ export async function verifyPbToken(token: string): Promise<PbAuthUser | null> {
     await pb.collection("users").authRefresh();
     const user = pb.authStore.record;
     if (!user) return null;
-    return { id: user.id, email: user.email };
+    return { 
+      id: user.id, 
+      email: user.email,
+      collectionName: user.collectionName || 'users'
+    };
   } catch {
     return null;
   } finally {

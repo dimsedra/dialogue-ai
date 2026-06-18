@@ -103,7 +103,7 @@ function mockCollection(overrides = {}) {
 }
 
 function mockPb(collections: Record<string, any>) {
-  const pb = { authStore: { save: vi.fn(), token: "mock-token", record: { id: "user-1" } } } as any;
+  const pb = { authStore: { save: vi.fn(), token: "mock-token", record: { id: "user-1", collectionName: "users" } } } as any;
   pb.collection = vi.fn((name: string) => {
     return collections[name];
   });

@@ -1,4 +1,5 @@
 import PocketBase from 'pocketbase';
+import { getActiveUserId } from '../pb-server';
 import crypto from 'crypto';
 import { getLocalEmbedding } from './embedding';
 import { wireMentionsEdges } from './edges';
@@ -53,15 +54,7 @@ export async function ingestTaskNotes(
   notesText: string | undefined,
   maxChunkSize = 500
 ): Promise<void> {
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    try {
-      const firstUser = await pb.collection("users").getFirstListItem("");
-      userId = firstUser?.id;
-    } catch {
-      return;
-    }
-  }
+  const userId = await getActiveUserId(pb);
 
   if (!userId) return;
 
@@ -124,15 +117,7 @@ export async function ingestEventNotes(
   outcomeText: string | undefined,
   maxChunkSize = 500
 ): Promise<void> {
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    try {
-      const firstUser = await pb.collection("users").getFirstListItem("");
-      userId = firstUser?.id;
-    } catch {
-      return;
-    }
-  }
+  const userId = await getActiveUserId(pb);
 
   if (!userId) return;
 
@@ -197,15 +182,7 @@ export async function ingestHabitLogNotes(
   notesText: string | undefined,
   maxChunkSize = 500
 ): Promise<void> {
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    try {
-      const firstUser = await pb.collection("users").getFirstListItem("");
-      userId = firstUser?.id;
-    } catch {
-      return;
-    }
-  }
+  const userId = await getActiveUserId(pb);
 
   if (!userId) return;
 
@@ -266,15 +243,7 @@ export async function deleteSourceMemories(
   sourceId: string,
   sourceType: 'Task' | 'Event' | 'HabitLog'
 ): Promise<void> {
-  let userId = pb.authStore.record?.id;
-  if (!userId) {
-    try {
-      const firstUser = await pb.collection("users").getFirstListItem("");
-      userId = firstUser?.id;
-    } catch {
-      return;
-    }
-  }
+  const userId = await getActiveUserId(pb);
 
   if (!userId) return;
 

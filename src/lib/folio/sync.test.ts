@@ -30,6 +30,13 @@ const mockPb: any = {
 
 vi.mock('../../lib/pb-server', () => ({
   getPbClient: () => mockPb,
+  getActiveUserId: async (pb: any) => {
+    if (pb.authStore.record && pb.authStore.record.collectionName === 'users') {
+      return pb.authStore.record.id;
+    }
+    const users = await pb.collection('users').getFullList({ limit: 1 });
+    return users[0]?.id;
+  }
 }));
 
 vi.mock('../graph/embedding', () => ({

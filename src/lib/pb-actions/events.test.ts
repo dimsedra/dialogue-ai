@@ -56,7 +56,7 @@ function matchFilter(item: any, filter: string): boolean {
 const mockPbInstance = {
   authStore: {
     save: vi.fn(),
-    record: { id: "test-user-id" },
+    record: { id: "test-user-id", collectionName: "users" },
     token: "mock-token",
   },
   collection: vi.fn().mockImplementation((colName) => {

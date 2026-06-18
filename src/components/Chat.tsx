@@ -637,6 +637,7 @@ function ActiveChat({
             'x-base-url': getActiveConfig.baseUrl || "",
             'x-timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
             'x-auth-token': authToken || "",
+            'x-active-workspace': activeWorkspaceId || "",
             ...(scopeHeader ? { 'x-active-scope': scopeHeader } : {}),
           }
         });

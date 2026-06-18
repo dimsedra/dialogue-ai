@@ -42,7 +42,7 @@ function matchFilter(item: any, filter: string): boolean {
 
 class MockPocketBase {
   authStore = {
-    record: { id: "test-user-id" }
+    record: { id: "test-user-id", collectionName: "users" }
   };
 
   collections: Record<string, any> = {};

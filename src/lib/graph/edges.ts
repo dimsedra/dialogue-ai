@@ -1,4 +1,5 @@
 import PocketBase from 'pocketbase';
+import { getActiveUserId } from '../pb-server';
 
 export interface MentionsInput {
   taskIds?: string[];
@@ -39,7 +40,7 @@ export async function wireMentionsEdges(
   let succeeded = 0;
   let failed = 0;
 
-  const userId = pb.authStore.record?.id;
+  const userId = await getActiveUserId(pb);
   if (!userId) {
     console.warn("wireMentionsEdges: No user ID found in PB store, skipping edge creation");
     const totalCount = (mentions.taskIds?.length ?? 0) + 

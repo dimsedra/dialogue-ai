@@ -12,7 +12,7 @@ let mockItems: any[] = [];
 const mockPbInstance = {
   authStore: {
     save: vi.fn(),
-    record: { id: "test-user-id" },
+    record: { id: "test-user-id", collectionName: "users" },
   },
   collection: vi.fn().mockImplementation((colName) => {
     return {
