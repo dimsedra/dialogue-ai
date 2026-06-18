@@ -63,6 +63,10 @@ export function parseMarkdownFile(content: string): ParsedMarkdown {
       value = false;
     } else if (!isNaN(Number(valStr)) && valStr !== '') {
       value = Number(valStr);
+    } else if ((valStr.startsWith('{') && valStr.endsWith('}')) || (valStr.startsWith('[') && valStr.endsWith(']'))) {
+      try {
+        value = JSON.parse(valStr);
+      } catch {}
     }
 
     metadata[key] = value;
@@ -90,6 +94,8 @@ export function serializeMarkdownFile(metadata: Record<string, any>, body: strin
       } else {
         valStr = value;
       }
+    } else if (typeof value === 'object') {
+      valStr = JSON.stringify(value);
     } else {
       valStr = String(value);
     }
@@ -101,4 +107,68 @@ export function serializeMarkdownFile(metadata: Record<string, any>, body: strin
   
   const trimmedBody = body.replace(/^\n+/, ''); // strip leading newlines from body
   return yamlLines.join('\n') + '\n' + trimmedBody;
+}
+
+export function parseWorkspaceYaml(content: string): Record<string, any> {
+  const normalized = content.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  const metadata: Record<string, any> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed === '---') continue;
+
+    const colonIndex = trimmed.indexOf(':');
+    if (colonIndex === -1) continue;
+
+    const key = trimmed.slice(0, colonIndex).trim();
+    let valStr = trimmed.slice(colonIndex + 1).trim();
+
+    if ((valStr.startsWith('"') && valStr.endsWith('"')) || (valStr.startsWith("'") && valStr.endsWith("'"))) {
+      valStr = valStr.slice(1, -1);
+    }
+
+    let value: any = valStr;
+    if (valStr.toLowerCase() === 'null') {
+      value = null;
+    } else if (valStr.toLowerCase() === 'true') {
+      value = true;
+    } else if (valStr.toLowerCase() === 'false') {
+      value = false;
+    } else if (!isNaN(Number(valStr)) && valStr !== '') {
+      value = Number(valStr);
+    } else if ((valStr.startsWith('{') && valStr.endsWith('}')) || (valStr.startsWith('[') && valStr.endsWith(']'))) {
+      try {
+        value = JSON.parse(valStr);
+      } catch {}
+    }
+
+    metadata[key] = value;
+  }
+
+  return metadata;
+}
+
+export function serializeWorkspaceYaml(metadata: Record<string, any>): string {
+  const yamlLines: string[] = [];
+  for (const [key, value] of Object.entries(metadata)) {
+    if (value === undefined) continue;
+    
+    let valStr = '';
+    if (value === null) {
+      valStr = 'null';
+    } else if (typeof value === 'string') {
+      if (value.includes(':') || value.includes('#') || value.includes('"') || value.includes('\n')) {
+        valStr = `"${value.replace(/"/g, '\\"')}"`;
+      } else {
+        valStr = value;
+      }
+    } else if (typeof value === 'object') {
+      valStr = JSON.stringify(value);
+    } else {
+      valStr = String(value);
+    }
+    yamlLines.push(`${key}: ${valStr}`);
+  }
+  return yamlLines.join('\n') + '\n';
 }

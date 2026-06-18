@@ -24,7 +24,7 @@ export const updateTaskTool = createTool({
     const { getFolioContext, syncFolioFileToDb } = await import('../../lib/folio/sync');
     const { parseMarkdownFile, serializeMarkdownFile } = await import('../../lib/folio/parser');
     const { parseDateTime } = await import('../../lib/jobs/dateUtils');
-    const { existsSync, readFileSync, writeFileSync } = await import('fs');
+    const { existsSync, readFileSync, writeFileSync, readdirSync } = await import('fs');
     const { join } = await import('path');
 
     try {
@@ -40,15 +40,21 @@ export const updateTaskTool = createTool({
         cleanTaskId = cleanTaskId.slice(5);
       }
 
-      const filePath = join(basePath, 'tasks', `task-${cleanTaskId}.md`);
-      console.log('[updateTask Tool] Resolved filePath:', filePath);
-
-      if (!existsSync(filePath)) {
-        console.error('[updateTask Tool] Task file not found:', filePath);
-        throw new Error(`Task file not found: tasks/task-${cleanTaskId}.md`);
+      const tasksDir = join(basePath, 'tasks');
+      if (!existsSync(tasksDir)) {
+        throw new Error(`Tasks directory does not exist: ${tasksDir}`);
       }
 
-      const fileContent = readFileSync(filePath, 'utf8');
+      const files = readdirSync(tasksDir);
+      const targetFile = files.find((f) => f.endsWith(`-${cleanTaskId}.md`) || f === `task-${cleanTaskId}.md`);
+      if (!targetFile) {
+        throw new Error(`Task file not found on disk for ID: ${cleanTaskId}`);
+      }
+
+      const oldFilePath = join(tasksDir, targetFile);
+      console.log('[updateTask Tool] Resolved oldFilePath:', oldFilePath);
+
+      const fileContent = readFileSync(oldFilePath, 'utf8');
       const { metadata, body } = parseMarkdownFile(fileContent);
       console.log('[updateTask Tool] Current metadata:', metadata);
 
@@ -86,11 +92,33 @@ export const updateTaskTool = createTool({
       
       // Serialize and save back to disk
       const updatedContent = serializeMarkdownFile(metadata, newBody);
-      writeFileSync(filePath, updatedContent, 'utf8');
+
+      // Check if title (and therefore slug) changed
+      const newSlug = (metadata.title || cleanTaskId).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "task";
+      const newFilename = `${newSlug}-${cleanTaskId}.md`;
+      const newFilePath = join(tasksDir, newFilename);
+
+      let renamed = false;
+      if (newFilePath !== oldFilePath) {
+        renamed = true;
+        writeFileSync(newFilePath, updatedContent, 'utf8');
+        try {
+          const { unlinkSync } = await import('fs');
+          unlinkSync(oldFilePath);
+        } catch (err) {
+          console.warn(`[updateTask Tool] Failed to delete old file: ${oldFilePath}`, err);
+        }
+      } else {
+        writeFileSync(oldFilePath, updatedContent, 'utf8');
+      }
       console.log('[updateTask Tool] Updated file content on disk.');
 
       // Sync to DB cache (which updates index and schedules notifications)
-      await syncFolioFileToDb(filePath, pb, folioRootPath);
+      const { pruneFolioFileFromDb } = await import('../../lib/folio/sync');
+      if (renamed) {
+        await pruneFolioFileFromDb(oldFilePath, pb, folioRootPath);
+      }
+      await syncFolioFileToDb(newFilePath, pb, folioRootPath);
       console.log('[updateTask Tool] Synced with DB successfully.');
 
       // Reschedule notifications in PB

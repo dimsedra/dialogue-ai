@@ -27,6 +27,13 @@ export const updateEventTool = createTool({
   outputSchema: z.object({ success: z.boolean(), eventId: z.string() }),
   execute: async (input) => {
     const { parseDateTime } = await import('../../lib/jobs/dateUtils');
+    const { getPbClient } = await import('../../lib/pb-server');
+    const pb = getPbClient();
+    const user = pb.authStore.record?.id;
+    if (!user) throw new Error("Unauthorized");
+
+    const startMs = input.startTime ? parseDateTime(input.startTime, input.timezone).getTime() : undefined;
+    const endMs = input.endTime ? parseDateTime(input.endTime, input.timezone).getTime() : undefined;
     const recurrence = input.recurrence ? {
       frequency: input.recurrence.frequency as "daily" | "weekly",
       interval: input.recurrence.interval,
@@ -34,53 +41,24 @@ export const updateEventTool = createTool({
       until: input.recurrence.until ? parseDateTime(input.recurrence.until, input.timezone).getTime() : undefined,
     } : undefined;
 
-    const { getPbClient } = await import('../../lib/pb-server');
-    const pb = getPbClient();
-    const user = pb.authStore.record?.id;
-    if (!user) throw new Error("Unauthorized");
-
-    const updates: Record<string, any> = {};
-    if (input.title !== undefined) updates.title = input.title;
-    if (input.startTime !== undefined) updates.startTime = parseDateTime(input.startTime, input.timezone).getTime();
-    if (input.endTime !== undefined) updates.endTime = parseDateTime(input.endTime, input.timezone).getTime();
-    if (input.eventType !== undefined) updates.eventType = input.eventType;
-    if (input.location !== undefined) updates.location = input.location;
-    if (input.notes !== undefined) updates.notes = input.notes;
-    if (input.outcome !== undefined) updates.outcome = input.outcome;
-    if (input.statusHook !== undefined) updates.statusHook = input.statusHook;
-    if (input.cancelled !== undefined) updates.cancelled = input.cancelled;
-    if (input.reminderOffset !== undefined) updates.reminderOffset = input.reminderOffset < 0 ? null : input.reminderOffset;
-    if (input.recurrence !== undefined) updates.recurrence = recurrence ?? null;
-
-    const record = await pb.collection("events").update(input.eventId, updates);
-
-    try {
-      const existingReminders = await pb.collection("scheduled_notifications").getFullList({
-        filter: `targetId = "${record.id}" && kind = "event_remind" && delivered = false`
-      });
-      for (const er of existingReminders) {
-        await pb.collection("scheduled_notifications").delete(er.id);
-      }
-
-      if (!record.cancelled && record.startTime && record.reminderOffset !== null && record.reminderOffset >= 0) {
-        const triggerAt = Math.max(Date.now(), record.startTime - record.reminderOffset * 60 * 1000);
-        await pb.collection("scheduled_notifications").create({
-          user,
-          kind: "event_remind",
-          targetId: record.id,
-          triggerAt,
-          delivered: false,
-          createdAt: Date.now(),
-        });
-      }
-    } catch (err) {
-      console.error("Failed to reschedule event reminder in PB:", err);
-    }
-
-    if (input.notes !== undefined || input.outcome !== undefined) {
-      const { ingestEventNotes } = await import('../../lib/graph/ingest');
-      await ingestEventNotes(pb, input.eventId, record.notes, record.outcome);
-    }
+    const { updateEvent } = await import('../../lib/pb-actions/updateEvent');
+    await updateEvent({
+      eventId: input.eventId,
+      title: input.title,
+      location: input.location,
+      startTime: startMs,
+      endTime: endMs,
+      eventType: input.eventType as any,
+      recurrence,
+      reminderOffset: input.reminderOffset !== undefined ? (input.reminderOffset < 0 ? null : input.reminderOffset) : undefined,
+      cancelled: input.cancelled,
+      notes: input.notes,
+      outcome: input.outcome,
+      statusHook: input.statusHook,
+    }, {
+      user: { id: user, email: "" },
+      token: pb.authStore.token || "",
+    });
 
     return { success: true, eventId: input.eventId };
   }

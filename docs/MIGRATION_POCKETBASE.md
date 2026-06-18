@@ -1,7 +1,7 @@
 # Dialogue → PocketBase Migration Plan
 
 > **Status**: Draft. Living document — update as decisions are made and phases complete.
-> **Last updated**: 2026-06-07 (rev 5: Phase 4 write paths done — all mutation hooks wired with dual-mutation pattern across all consumer components, local LLM tool calls conditionalized (14 call sites), parameter adapter wrappers for id→taskId/eventId mapping, dynamic toggleCompleted, null→undefined conversion. 0 TS errors, 170/170 tests pass. See `docs/migration/phase-4-write-paths.md`.)
+> **Last updated**: 2026-06-18 (rev 6: Completed all Mastra tools and background jobs to be file-first, implemented JIT detachment for recurring events, transitioned tasks and events to `[slug]-[id].md` filenames, added actions tests. 0 TS errors, 206/206 tests pass.)
 > **Scope**: Replace the Convex backend with a self-hosted, Tauri-packaged stack. End-user install becomes a single desktop binary.
 >
 > **Source of truth**:
@@ -210,7 +210,7 @@ Rough effort estimates. Each phase is independently shippable.
 | 3 — Read paths | ✅ Done | workspaces, personas, sessions, tasks, events, habits, and dashboard proactive card states ported behind `isPbBackend()` flag. See `phase-3-read-paths.md`. |
 | 4 — Flip write paths | ✅ Done | 13 mutation hook files + 10 consumer components + parameter adapter wrappers. See `phase-4-write-paths.md`. |
 | 5 — Realtime + dashboard cards | ✅ Done | 6 `useQuery` + 1 `usePaginatedQuery` in Chat + 9 dual-queries in Dashboard. Real-collection stress (5.2, 22/22) + Dashboard mount smoke (5.3, 30/30) + 5.1 guard + 5.4 set-state-in-effect fix + habits migration fix. See `phase-5-realtime.md`. |
-| 6 — Background jobs | 🟡 In progress (6.1.1 done) | Architecture: Next.js API routes, not PB JS hooks (locked 2026-06-07). 5 jobs, not 6 (extractAndSaveMemory is dead code). See § below for sub-steps. |
+| 6 — Background jobs | ✅ Done | Next.js API routes securely wrapped. All 5 background jobs fully ported. All 21 Mastra agent tools refactored to be file-first and support `[slug]-[id].md` naming and JIT detachment. |
 | 7 — On-open scheduler | ✅ Done | |
 | 8 — File storage + public share | ✅ Done | |
 | 9 — Tests + e2e + cutover | Pending | |

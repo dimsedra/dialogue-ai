@@ -27,14 +27,22 @@ export const deleteTaskTool = createTool({
         cleanTaskId = cleanTaskId.slice(5);
       }
 
-      const filePath = join(basePath, 'tasks', `task-${cleanTaskId}.md`);
-      console.log('[deleteTask Tool] Resolved filePath:', filePath);
+      const tasksDir = join(basePath, 'tasks');
+      let filePath = "";
+      if (existsSync(tasksDir)) {
+        const { readdirSync } = await import('fs');
+        const files = readdirSync(tasksDir);
+        const targetFile = files.find((f) => f.endsWith(`-${cleanTaskId}.md`) || f === `task-${cleanTaskId}.md`);
+        if (targetFile) {
+          filePath = join(tasksDir, targetFile);
+        }
+      }
 
-      if (existsSync(filePath)) {
+      if (filePath && existsSync(filePath)) {
         unlinkSync(filePath);
         console.log('[deleteTask Tool] Deleted task file from disk.');
       } else {
-        console.warn('[deleteTask Tool] Task file to delete not found on disk:', filePath);
+        console.warn('[deleteTask Tool] Task file to delete not found on disk for ID:', cleanTaskId);
       }
 
       // Clean up DB cache and RAG memories

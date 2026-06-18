@@ -17,6 +17,10 @@ const mockPb: any = {
       graph_edges: createMockCollection([]),
       tasks: createMockCollection([]),
       events: createMockCollection([]),
+      workspaces: createMockCollection([]),
+      chat_sessions: createMockCollection([]),
+      habits: createMockCollection([]),
+      reflections: createMockCollection([]),
     };
   },
   collection(name: string) {

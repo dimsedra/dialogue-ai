@@ -16,18 +16,46 @@ export const appendEventNotesTool = createTool({
     const newEntry = `[${timestamp}]\n- ${input.notes.trim()}`;
 
     const { getPbClient } = await import('../../lib/pb-server');
-    const { ingestEventNotes } = await import('../../lib/graph/ingest');
-    const pb = getPbClient();
-    const user = pb.authStore.record?.id;
-    if (!user) throw new Error("Unauthorized");
+    const { getFolioContext, syncFolioFileToDb } = await import('../../lib/folio/sync');
+    const { parseMarkdownFile, serializeMarkdownFile } = await import('../../lib/folio/parser');
+    const { existsSync, readFileSync, writeFileSync, readdirSync } = await import('fs');
+    const { join } = await import('path');
 
-    const event = await pb.collection("events").getOne(input.eventId);
-    const currentNotes = event.notes ? event.notes.trim() : "";
-    const updatedNotes = currentNotes ? `${currentNotes}\n\n${newEntry}` : newEntry;
+    try {
+      const pb = getPbClient();
+      const user = pb.authStore.record?.id;
+      if (!user) throw new Error("Unauthorized");
 
-    await pb.collection("events").update(input.eventId, { notes: updatedNotes });
-    await ingestEventNotes(pb, input.eventId, updatedNotes, event.outcome);
+      const { folioRootPath, basePath } = getFolioContext();
 
-    return { success: true, eventId: input.eventId };
+      const eventsDir = join(basePath, 'events');
+      if (!existsSync(eventsDir)) {
+        throw new Error(`Events directory does not exist: ${eventsDir}`);
+      }
+
+      const files = readdirSync(eventsDir);
+      const targetFile = files.find((f) => f.endsWith(`-${input.eventId}.md`) || f === `event-${input.eventId}.md`);
+      if (!targetFile) {
+        throw new Error(`Event file not found on disk for ID: ${input.eventId}`);
+      }
+
+      const filePath = join(eventsDir, targetFile);
+      const fileContent = readFileSync(filePath, 'utf8');
+      const { metadata, body } = parseMarkdownFile(fileContent);
+
+      const currentNotes = body ? body.trim() : "";
+      const updatedNotes = currentNotes ? `${currentNotes}\n\n${newEntry}` : newEntry;
+
+      const updatedContent = serializeMarkdownFile(metadata, updatedNotes);
+      writeFileSync(filePath, updatedContent, 'utf8');
+
+      // Sync to DB (which triggers ingestEventNotes and updates database cache)
+      await syncFolioFileToDb(filePath, pb, folioRootPath);
+
+      return { success: true, eventId: input.eventId };
+    } catch (err) {
+      console.error('[appendEventNotes Tool] Error during execution:', err);
+      throw err;
+    }
   }
 });

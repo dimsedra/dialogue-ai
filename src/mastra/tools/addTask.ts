@@ -63,7 +63,8 @@ export const addTaskTool = createTool({
       mkdirSync(tasksDir, { recursive: true });
     }
 
-    const filePath = join(tasksDir, `task-${taskId}.md`);
+    const slug = input.text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "task";
+    const filePath = join(tasksDir, `${slug}-${taskId}.md`);
     writeFileSync(filePath, fileContent, 'utf8');
 
     // Sync to DB cache (which handles RAG embedding)

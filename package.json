@@ -53,6 +53,7 @@
     "@streamdown/mermaid": "^1.0.2",
     "ai": "^6.0.195",
     "ai-sdk-provider-opencode-sdk": "^3.0.2",
+    "chokidar": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",

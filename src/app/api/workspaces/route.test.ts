@@ -25,6 +25,11 @@ vi.mock('fs', async (importOriginal) => {
       mockFiles[norm] = 'directory';
       return undefined;
     },
+    writeFileSync: (p: any, content: any) => {
+      const norm = String(p).replace(/\\/g, '/');
+      mockFiles[norm] = content;
+      return undefined;
+    },
   };
   return {
     ...mocked,

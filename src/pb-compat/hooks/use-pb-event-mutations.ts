@@ -1,11 +1,26 @@
-import { useMutation } from "../use-mutation";
+import { useAction, defineAction } from "../use-action";
 import { useAuth } from "../auth";
 import { getPbClient } from "../client";
-import type { PbEvents } from "../_generated/dataModel";
 
 export function usePbEventCreate() {
-  const { user } = useAuth();
-  const mutate = useMutation<PbEvents>({ collection: "events", kind: "create" });
+  const runCreate = useAction<
+    {
+      title: string;
+      description?: string;
+      location?: string;
+      startTime: number;
+      endTime?: number;
+      eventType: "interval" | "point";
+      recurrence?: any;
+      reminderOffset?: number;
+      notes?: string;
+      outcome?: string;
+      statusHook?: string;
+      workspaceId?: string;
+    },
+    { id: string }
+  >(defineAction("createEvent"));
+
   return async (args: {
     title: string;
     description?: string;
@@ -20,42 +35,45 @@ export function usePbEventCreate() {
     outcome?: string;
     statusHook?: string;
   }) => {
-    if (!user) throw new Error("Unauthorized");
-    const record = await mutate({
-      user: user.id as any,
-      title: args.title || "Untitled Event",
-      description: args.description || undefined,
-      location: args.location || undefined,
+    const res = await runCreate({
+      title: args.title,
+      description: args.description,
+      location: args.location,
       startTime: args.startTime,
-      endTime: args.endTime || undefined,
-      workspace: (args.workspaceId || undefined) as any,
+      endTime: args.endTime,
       eventType: args.eventType,
-      recurrence: args.recurrence || undefined,
-      reminderOffset: args.reminderOffset || undefined,
-      notes: args.notes || undefined,
-      outcome: args.outcome || undefined,
-      statusHook: args.statusHook || undefined,
-      cancelled: false,
-      createdAt: Date.now(),
-    } as any);
-
-    if (args.notes || args.outcome) {
-      const pb = getPbClient();
-      const token = pb.authStore.token || null;
-      import("../use-action").then(({ executePbAction }) => {
-        executePbAction({ name: "ingestNotes" }, { targetId: record.id, targetType: "Event" }, { token }).catch(err => {
-          console.error("Failed to trigger event notes ingestion:", err);
-        });
-      });
-    }
-
-    return record.id;
+      recurrence: args.recurrence,
+      reminderOffset: args.reminderOffset,
+      notes: args.notes,
+      outcome: args.outcome,
+      statusHook: args.statusHook,
+      workspaceId: args.workspaceId,
+    });
+    return res.id;
   };
 }
 
 export function usePbEventUpdate() {
-  const { user } = useAuth();
-  const mutate = useMutation<PbEvents>({ collection: "events", kind: "update" });
+  const runUpdate = useAction<
+    {
+      eventId: string;
+      title?: string;
+      description?: string;
+      location?: string;
+      startTime?: number;
+      endTime?: number;
+      workspaceId?: string | null;
+      eventType?: "interval" | "point";
+      recurrence?: any;
+      reminderOffset?: number | null;
+      cancelled?: boolean;
+      notes?: string | null;
+      outcome?: string | null;
+      statusHook?: string | null;
+    },
+    { success: boolean }
+  >(defineAction("updateEvent"));
+
   return async (args: {
     eventId: string;
     title?: string;
@@ -72,59 +90,33 @@ export function usePbEventUpdate() {
     outcome?: string | null;
     statusHook?: string | null;
   }) => {
-    if (!user) throw new Error("Unauthorized");
-    const patch: Record<string, any> = {};
-    if (args.title !== undefined) patch.title = args.title || "Untitled Event";
-    if (args.description !== undefined) patch.description = args.description;
-    if (args.location !== undefined) patch.location = args.location;
-    if (args.startTime !== undefined) patch.startTime = args.startTime;
-    if (args.endTime !== undefined) patch.endTime = args.endTime === null ? undefined : args.endTime;
-    if (args.workspaceId !== undefined) patch.workspace = args.workspaceId === null ? "" : args.workspaceId;
-    if (args.eventType !== undefined) patch.eventType = args.eventType;
-    if (args.recurrence !== undefined) patch.recurrence = args.recurrence;
-    if (args.reminderOffset !== undefined) patch.reminderOffset = args.reminderOffset === null ? undefined : args.reminderOffset;
-    if (args.cancelled !== undefined) patch.cancelled = args.cancelled;
-    if (args.notes !== undefined) patch.notes = args.notes === null ? "" : args.notes;
-    if (args.outcome !== undefined) patch.outcome = args.outcome === null ? "" : args.outcome;
-    if (args.statusHook !== undefined) patch.statusHook = args.statusHook === null ? "" : args.statusHook;
-
-    const record = await mutate({ id: args.eventId, record: patch });
-
-    if (args.notes !== undefined || args.outcome !== undefined) {
-      const pb = getPbClient();
-      const token = pb.authStore.token || null;
-      import("../use-action").then(({ executePbAction }) => {
-        executePbAction({ name: "ingestNotes" }, { targetId: record.id, targetType: "Event" }, { token }).catch(err => {
-          console.error("Failed to trigger event notes update ingestion:", err);
-        });
-      });
-    }
-
-    return record;
+    await runUpdate(args);
+    return { id: args.eventId };
   };
 }
 
 export function usePbEventDelete() {
-  const { user } = useAuth();
-  const mutate = useMutation({ collection: "events", kind: "delete" });
-  return async (args: { id: string }) => {
-    if (!user) throw new Error("Unauthorized");
-    await mutate({ id: args.id });
+  const runDelete = useAction<{ eventId: string }, { success: boolean }>(
+    defineAction("deleteEvent")
+  );
 
-    const pb = getPbClient();
-    const token = pb.authStore.token || null;
-    import("../use-action").then(({ executePbAction }) => {
-      executePbAction({ name: "ingestNotes" }, { targetId: args.id, targetType: "Event" }, { token }).catch(err => {
-        console.error("Failed to trigger event notes delete ingestion:", err);
-      });
-    });
+  return async (args: { id: string }) => {
+    await runDelete({ eventId: args.id });
   };
 }
 
 export function usePbEventCancelOccurrence() {
+  const runCancelOccurrence = useAction<
+    { seriesId: string; originalStartTime: number; timezone?: string },
+    { success: boolean }
+  >(defineAction("cancelEventOccurrence"));
+
+  const runDelete = useAction<{ eventId: string }, { success: boolean }>(
+    defineAction("deleteEvent")
+  );
+
   const { user } = useAuth();
-  const mutate = useMutation<PbEvents>({ collection: "events", kind: "update" });
-  const remove = useMutation({ collection: "events", kind: "delete" });
+
   return async (args: { id: string; timestamp: number; timezone?: string }) => {
     if (!user) throw new Error("Unauthorized");
     const pb = getPbClient();
@@ -133,43 +125,37 @@ export function usePbEventCancelOccurrence() {
 
     if (event.series) {
       // It is a detached occurrence, just delete it.
-      await remove({ id: args.id });
+      await runDelete({ eventId: args.id });
       return;
     }
 
     if (event.recurrence) {
-      const rec = typeof event.recurrence === "string" ? JSON.parse(event.recurrence) : event.recurrence;
-      const exceptions = rec.exceptions ?? [];
-      const exceptionsStr = rec.exceptionsStr ?? [];
-      const dateStr = new Date(args.timestamp).toLocaleDateString("en-CA", {
-        timeZone: args.timezone || "UTC",
-      });
-
-      if (!exceptions.includes(args.timestamp)) {
-        exceptions.push(args.timestamp);
-      }
-      if (!exceptionsStr.includes(dateStr)) {
-        exceptionsStr.push(dateStr);
-      }
-
-      await mutate({
-        id: args.id,
-        record: {
-          recurrence: {
-            ...rec,
-            exceptions,
-            exceptionsStr,
-          },
-        },
+      await runCancelOccurrence({
+        seriesId: args.id,
+        originalStartTime: args.timestamp,
+        timezone: args.timezone,
       });
     }
   };
 }
 
 export function usePbEventUpdateOccurrence() {
-  const { user } = useAuth();
-  const mutate = useMutation<PbEvents>({ collection: "events", kind: "update" });
-  const create = useMutation<PbEvents>({ collection: "events", kind: "create" });
+  const runUpdateOccurrence = useAction<
+    {
+      seriesId: string;
+      originalStartTime: number;
+      title?: string;
+      description?: string;
+      location?: string;
+      startTime?: number;
+      endTime?: number;
+      eventType?: "interval" | "point";
+      cancelled?: boolean;
+      timezone?: string;
+    },
+    { detachedEventId: string }
+  >(defineAction("updateEventOccurrence"));
+
   return async (args: {
     seriesId: string;
     originalStartTime: number;
@@ -182,69 +168,23 @@ export function usePbEventUpdateOccurrence() {
     cancelled?: boolean;
     timezone?: string;
   }) => {
-    if (!user) throw new Error("Unauthorized");
-    const pb = getPbClient();
-    const parent = await pb.collection("events").getOne(args.seriesId);
-    if (!parent || parent.user !== user.id) throw new Error("Unauthorized");
-
-    // 1. Add exception to parent series
-    if (parent.recurrence) {
-      const rec = typeof parent.recurrence === "string" ? JSON.parse(parent.recurrence) : parent.recurrence;
-      const exceptions = rec.exceptions ?? [];
-      const exceptionsStr = rec.exceptionsStr ?? [];
-      const dateStr = new Date(args.originalStartTime).toLocaleDateString("en-CA", {
-        timeZone: args.timezone || "UTC",
-      });
-
-      if (!exceptions.includes(args.originalStartTime)) {
-        exceptions.push(args.originalStartTime);
-      }
-      if (!exceptionsStr.includes(dateStr)) {
-        exceptionsStr.push(dateStr);
-      }
-
-      await mutate({
-        id: args.seriesId,
-        record: {
-          recurrence: {
-            ...rec,
-            exceptions,
-            exceptionsStr,
-          },
-        },
-      });
-    }
-
-    // 2. Insert new detached occurrence event
-    const duration = parent.endTime !== undefined ? parent.endTime - parent.startTime : 0;
-    const finalStartTime = args.startTime ?? args.originalStartTime;
-    const finalEndTime = parent.endTime !== undefined ? (args.endTime ?? finalStartTime + duration) : undefined;
-
-    const record = await create({
-      user: user.id as any,
-      title: args.title ?? parent.title,
-      description: args.description ?? parent.description,
-      location: args.location ?? parent.location,
-      notes: parent.notes || undefined,
-      outcome: parent.outcome || undefined,
-      statusHook: parent.statusHook || undefined,
-      cancelled: args.cancelled || false,
-      contextUpdatedAt: parent.contextUpdatedAt || undefined,
-      startTime: finalStartTime,
-      endTime: finalEndTime,
-      eventType: args.eventType ?? parent.eventType,
-      series: args.seriesId as any,
-      workspace: (parent.workspace || undefined) as any,
-      createdAt: Date.now(),
-      reminderOffset: parent.reminderOffset || undefined,
-    } as any);
-    return record.id;
+    const res = await runUpdateOccurrence(args);
+    return res.detachedEventId;
   };
 }
 
 export function usePbEventScheduleFocusBlock() {
   const { user } = useAuth();
-  const create = useMutation<PbEvents>({ collection: "events", kind: "create" });
+  const runCreate = useAction<
+    {
+      title: string;
+      startTime: number;
+      endTime: number;
+      eventType: "interval" | "point";
+    },
+    { id: string }
+  >(defineAction("createEvent"));
+
   return async (args: { timezone?: string; timezoneOffset?: number }) => {
     if (!user) throw new Error("Unauthorized");
     const pb = getPbClient();
@@ -279,15 +219,12 @@ export function usePbEventScheduleFocusBlock() {
     }
 
     const focusEnd = focusStart + FOCUS_DURATION;
-    const record = await create({
-      user: user.id as any,
+    const res = await runCreate({
       title: "Focus Block",
       startTime: focusStart,
       endTime: focusEnd,
       eventType: "interval",
-      cancelled: false,
-      createdAt: Date.now(),
-    } as any);
-    return record.id;
+    });
+    return res.id;
   };
 }

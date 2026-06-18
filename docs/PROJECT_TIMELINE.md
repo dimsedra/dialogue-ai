@@ -1,6 +1,6 @@
 # Dialogue Project Timeline
 
-> **Last updated**: 2026-06-10
+> **Last updated**: 2026-06-18
 > This doc is the top-level roadmap superseding `docs/MIGRATION_POCKETBASE.md`. Each phase links to detailed design docs in `docs/future-impl/`.
 
 ---
@@ -51,7 +51,7 @@ dialogue-folio/
 
 | Item | Status | What | Reference |
 |---|---|---|---|
-| 1.1 | **Partial** | **Sync engine** — Node-based file watcher, YAML frontmatter parser, SHA-256 change tracking, PocketBase cache upsert (implemented in `src/lib/folio/sync.ts`) | [`sync_ingestion_engine.md`](future-impl/folio-system/sync_ingestion_engine.md) |
+| 1.1 | **Done** | **Sync engine** — Node-based file watcher, YAML frontmatter parser, JSON object frontmatter support, SHA-256 change tracking, PocketBase cache upsert, JIT recurrence detachment, and `[slug]-[id].md` filenames (implemented in `src/lib/folio/sync.ts` and `src/lib/pb-actions/`) | [`sync_ingestion_engine.md`](future-impl/folio-system/sync_ingestion_engine.md) |
 | 1.2 | **Done** | **Workspace isolation** — per-workspace folio subdirectories (`workspaces/[slug]-[id]`), scope-pinned memory lookup, folder operations, and deletion/archive capabilities | [`workspace_folio_layout.md`](future-impl/folio-system/workspace_folio_layout.md) |
 | 1.3 | **Done** | **Auditable memory** — `folio/system/memories.md` and workspace-scoped memories as editable sources of truth, local vector embeddings, and semantic deduplication | [`unified_memory_architecture.md`](future-impl/memory-and-sessions/unified_memory_architecture.md) |
 | 1.4 | **Pending** | **Dynamic agent personas** — `folio/personas/` as editable Markdown, length-capped prompt refinement on updates | [`dynamic_agent_personas.md`](future-impl/agent-orchestration/dynamic_agent_personas.md) |

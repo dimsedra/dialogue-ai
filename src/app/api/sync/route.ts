@@ -3,10 +3,9 @@ import { join, relative } from 'path';
 import PocketBase from 'pocketbase';
 import { verifyPbToken } from '@/lib/pb-actions/auth';
 import { getPbAdmin } from '@/lib/pb-server-admin';
-import { syncFolioFileToDb, resolveEntityFromPath } from '@/lib/folio/sync';
+import { syncFolioFileToDb, resolveEntityFromPath, pruneFolioFileFromDb } from '@/lib/folio/sync';
 import { DEFAULT_FOLIO_DIR } from '@/lib/folio/constants';
 import { existsSync } from 'fs';
-import { deleteSourceMemories } from '@/lib/graph/ingest';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const auth = req.headers.get('authorization');
@@ -68,32 +67,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     } else {
       // File deleted, let's prune it
       console.log(`[Sync Engine API] File deleted, pruning:`, filePath);
-      const { id, collectionName } = info;
-      
-      if (collectionName === 'memories') {
-        const sourceId = relative(folioRootPath, filePath).replace(/\\/g, '/');
-        // Delete all memories synced from this file
-        try {
-          const existing = await pb.collection('memories').getFullList({
-            filter: `source_type = "File" && source_id = "${sourceId}"`,
-          });
-          for (const mem of existing) {
-            await pb.collection('memories').delete(mem.id);
-          }
-        } catch (err) {
-          console.warn(`[Sync Engine API] Failed to fetch or delete memories for source ${sourceId}:`, err);
-        }
-      } else {
-        const sourceType = collectionName === 'tasks' ? 'Task' : 'Event';
-        // Cascade delete memories and DB records
-        await deleteSourceMemories(pb, id, sourceType);
-        try {
-          await pb.collection(collectionName).delete(id);
-        } catch {
-          // Already deleted or not found
-        }
-      }
-      
+      await pruneFolioFileFromDb(filePath, pb, folioRootPath);
       return NextResponse.json({ ok: true, status: 'pruned', entity: info });
     }
   } catch (err) {

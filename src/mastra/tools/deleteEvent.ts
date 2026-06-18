@@ -11,10 +11,18 @@ export const deleteEventTool = createTool({
   requireApproval: true,
   execute: async (input) => {
     const { getPbClient } = await import('../../lib/pb-server');
-    const { deleteSourceMemories } = await import('../../lib/graph/ingest');
     const pb = getPbClient();
-    await deleteSourceMemories(pb, input.eventId, 'Event');
-    await pb.collection("events").delete(input.eventId);
+    const user = pb.authStore.record?.id;
+    if (!user) throw new Error("Unauthorized");
+
+    const { deleteEvent } = await import('../../lib/pb-actions/deleteEvent');
+    await deleteEvent({
+      eventId: input.eventId,
+    }, {
+      user: { id: user, email: "" },
+      token: pb.authStore.token || "",
+    });
+
     return { success: true, eventId: input.eventId };
   }
 });

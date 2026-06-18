@@ -21,19 +21,35 @@ export const updateEventOccurrenceTool = createTool({
     const user = pb.authStore.record?.id;
     if (!user) throw new Error("Unauthorized");
 
-    const record = await pb.collection("events").create({
-      user,
-      title: input.title,
-      startTime: input.startTime ? new Date(input.startTime).getTime() : new Date(input.originalStartTime).getTime(),
-      endTime: input.endTime ? new Date(input.endTime).getTime() : undefined,
-      eventType: input.eventType || "point",
-      location: input.location,
-      parentSeriesId: input.seriesId,
-      originalStartTime: new Date(input.originalStartTime).getTime(),
-      isException: true,
-      cancelled: input.cancelled || false,
-      createdAt: Date.now(),
-    });
-    return { success: true, detachedEventId: record.id };
+    const originalStartMs = new Date(input.originalStartTime).getTime();
+    const startMs = input.startTime ? new Date(input.startTime).getTime() : undefined;
+    const endMs = input.endTime ? new Date(input.endTime).getTime() : undefined;
+
+    if (input.cancelled) {
+      const { cancelEventOccurrence } = await import('../../lib/pb-actions/cancelEventOccurrence');
+      await cancelEventOccurrence({
+        seriesId: input.seriesId,
+        originalStartTime: originalStartMs,
+      }, {
+        user: { id: user, email: "" },
+        token: pb.authStore.token || "",
+      });
+      return { success: true, detachedEventId: "" };
+    } else {
+      const { updateEventOccurrence } = await import('../../lib/pb-actions/updateEventOccurrence');
+      const res = await updateEventOccurrence({
+        seriesId: input.seriesId,
+        originalStartTime: originalStartMs,
+        title: input.title,
+        startTime: startMs,
+        endTime: endMs,
+        eventType: input.eventType as any,
+        cancelled: false,
+      }, {
+        user: { id: user, email: "" },
+        token: pb.authStore.token || "",
+      });
+      return { success: true, detachedEventId: res.detachedEventId };
+    }
   }
 });

@@ -1,5 +1,5 @@
 import { join, relative, basename, dirname } from 'path';
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
 import PocketBase from 'pocketbase';
 import { parseMarkdownFile } from './parser';
@@ -26,8 +26,37 @@ export function getFolioContext(): FolioContext {
 
 export interface EntityInfo {
   id: string;
-  collectionName: 'tasks' | 'events' | 'memories' | 'daily_logs';
+  collectionName: 'tasks' | 'events' | 'memories' | 'daily_logs' | 'workspaces';
   workspaceId: string | null;
+}
+
+/**
+ * Extracts the 15-character PocketBase record ID from a task or event filename.
+ * Supports:
+ * - [slug]-[15-char-id].md (e.g. fix-bug-evt123456789012.md)
+ * - task-[15-char-id].md (legacy)
+ * - event-[15-char-id].md (legacy)
+ */
+export function extractIdFromFilename(filename: string): string {
+  const nameWithoutExt = filename.endsWith('.md') ? filename.slice(0, -3) : filename;
+
+  // 1. Handle slug-[15-char-id]
+  const parts = nameWithoutExt.split('-');
+  const lastPart = parts[parts.length - 1];
+  if (lastPart && lastPart.length === 15) {
+    return lastPart;
+  }
+
+  // 2. Handle legacy task-[15-char-id] or event-[15-char-id]
+  if (nameWithoutExt.startsWith('task-') && nameWithoutExt.length === 20) {
+    return nameWithoutExt.slice(5);
+  }
+  if (nameWithoutExt.startsWith('event-') && nameWithoutExt.length === 21) {
+    return nameWithoutExt.slice(6);
+  }
+
+  // 3. Fallback to last 15 chars
+  return nameWithoutExt.slice(-15);
 }
 
 /**
@@ -64,6 +93,9 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
     } else if (parts[1] === 'workspace_memories.md') {
       // Old style: [workspaceId]/workspace_memories.md
       return { id: parts[0], collectionName: 'memories', workspaceId: parts[0] };
+    } else if (parts[1] === '.workspace.yaml') {
+      // Old style workspace config
+      return { id: parts[0], collectionName: 'workspaces', workspaceId: parts[0] };
     }
   } else if (parts.length === 3) {
     if (parts[0] === 'workspaces' && parts[2] === 'workspace_memories.md') {
@@ -72,6 +104,12 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
       const dashIndex = folderName.lastIndexOf('-');
       const parsedId = dashIndex !== -1 ? folderName.slice(dashIndex + 1) : folderName;
       return { id: parsedId, collectionName: 'memories', workspaceId: parsedId };
+    } else if (parts[0] === 'workspaces' && parts[2] === '.workspace.yaml') {
+      // New style: workspaces/[name-id]/.workspace.yaml
+      const folderName = parts[1];
+      const dashIndex = folderName.lastIndexOf('-');
+      const parsedId = dashIndex !== -1 ? folderName.slice(dashIndex + 1) : folderName;
+      return { id: parsedId, collectionName: 'workspaces', workspaceId: parsedId };
     } else if (parts[1] === 'tasks' || parts[1] === 'events') {
       // Old style: [workspaceId]/[tasks|events]/task-[id].md
       workspaceId = parts[0];
@@ -93,9 +131,7 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
     return null;
   }
   
-  let id = filename.slice(0, -3); // remove .md
-  if (id.startsWith('task-')) id = id.slice(5);
-  if (id.startsWith('event-')) id = id.slice(6);
+  const id = extractIdFromFilename(filename);
   
   return { id, collectionName, workspaceId };
 }
@@ -252,6 +288,7 @@ export async function syncFolioFileToDb(
       createdAt,
       reminderOffset,
       resources,
+      series: metadata.series || null,
     };
 
     if (existingRecord) {
@@ -269,7 +306,8 @@ export async function syncFolioFileToDb(
         existingRecord.workspace === data.workspace &&
         JSON.stringify(existingRecord.recurrence) === JSON.stringify(data.recurrence) &&
         existingRecord.reminderOffset === data.reminderOffset &&
-        JSON.stringify(existingRecord.resources) === JSON.stringify(data.resources);
+        JSON.stringify(existingRecord.resources) === JSON.stringify(data.resources) &&
+        existingRecord.series === data.series;
 
       if (isIdentical) {
         return;
@@ -286,6 +324,73 @@ export async function syncFolioFileToDb(
     await syncMemoriesFileToDb(filePath, pb, folioRootPath);
   } else if (collectionName === 'daily_logs') {
     await syncDailyLogFileToDb(filePath, pb, id);
+  } else if (collectionName === 'workspaces') {
+    await syncWorkspaceFileToDb(filePath, pb, id);
+  }
+}
+
+export async function syncWorkspaceFileToDb(
+  filePath: string,
+  pb: PocketBase,
+  id: string
+): Promise<void> {
+  if (!existsSync(filePath)) return;
+
+  const { parseWorkspaceYaml } = await import('./parser');
+  const content = readFileSync(filePath, 'utf8');
+  const metadata = parseWorkspaceYaml(content);
+
+  // Resolve user ID
+  let userId = pb.authStore.record?.id;
+  if (!userId) {
+    const users = await pb.collection('users').getFullList({ limit: 1 });
+    if (users.length > 0) {
+      userId = users[0].id;
+    }
+  }
+  if (!userId) {
+    console.warn('[Sync Engine] No active user found for workspace sync:', filePath);
+    return;
+  }
+
+  const data = {
+    user: userId,
+    name: metadata.name || id,
+    icon: metadata.icon || 'Briefcase',
+    color: metadata.color || '#d4a373',
+    context: metadata.context || '',
+    agentName: metadata.agentName || '',
+    defaultAgentPersona: metadata.defaultAgentPersona || null,
+    createdAt: metadata.createdAt || Date.now(),
+    archived: metadata.archived === true,
+  };
+
+  let existingRecord;
+  try {
+    existingRecord = await pb.collection('workspaces').getOne(id);
+  } catch (err: any) {
+    if (err?.status !== 404) {
+      throw err;
+    }
+  }
+
+  if (existingRecord) {
+    const isIdentical =
+      existingRecord.name === data.name &&
+      existingRecord.icon === data.icon &&
+      existingRecord.color === data.color &&
+      existingRecord.context === data.context &&
+      existingRecord.agentName === data.agentName &&
+      existingRecord.defaultAgentPersona === data.defaultAgentPersona &&
+      existingRecord.archived === data.archived;
+
+    if (isIdentical) {
+      return;
+    }
+
+    await pb.collection('workspaces').update(id, data);
+  } else {
+    await pb.collection('workspaces').create({ id, ...data });
   }
 }
 
@@ -380,6 +485,130 @@ export async function syncMemoriesFileToDb(
 }
 
 /**
+ * Searches the folio directory structure for an existing file with the given ID and collection type.
+ * Returns the file path if found, or null if not.
+ */
+export function findEntityFileOnDisk(id: string, collectionName: string, folioRootPath: string): string | null {
+  if (collectionName === 'workspaces') {
+    const workspacesParent = join(folioRootPath, 'workspaces');
+    if (existsSync(workspacesParent)) {
+      const folders = readdirSync(workspacesParent);
+      const matched = folders.find((f) => f.endsWith(`-${id}`) && statSync(join(workspacesParent, f)).isDirectory());
+      if (matched) return join(workspacesParent, matched, '.workspace.yaml');
+    }
+    const legacyPath = join(folioRootPath, id);
+    if (existsSync(legacyPath) && statSync(legacyPath).isDirectory()) {
+      return join(legacyPath, '.workspace.yaml');
+    }
+    return null;
+  }
+
+  // Check global tasks/events directories
+  const globalDir = join(folioRootPath, collectionName);
+  if (existsSync(globalDir)) {
+    const files = readdirSync(globalDir);
+    const matched = files.find((f) => extractIdFromFilename(f) === id && f.endsWith('.md'));
+    if (matched) return join(globalDir, matched);
+  }
+
+  // Check new style workspaces folder
+  const workspacesParent = join(folioRootPath, 'workspaces');
+  if (existsSync(workspacesParent)) {
+    const folders = readdirSync(workspacesParent);
+    for (const folder of folders) {
+      const wsDir = join(workspacesParent, folder, collectionName);
+      if (existsSync(wsDir) && statSync(wsDir).isDirectory()) {
+        const files = readdirSync(wsDir);
+        const matched = files.find((f) => extractIdFromFilename(f) === id && f.endsWith('.md'));
+        if (matched) return join(wsDir, matched);
+      }
+    }
+  }
+
+  // Check old style workspaces directly under root
+  const rootItems = readdirSync(folioRootPath);
+  for (const item of rootItems) {
+    if (item === 'tasks' || item === 'events' || item === 'system' || item === 'workspaces') continue;
+    const wsDir = join(folioRootPath, item, collectionName);
+    if (existsSync(wsDir) && statSync(wsDir).isDirectory()) {
+      const files = readdirSync(wsDir);
+      const matched = files.find((f) => extractIdFromFilename(f) === id && f.endsWith('.md'));
+      if (matched) return join(wsDir, matched);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Prunes a deleted workspace folder and cascade-deletes associated tasks, events, chat sessions, habits, and reflections from DB cache.
+ */
+export async function pruneWorkspaceFromDb(pb: PocketBase, workspaceId: string): Promise<void> {
+  console.log(`[Sync Engine] Pruning workspace ${workspaceId} and running cascade deletes...`);
+
+  // 1. Delete associated tasks and their memories
+  try {
+    const tasks = await pb.collection('tasks').getFullList({ filter: `workspace = "${workspaceId}"` });
+    for (const task of tasks) {
+      await deleteSourceMemories(pb, task.id, 'Task');
+      await pb.collection('tasks').delete(task.id);
+    }
+  } catch (err) {
+    console.error(`[Sync Engine] Error cascade deleting tasks for workspace ${workspaceId}:`, err);
+  }
+
+  // 2. Delete associated events and their memories
+  try {
+    const events = await pb.collection('events').getFullList({ filter: `workspace = "${workspaceId}"` });
+    for (const event of events) {
+      await deleteSourceMemories(pb, event.id, 'Event');
+      await pb.collection('events').delete(event.id);
+    }
+  } catch (err) {
+    console.error(`[Sync Engine] Error cascade deleting events for workspace ${workspaceId}:`, err);
+  }
+
+  // 3. Delete associated chat sessions (messages will cascade delete automatically)
+  try {
+    const sessions = await pb.collection('chat_sessions').getFullList({ filter: `workspace = "${workspaceId}"` });
+    for (const session of sessions) {
+      await pb.collection('chat_sessions').delete(session.id);
+    }
+  } catch (err) {
+    console.error(`[Sync Engine] Error cascade deleting chat sessions for workspace ${workspaceId}:`, err);
+  }
+
+  // 4. Delete associated habits
+  try {
+    const habits = await pb.collection('habits').getFullList({ filter: `workspace = "${workspaceId}"` });
+    for (const habit of habits) {
+      await pb.collection('habits').delete(habit.id);
+    }
+  } catch (err) {
+    console.error(`[Sync Engine] Error cascade deleting habits for workspace ${workspaceId}:`, err);
+  }
+
+  // 5. Delete associated reflections
+  try {
+    const reflections = await pb.collection('reflections').getFullList({ filter: `workspace = "${workspaceId}"` });
+    for (const reflection of reflections) {
+      await pb.collection('reflections').delete(reflection.id);
+    }
+  } catch (err) {
+    console.error(`[Sync Engine] Error cascade deleting reflections for workspace ${workspaceId}:`, err);
+  }
+
+  // 6. Delete workspace record
+  try {
+    await pb.collection('workspaces').delete(workspaceId);
+  } catch (err: any) {
+    if (err?.status !== 404) {
+      console.warn(`[Sync Engine] Failed to delete workspace record ${workspaceId}:`, err);
+    }
+  }
+}
+
+/**
  * Reconciles the local folio markdown files with the database cache on startup.
  * Syncs new/updated files and prunes database records for deleted files.
  */
@@ -436,6 +665,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   // Global folders
   scanFolder(join(folioRootPath, 'tasks'));
   scanFolder(join(folioRootPath, 'events'));
+  scanFolder(join(folioRootPath, 'daily-logs'));
   
   // Global memories file
   const globalMemoriesPath = join(folioRootPath, 'system', 'memories.md');
@@ -458,6 +688,51 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
         if (existsSync(wsMemoriesPath)) {
           filesToSync.push(wsMemoriesPath);
         }
+
+        const dashIndex = folder.lastIndexOf('-');
+        const workspaceId = dashIndex !== -1 ? folder.slice(dashIndex + 1) : folder;
+        const wsConfigPath = join(fullPath, '.workspace.yaml');
+        if (existsSync(wsConfigPath)) {
+          filesToSync.push(wsConfigPath);
+        } else {
+          try {
+            const dbWs = await pb.collection('workspaces').getOne(workspaceId);
+            if (dbWs) {
+              console.log(`[Sync Engine] Restoring missing .workspace.yaml for workspace ${workspaceId}`);
+              const { serializeWorkspaceYaml } = await import('./parser');
+              const yamlContent = serializeWorkspaceYaml({
+                id: dbWs.id,
+                name: dbWs.name,
+                icon: dbWs.icon,
+                color: dbWs.color,
+                context: dbWs.context || '',
+                agentName: dbWs.agentName || '',
+                defaultAgentPersona: dbWs.defaultAgentPersona || '',
+                createdAt: dbWs.createdAt,
+                archived: dbWs.archived || false,
+              });
+              writeFileSync(wsConfigPath, yamlContent, 'utf8');
+              filesToSync.push(wsConfigPath);
+            }
+          } catch (err: any) {
+            if (err?.status !== 404) {
+              console.error(`[Sync Engine] Failed to restore .workspace.yaml for workspace ${workspaceId}:`, err);
+            } else {
+              console.log(`[Sync Engine] Generating default .workspace.yaml for workspace folder: ${folder}`);
+              const { serializeWorkspaceYaml } = await import('./parser');
+              const namePart = dashIndex !== -1 ? folder.slice(0, dashIndex) : folder;
+              const yamlContent = serializeWorkspaceYaml({
+                id: workspaceId,
+                name: namePart.replace(/-/g, ' '),
+                icon: 'Briefcase',
+                color: '#d4a373',
+                createdAt: Date.now(),
+              });
+              writeFileSync(wsConfigPath, yamlContent, 'utf8');
+              filesToSync.push(wsConfigPath);
+            }
+          }
+        }
       }
     }
   }
@@ -475,6 +750,11 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
       if (existsSync(wsMemoriesPath)) {
         filesToSync.push(wsMemoriesPath);
       }
+
+      const wsConfigPath = join(fullPath, '.workspace.yaml');
+      if (existsSync(wsConfigPath)) {
+        filesToSync.push(wsConfigPath);
+      }
     }
   }
 
@@ -488,39 +768,13 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   }
 
   // 2. Query all DB tasks and events to prune deleted items
+  const existingIds = new Set(filesToSync.map((f) => extractIdFromFilename(basename(f))));
+
   const pruneDeleted = async (collectionName: 'tasks' | 'events', sourceType: 'Task' | 'Event') => {
     try {
       const records = await pb.collection(collectionName).getFullList();
       for (const rec of records) {
-        // Construct expected path
-        const filePrefix = collectionName === 'tasks' ? 'task-' : 'event-';
-        const expectedFilename = `${filePrefix}${rec.id}.md`;
-        
-        let expectedPath: string;
-        if (rec.workspace) {
-          // Look up folder ending with -rec.workspace in workspaces/ first
-          let workspaceFolder = rec.workspace;
-          const wsParent = join(folioRootPath, 'workspaces');
-          let foundNewStyle = false;
-          if (existsSync(wsParent)) {
-            const folders = readdirSync(wsParent);
-            const matched = folders.find((f) => f.endsWith(`-${rec.workspace}`));
-            if (matched) {
-              workspaceFolder = matched;
-              foundNewStyle = true;
-            }
-          }
-          if (foundNewStyle) {
-            expectedPath = join(folioRootPath, 'workspaces', workspaceFolder, collectionName, expectedFilename);
-          } else {
-            // Fallback to old style directly under root
-            expectedPath = join(folioRootPath, rec.workspace, collectionName, expectedFilename);
-          }
-        } else {
-          expectedPath = join(folioRootPath, collectionName, expectedFilename);
-        }
-
-        if (!existsSync(expectedPath)) {
+        if (!existingIds.has(rec.id)) {
           console.log(`[Sync Engine] Pruning deleted ${sourceType} from DB:`, rec.id);
           // Delete memories
           await deleteSourceMemories(pb, rec.id, sourceType);
@@ -557,6 +811,44 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
     }
   } catch (err) {
     console.error('[Sync Engine] Error pruning deleted memories files:', err);
+  }
+
+  // Prune deleted workspaces
+  try {
+    const dbWorkspaces = await pb.collection('workspaces').getFullList();
+    const activeWorkspaceIds = new Set<string>();
+    
+    // 1. Scan workspaces/ folder
+    if (existsSync(workspacesParentPath)) {
+      const wsFolders = readdirSync(workspacesParentPath);
+      for (const folder of wsFolders) {
+        const fullPath = join(workspacesParentPath, folder);
+        if (statSync(fullPath).isDirectory()) {
+          const dashIndex = folder.lastIndexOf('-');
+          const workspaceId = dashIndex !== -1 ? folder.slice(dashIndex + 1) : folder;
+          activeWorkspaceIds.add(workspaceId);
+        }
+      }
+    }
+    
+    // 2. Scan root folder for old-style workspaces
+    for (const item of rootItems) {
+      if (item === 'tasks' || item === 'events' || item === 'system' || item === 'workspaces') continue;
+      const fullPath = join(folioRootPath, item);
+      if (statSync(fullPath).isDirectory()) {
+        activeWorkspaceIds.add(item);
+      }
+    }
+    
+    // Now prune any db workspace whose ID is not in activeWorkspaceIds
+    for (const dbWs of dbWorkspaces) {
+      if (!activeWorkspaceIds.has(dbWs.id)) {
+        console.log(`[Sync Engine] Pruning deleted workspace ${dbWs.id} from DB`);
+        await pruneWorkspaceFromDb(pb, dbWs.id);
+      }
+    }
+  } catch (err) {
+    console.error('[Sync Engine] Error pruning deleted workspaces during reconciliation:', err);
   }
 
   console.log('[Sync Engine] Folio reconciliation completed.');
@@ -784,3 +1076,51 @@ export async function syncDailyLogFileToDb(
     }
   }
 }
+
+/**
+ * Prunes DB cache records and associated memories when a folio file is deleted.
+ */
+export async function pruneFolioFileFromDb(
+  filePath: string,
+  pb: PocketBase,
+  folioRootPath: string
+): Promise<void> {
+  const info = resolveEntityFromPath(filePath, folioRootPath);
+  if (!info) return;
+
+  const { id, collectionName } = info;
+
+  // Check if the entity still exists somewhere on disk (e.g. if it was renamed/moved)
+  const existingPath = findEntityFileOnDisk(id, collectionName, folioRootPath);
+  if (existingPath) {
+    console.log(`[Sync Engine] Entity ${id} in ${collectionName} still exists on disk at ${existingPath}, skipping DB pruning.`);
+    return;
+  }
+
+  if (collectionName === 'memories') {
+    const sourceId = relative(folioRootPath, filePath).replace(/\\/g, '/');
+    try {
+      const existing = await pb.collection('memories').getFullList({
+        filter: `source_type = "File" && source_id = "${sourceId}"`,
+      });
+      for (const mem of existing) {
+        await pb.collection('memories').delete(mem.id);
+      }
+    } catch (err) {
+      console.warn(`[Sync Engine] Failed to prune memories for file ${sourceId}:`, err);
+    }
+  } else if (collectionName === 'workspaces') {
+    await pruneWorkspaceFromDb(pb, id);
+  } else {
+    const sourceType = collectionName === 'tasks' ? 'Task' : 'Event';
+    await deleteSourceMemories(pb, id, sourceType);
+    try {
+      await pb.collection(collectionName).delete(id);
+    } catch (err: any) {
+      if (err?.status !== 404) {
+        console.warn(`[Sync Engine] Failed to delete record ${id} from ${collectionName}:`, err);
+      }
+    }
+  }
+}
+

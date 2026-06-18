@@ -67,6 +67,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       mkdirSync(workspacePath, { recursive: true });
     }
 
+    // Write initial .workspace.yaml file
+    const { serializeWorkspaceYaml } = await import('../../../lib/folio/parser');
+    const { writeFileSync } = await import('fs');
+    const configContent = serializeWorkspaceYaml({
+      id: record.id,
+      name,
+      icon,
+      color,
+      createdAt: record.createdAt,
+      archived: false,
+    });
+    writeFileSync(join(workspacePath, '.workspace.yaml'), configContent, 'utf8');
+
     return NextResponse.json({ ok: true, id: record.id });
   } catch (err: any) {
     console.error('[API Workspace] Creation failed:', err);

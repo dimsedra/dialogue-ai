@@ -27,13 +27,20 @@ export const completeTaskTool = createTool({
         cleanTaskId = cleanTaskId.slice(5);
       }
 
-      const filePath = join(basePath, 'tasks', `task-${cleanTaskId}.md`);
-      console.log('[completeTask Tool] Resolved filePath:', filePath);
-
-      if (!existsSync(filePath)) {
-        console.error('[completeTask Tool] Task file not found:', filePath);
-        throw new Error(`Task file not found: tasks/task-${cleanTaskId}.md`);
+      const tasksDir = join(basePath, 'tasks');
+      if (!existsSync(tasksDir)) {
+        throw new Error(`Tasks directory does not exist: ${tasksDir}`);
       }
+
+      const { readdirSync } = await import('fs');
+      const files = readdirSync(tasksDir);
+      const targetFile = files.find((f) => f.endsWith(`-${cleanTaskId}.md`) || f === `task-${cleanTaskId}.md`);
+      if (!targetFile) {
+        throw new Error(`Task file not found on disk for ID: ${cleanTaskId}`);
+      }
+
+      const filePath = join(tasksDir, targetFile);
+      console.log('[completeTask Tool] Resolved filePath:', filePath);
 
       const fileContent = readFileSync(filePath, 'utf8');
       const { metadata, body } = parseMarkdownFile(fileContent);

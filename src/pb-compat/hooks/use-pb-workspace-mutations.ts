@@ -2,6 +2,7 @@ import { useMutation } from "../use-mutation";
 import { useAuth } from "../auth";
 import type { PbWorkspaces } from "../_generated/dataModel";
 import { getPbClient } from "../client";
+import { useAction, defineAction } from "../use-action";
 
 export function usePbWorkspaceCreate() {
   const { user } = useAuth();
@@ -36,7 +37,18 @@ export function usePbWorkspaceCreate() {
 
 export function usePbWorkspaceUpdate() {
   const { user } = useAuth();
-  const mutate = useMutation<PbWorkspaces>({ collection: "workspaces", kind: "update" });
+  const runUpdate = useAction<
+    {
+      id: string;
+      context?: string;
+      agentName?: string;
+      color?: string;
+      defaultAgentPersonaId?: string | null;
+      archived?: boolean;
+    },
+    { success: boolean }
+  >(defineAction("updateWorkspace"));
+
   return async (args: {
     id: string;
     context?: string;
@@ -46,16 +58,10 @@ export function usePbWorkspaceUpdate() {
     archived?: boolean;
   }) => {
     if (!user) throw new Error("Unauthorized");
-    const patch: Record<string, any> = {};
-    if (args.context !== undefined) patch.context = args.context;
-    if (args.agentName !== undefined) patch.agentName = args.agentName;
-    if (args.color !== undefined) patch.color = args.color;
-    if (args.defaultAgentPersonaId !== undefined) {
-      patch.defaultAgentPersona = args.defaultAgentPersonaId === null ? "" : args.defaultAgentPersonaId;
-    }
-    if (args.archived !== undefined) patch.archived = args.archived;
-    const record = await mutate({ id: args.id, record: patch });
-    return record;
+    await runUpdate(args);
+    const pb = getPbClient();
+    const record = await pb.collection("workspaces").getOne(args.id);
+    return record as unknown as PbWorkspaces;
   };
 }
 
