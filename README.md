@@ -12,6 +12,19 @@ Dialogue is a relationship-first AI companion that runs entirely on your local m
 2. **Active, Not Passive**: While traditional apps wait for your input, Dialogue pays attention. It notices patterns, tracks habit consistency, and raises observations—always with a strict consent gate: **the agent proposes, you confirm, then it acts.**
 3. **Local-First & Offline-First**: Your conversations, memories, tasks, and daily logs are stored as plain Markdown files on your disk. You own your data.
 
+
+---
+
+## Agentic Capabilities & Workloads
+
+Dialogue equips the agent with a local toolkit to execute complex tasks. The agent orchestrates these capabilities via **Mastra**, running under a strict consent gate: **the agent proposes a plan, and only executes it upon your confirmation.**
+
+* **Deep Web Research**: Search the web, render and scrape pages via Playwright, summarize articles, and compile findings into cited markdown files.
+* **Asset Ingestion**: Drop PDFs, images, or document files into the chat. The agent parses the contents to schedule events, write tasks, or answer context-specific questions.
+* **Task, Event, & Habit Automation**: Create, update, or reorganize tasks, habits, and calendars. The agent tracks streaks, alerts you to upcoming deadlines, and surfaces blocked dependencies.
+* **Git Sync & Peer Collaboration**: Perform offline-first, peer-to-peer workspace sync. The agent can stage files, write semantic commit messages, and push/pull updates.
+* **Resource Management**: Attach websites, reference files, or briefs directly to tasks or events, building a visual resource tray for your workspace.
+
 ---
 
 ## Folio Directory Layout
@@ -24,11 +37,13 @@ dialogue-folio/
 │   ├── personal-ws001/              <--- Default workspace
 │   │   ├── .workspace.yaml          <--- Workspace metadata
 │   │   ├── CONTEXT.md               <--- Workspace focus & User Notes
-│   │   └── notes/                   <--- Free-form notes (BlockNote planned)
-│   └── project-x/
+│   │   ├── MEMORIES.md              <--- Personal memories
+│   │   └── notes/                   <--- Personal free-form notes (BlockNote planned)
+│   └── project-x/                   <--- Project workspace
 │       ├── .workspace.yaml
 │       ├── CONTEXT.md
-│       └── MEMORIES.md              <--- Project-specific memories
+│       ├── MEMORIES.md              <--- Project-specific memories
+│       └── notes/                   <--- Project notes
 ├── daily-logs/                      <--- The Daily Ledger (daily journals)
 │   └── YYYY-MM-DD.md
 └── system/                          <--- Auditable Memory & System Profiles
