@@ -294,6 +294,7 @@ export async function POST(req: Request) {
       timeFormat,
       userWorkspace,
       folioName,
+      folioRootPath,
     );
     
     // File-based LibSQL ensures approval snapshots survive across HTTP requests

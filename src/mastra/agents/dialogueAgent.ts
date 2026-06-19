@@ -21,9 +21,11 @@ import { ollama } from 'ollama-ai-provider';
 import { opencode } from 'ai-sdk-provider-opencode-sdk';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { zhipu } from 'zhipu-ai-provider';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 import * as tools from '../tools';
 import { filterToolsByScope } from '../tools/categories';
-import { getFolioDisplayName } from '@/lib/folio/constants';
+import { getFolioDisplayName, DEFAULT_FOLIO_DIR } from '../../lib/folio/constants';
 
 const customFetch = (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   if (init && init.body && typeof init.body === 'string') {
@@ -68,6 +70,7 @@ export async function createDialogueAgent(
   timeFormat: "auto" | "12h" | "24h" = "auto",
   workspace?: Workspace,
   folioName?: string | null,
+  folioRootPath?: string | null,
 ) {
   let model;
   const opts = {
@@ -152,7 +155,40 @@ export async function createDialogueAgent(
       break;
   }
 
-  let instructions = `You are ${personaName}. ${personaPrompt}`;
+  // Resolve the Folio root path
+  let resolvedFolioRootPath = folioRootPath;
+  if (!resolvedFolioRootPath) {
+    let devFallbackPath = process.env.NODE_ENV === 'development' ? process.env.DEV_LOCAL_PATH : null;
+    if (devFallbackPath && devFallbackPath.startsWith('"') && devFallbackPath.endsWith('"')) {
+      devFallbackPath = devFallbackPath.slice(1, -1);
+    }
+    resolvedFolioRootPath = devFallbackPath || join(process.cwd(), DEFAULT_FOLIO_DIR);
+  }
+
+  // 1. Core Identity backing
+  let coreIdentity = `You are ${personaName}. ${personaPrompt}`;
+  const coreMdPath = join(resolvedFolioRootPath, 'system', 'CORE.md');
+  if (existsSync(coreMdPath)) {
+    try {
+      coreIdentity = readFileSync(coreMdPath, 'utf8').trim();
+    } catch (err) {
+      console.warn(`[Dialogue Agent] Failed to read system/CORE.md:`, err);
+    }
+  } else {
+    try {
+      const systemDir = dirname(coreMdPath);
+      if (!existsSync(systemDir)) {
+        mkdirSync(systemDir, { recursive: true });
+      }
+      const defaultCoreContent = `# Core Identity\n\nYou are ${personaName}.\n${personaPrompt}\n`;
+      writeFileSync(coreMdPath, defaultCoreContent, 'utf8');
+      coreIdentity = defaultCoreContent.trim();
+    } catch (err) {
+      console.warn(`[Dialogue Agent] Failed to write default system/CORE.md:`, err);
+    }
+  }
+
+  let instructions = coreIdentity;
   
   try {
     const formatter = new Intl.DateTimeFormat('en-US', {
@@ -180,8 +216,34 @@ export async function createDialogueAgent(
     instructions += `\n## Time Formatting Rule\nWhen mentioning times in your chat replies to the user, follow the user's timezone locale preference or default to 12-hour format with AM/PM (e.g. "3:00 PM", "9:30 AM"). When calling tools that accept ISO-8601 parameters (startTime, endTime, dueDate), always use 24-hour format as the tool schemas require.\n`;
   }
 
-  
-  if (userName || userBio) {
+  // 2. User Identity backing
+  let userIdentity = '';
+  const userMdPath = join(resolvedFolioRootPath, 'system', 'USER.md');
+  if (existsSync(userMdPath)) {
+    try {
+      userIdentity = readFileSync(userMdPath, 'utf8').trim();
+    } catch (err) {
+      console.warn(`[Dialogue Agent] Failed to read system/USER.md:`, err);
+    }
+  } else {
+    if (userName || userBio) {
+      try {
+        const systemDir = dirname(userMdPath);
+        if (!existsSync(systemDir)) {
+          mkdirSync(systemDir, { recursive: true });
+        }
+        const defaultUserContent = `# User Profile\n\n## Profile\n- Name: ${userName || 'User'}\n- Bio/Facts: ${userBio || ''}\n`;
+        writeFileSync(userMdPath, defaultUserContent, 'utf8');
+        userIdentity = defaultUserContent.trim();
+      } catch (err) {
+        console.warn(`[Dialogue Agent] Failed to write default system/USER.md:`, err);
+      }
+    }
+  }
+
+  if (userIdentity) {
+    instructions += `\n\n## User Identity\n${userIdentity}`;
+  } else if (userName || userBio) {
     instructions += `\n\n## User Identity\n`;
     if (userName) instructions += `- Name: ${userName}\n`;
     if (userBio) instructions += `- Bio/Facts: ${userBio}\n`;
@@ -233,7 +295,10 @@ Only for standalone knowledge: preferences, life context, project-level details,
 - User says "My dad just got laid off" → call saveSemanticMemory with "User's father was recently laid off from his job after being employed for only half a month, following years of unemployment"
 - User says "I prefer React over Vue" → call saveSemanticMemory with "User prefers React over Vue for frontend development"
 
-**IMPORTANT**: Do NOT call \`saveSemanticMemory\` for information that belongs in a task note, event note, or habit log. Those tools auto-generate memories via the ingestion pipeline — calling \`saveSemanticMemory\` in addition creates duplicate, unlinked entries. You MUST actually CALL these tools to save information. Do NOT just say "I'll remember this" or "I've noted this" — those are LIES unless you invoke the tool.
+**5. High-level User Profile / Bio updates** → call \`updateUserBio\`
+ONLY call \`updateUserBio\` when the user explicitly asks to update their overall bio/facts summary, or when you synthesize a significant change to their high-level identity, occupation, or core life theme. Do NOT call this for individual, atomic facts or preferences (which belong to \`saveSemanticMemory\`).
+
+**IMPORTANT**: Do NOT call \`saveSemanticMemory\` for information that belongs in a task note, event note, or habit log. Those tools auto-generate memories via the ingestion pipeline. Do NOT confuse \`saveSemanticMemory\` (for atomic facts/preferences stored in MEMORIES.md) with \`updateUserBio\` (for high-level personality/biography summaries stored in USER.md). You MUST actually CALL these tools to save information. Do NOT just say "I'll remember this" or "I've noted this" — those are LIES unless you invoke the tool.
 
 ### retrieveGraphContext — MANDATORY
 Before answering questions about the user's history, preferences, or past conversations, CALL \`retrieveGraphContext\` first to check what you actually know. Do NOT fabricate memories.

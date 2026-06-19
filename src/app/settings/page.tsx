@@ -521,7 +521,7 @@ export default function SettingsPage() {
                         Identity Profile
                       </h2>
                       <p className="text-[#a8a29e] text-[10px]">
-                        Personalize how your AI companions interact with you.
+                        What Dialogue has learned about you. Your companion uses this profile to personalize your interactions.
                       </p>
                     </div>
 
@@ -545,7 +545,7 @@ export default function SettingsPage() {
 
                       <div className="space-y-1.5">
                         <label className="text-[9px] font-bold uppercase tracking-wider text-[#d4a373]">
-                          Persona & Instructions
+                          Biography & Learned Facts
                         </label>
                         <textarea
                           name="settings-persona-bio"
@@ -556,7 +556,7 @@ export default function SettingsPage() {
                           value={bio}
                           onChange={(e) => setBio(e.target.value)}
                           rows={4}
-                          placeholder="Tell Dialogue about your role, goals, and communication style..."
+                          placeholder="Dialogue automatically learns and updates this biography from your daily logs and conversations. You can edit it directly to correct or override facts."
                           className="w-full bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all resize-none"
                         />
                       </div>

@@ -95,6 +95,8 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
       return { id, collectionName: 'daily_logs', workspaceId: null };
     } else if (parts[0] === 'system' && (parts[1] === 'memories.md' || parts[1] === 'MEMORIES.md')) {
       return { id: 'global', collectionName: 'memories', workspaceId: null };
+    } else if (parts[0] === 'system' && parts[1] === 'USER.md') {
+      return { id: 'user_profile', collectionName: 'user_profile', workspaceId: null };
     } else if (parts[1] === 'workspace_memories.md' || parts[1] === 'MEMORIES.md') {
       // Old style: [workspaceId]/MEMORIES.md
       return { id: parts[0], collectionName: 'memories', workspaceId: parts[0] };
@@ -171,12 +173,28 @@ export async function syncFolioFileToDb(
   // Fetch existing DB record to check for changes. Only treat 404 (Not Found) as non-existent.
   // Rethrow transient or connection errors (status 0, 500, etc.) to prevent false-creation 400 errors.
   let existingRecord: any = null;
-  try {
-    existingRecord = await pb.collection(collectionName).getOne(id);
-  } catch (err: any) {
-    if (err?.status !== 404) {
-      console.error(`[Sync Engine] Error checking existence for ${id} in ${collectionName}:`, err);
-      throw err;
+  if (collectionName === 'user_profile') {
+    const userProfileCol = typeof pb.collection === 'function' ? pb.collection('user_profile') : null;
+    if (!userProfileCol || typeof userProfileCol.getFirstListItem !== 'function') {
+      console.warn('[Sync Engine] pb.collection("user_profile") is not fully supported by the PocketBase client. Skipping user_profile sync.');
+      return;
+    }
+    try {
+      existingRecord = await userProfileCol.getFirstListItem(`user = "${userId.replace(/"/g, '\\"')}"`);
+    } catch (err: any) {
+      if (err?.status !== 404) {
+        console.error(`[Sync Engine] Error checking existence of profile for user ${userId}:`, err);
+        throw err;
+      }
+    }
+  } else {
+    try {
+      existingRecord = await pb.collection(collectionName).getOne(id);
+    } catch (err: any) {
+      if (err?.status !== 404) {
+        console.error(`[Sync Engine] Error checking existence for ${id} in ${collectionName}:`, err);
+        throw err;
+      }
     }
   }
 
@@ -195,6 +213,74 @@ export async function syncFolioFileToDb(
       return null;
     }
   };
+
+  if (collectionName === 'user_profile') {
+    const lines = fileContent.split(/\r?\n/);
+    let name = '';
+    let bioLines: string[] = [];
+    let inBio = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('- Name:') || trimmed.startsWith('* Name:')) {
+        name = trimmed.replace(/^[-*]\s*Name:\s*/i, '').trim();
+        inBio = false;
+      } else if (trimmed.startsWith('- Bio/Facts:') || trimmed.startsWith('* Bio/Facts:')) {
+        const initialBio = trimmed.replace(/^[-*]\s*Bio\/Facts:\s*/i, '').trim();
+        if (initialBio) {
+          bioLines.push(initialBio);
+        }
+        inBio = true;
+      } else if (inBio) {
+        if (trimmed.startsWith('##') || (trimmed.startsWith('#') && !trimmed.startsWith('# '))) {
+          inBio = false;
+        } else {
+          bioLines.push(line);
+        }
+      }
+    }
+
+    const nameVal = name || 'User';
+    const bioVal = bioLines.join('\n').trim() || 'No bio yet.';
+    const currentPrefs = existingRecord?.preferences || { theme: "system", sound: true };
+
+    const data = {
+      user: userId,
+      name: nameVal,
+      bio: bioVal,
+      preferences: currentPrefs,
+    };
+
+    const userProfileCol = typeof pb.collection === 'function' ? pb.collection('user_profile') : null;
+    if (existingRecord && userProfileCol) {
+      const isIdentical =
+        existingRecord.name === nameVal &&
+        existingRecord.bio === bioVal;
+      if (isIdentical) {
+        return;
+      }
+      if (typeof userProfileCol.update === 'function') {
+        await userProfileCol.update(existingRecord.id, data);
+      }
+    } else if (userProfileCol) {
+      if (typeof userProfileCol.create === 'function') {
+        await userProfileCol.create(data);
+      }
+    }
+
+    try {
+      const usersCol = typeof pb.collection === 'function' ? pb.collection('users') : null;
+      if (usersCol && typeof usersCol.getOne === 'function' && typeof usersCol.update === 'function') {
+        const userRecord = await usersCol.getOne(userId);
+        if (userRecord && userRecord.name !== nameVal) {
+          await usersCol.update(userId, { name: nameVal });
+        }
+      }
+    } catch (err) {
+      console.error('[Sync Engine] Failed to update user record name:', err);
+    }
+    return;
+  }
 
   if (collectionName === 'tasks') {
     const completed = metadata.completed === true || metadata.status === 'completed';
@@ -633,6 +719,65 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
     }
   }
 
+  // Ensure system/CORE.md and system/USER.md exist
+  if (!existsSync(systemDir)) {
+    try {
+      mkdirSync(systemDir, { recursive: true });
+    } catch (err) {
+      console.error('[Sync Engine] Failed to create system directory:', err);
+    }
+  }
+  const coreMdPath = join(systemDir, 'CORE.md');
+  const userMdPath = join(systemDir, 'USER.md');
+
+  if (!existsSync(coreMdPath)) {
+    console.log(`[Sync Engine] Creating default CORE.md at ${coreMdPath}`);
+    const defaultCoreContent = `# Core Identity\n\nYou are Dialogue, a relationship-first AI companion.\nYou build relationships through concrete behaviors, not prescribed tones.\n`;
+    try {
+      writeFileSync(coreMdPath, defaultCoreContent, 'utf8');
+    } catch (err) {
+      console.error('[Sync Engine] Failed to create default CORE.md:', err);
+    }
+  }
+
+  if (!existsSync(userMdPath)) {
+    console.log(`[Sync Engine] Creating default USER.md at ${userMdPath}`);
+    let userName = 'User';
+    let userBio = '';
+    
+    try {
+      const activeUserId = await getActiveUserId(pb);
+      if (activeUserId) {
+        const userRecord = await pb.collection('users').getOne(activeUserId);
+        if (userRecord && userRecord.name) {
+          userName = userRecord.name;
+        }
+        
+        try {
+          const userProfileCol = typeof pb.collection === 'function' ? pb.collection('user_profile') : null;
+          if (userProfileCol && typeof userProfileCol.getFirstListItem === 'function') {
+            const profile = await userProfileCol.getFirstListItem(`user = "${activeUserId.replace(/"/g, '\\"')}"`);
+            if (profile) {
+              if (!userName && profile.name) userName = profile.name;
+              if (profile.bio) userBio = profile.bio;
+            }
+          }
+        } catch (e) {
+          // ignore profile fetch errors
+        }
+      }
+    } catch (err) {
+      console.warn('[Sync Engine] Failed to pre-populate USER.md from PocketBase during reconciliation:', err);
+    }
+    
+    const defaultUserContent = `# User Profile\n\n## Profile\n- Name: ${userName}\n- Bio/Facts: ${userBio}\n`;
+    try {
+      writeFileSync(userMdPath, defaultUserContent, 'utf8');
+    } catch (err) {
+      console.error('[Sync Engine] Failed to create default USER.md:', err);
+    }
+  }
+
   // Migrate existing memories' source_id if their workspace folder is now in workspaces/
   const wsParentPath = join(folioRootPath, 'workspaces');
   if (existsSync(wsParentPath)) {
@@ -701,6 +846,11 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   const globalMemoriesPath = join(folioRootPath, 'system', 'MEMORIES.md');
   if (existsSync(globalMemoriesPath)) {
     filesToSync.push(globalMemoriesPath);
+  }
+
+  // Global USER.md file
+  if (existsSync(userMdPath)) {
+    filesToSync.push(userMdPath);
   }
 
   // Workspace folders
@@ -1134,6 +1284,10 @@ export async function pruneFolioFileFromDb(
   if (!info) return;
 
   const { id, collectionName } = info;
+
+  if (collectionName === 'user_profile') {
+    return; // Never prune user profile from database
+  }
 
   // Check if the entity still exists somewhere on disk (e.g. if it was renamed/moved)
   const existingPath = findEntityFileOnDisk(id, collectionName, folioRootPath);

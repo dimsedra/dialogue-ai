@@ -1,4 +1,5 @@
 import { useMutation } from "../use-mutation";
+import { useAction, defineAction } from "../use-action";
 import { useAuth } from "../auth";
 import { getPbClient } from "../client";
 import type { PbUserProfile, PbPushSubscriptions } from "../_generated/dataModel";
@@ -27,21 +28,19 @@ async function getOrCreateProfile(userId: string, name: string) {
 
 export function usePbUpdateProfile() {
   const { user } = useAuth();
-  const mutate = useMutation<PbUserProfile>({ collection: "user_profile", kind: "update" });
+  const runUpdate = useAction<
+    { name?: string; bio?: string; preferences?: any },
+    { success: boolean }
+  >(defineAction("updateProfile"));
+
   return async (args: { name?: string; bio?: string; preferences?: any }) => {
     if (!user) throw new Error("Unauthorized");
+    await runUpdate(args);
+    const pb = getPbClient();
     const email = (user as any).email;
     const name = email ? email.split("@")[0] : "User";
     const profile = await getOrCreateProfile(user.id, name);
-    const patch: Record<string, any> = {};
-    if (args.name !== undefined) patch.name = args.name || "User";
-    if (args.bio !== undefined) patch.bio = args.bio || "No bio yet.";
-    if (args.preferences !== undefined) {
-      const currentPrefs = (profile.preferences as any) || {};
-      patch.preferences = { ...currentPrefs, ...args.preferences };
-    }
-    const record = await mutate({ id: profile.id, record: patch });
-    return record;
+    return profile as unknown as PbUserProfile;
   };
 }
 

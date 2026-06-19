@@ -47,6 +47,7 @@ import { deleteEvent } from "./deleteEvent";
 import { updateEventOccurrence } from "./updateEventOccurrence";
 import { cancelEventOccurrence } from "./cancelEventOccurrence";
 import { updateWorkspace } from "./updateWorkspace";
+import { updateProfile } from "./updateProfile";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const handlers: Record<string, PbActionHandler<any, any>> = {
@@ -61,6 +62,7 @@ const handlers: Record<string, PbActionHandler<any, any>> = {
   updateEventOccurrence,
   cancelEventOccurrence,
   updateWorkspace,
+  updateProfile,
   // More handlers added as B.7 migrates consumers. The 8 Convex actions
   // estimated by the migration plan mostly have Next.js API routes already
   // (chat, embeddings, graph/memory, cron/ocean, admin/memory-health) or
