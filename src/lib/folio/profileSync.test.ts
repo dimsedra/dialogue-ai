@@ -268,4 +268,43 @@ describe('Folio Profile & Core Identity Sync Test', () => {
     expect(insts).toContain('Name: Alice');
     expect(insts).toContain('Bio/Facts: She likes hiking.');
   });
+
+  test('createDialogueAgent loads instructions from CONTEXT.md if workspace is provided', async () => {
+    mockFiles['C:/Users/user/test-folio-profile/system/CORE.md'] = '# My Core Identity\n\nYou are a helpful assistant.';
+    mockFiles['C:/Users/user/test-folio-profile/system/USER.md'] = '# My Profile\n\n## Profile\n- Name: Alice\n- Bio/Facts: She likes hiking.';
+    mockFiles['C:/Users/user/test-folio-profile/workspaces/project-abc-ws-abc/CONTEXT.md'] = '# Project ABC\n\n## Purpose\nThis workspace is for writing tests.';
+
+    // Mock Mastra Workspace and LocalFilesystem
+    const mockWorkspace = {
+      filesystem: {
+        basePath: 'C:/Users/user/test-folio-profile/workspaces/project-abc-ws-abc'
+      }
+    };
+
+    const agent = await createDialogueAgent(
+      'gemini',
+      'gemini-flash',
+      'mock-api-key',
+      null,
+      null,
+      null,
+      null,
+      null,
+      'UTC',
+      'Dialogue',
+      'Default prompt',
+      null,
+      null,
+      'auto',
+      mockWorkspace as any,
+      null,
+      folioRoot
+    );
+
+    const insts = await agent.getInstructions();
+    expect(insts).toContain('You are a helpful assistant.');
+    expect(insts).toContain('Name: Alice');
+    expect(insts).toContain('Workspace Context');
+    expect(insts).toContain('This workspace is for writing tests.');
+  });
 });

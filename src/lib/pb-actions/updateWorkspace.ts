@@ -103,6 +103,12 @@ export const updateWorkspace: PbActionHandler<
   const finalConfigFilePath = join(currentWorkspacePath, ".workspace.yaml");
   fs.writeFileSync(finalConfigFilePath, serialized, "utf8");
 
+  // Save CONTEXT.md if context is updated
+  if (args.context !== undefined) {
+    const contextFilePath = join(currentWorkspacePath, "CONTEXT.md");
+    fs.writeFileSync(contextFilePath, args.context, "utf8");
+  }
+
   // 6. Sync changes back to PB cache
   if (renamed) {
     const oldConfigFilePath = join(oldWorkspacePath, ".workspace.yaml");

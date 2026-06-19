@@ -1,17 +1,20 @@
 # Dialogue
 
-> *Let your personal growth be assisted.*
+> *One place for your life. An AI that knows you better every day.*
 
-Dialogue is a relationship-first AI companion that runs entirely on your local machine. It is not a passive task manager or calendar; it is an active partner that learns who you are, remembers what matters to you, and assists your personal growth on your own terms.
+Notion doesn't know you. Google Calendar doesn't know you. ChatGPT forgets you every session. Every tool out there is powerful — but blind to the person using it.
+
+Dialogue is your life's single source of truth — that actually knows you. One place for your tasks, habits, journals, projects, and conversations, backed by an AI that learns who you are over time, without you having to manually maintain it.
+
+It runs entirely on your machine. Your data never leaves your hardware.
 
 ---
 
 ## Core Philosophy
 
-1. **Relationship-First**: The agent is a single companion who knows you. It doesn't switch "modes" or "personas"; instead, it dynamically adapts its behavioral weights depending on your active workspace context.
-2. **Active, Not Passive**: While traditional apps wait for your input, Dialogue pays attention. It notices patterns, tracks habit consistency, and raises observations—always with a strict consent gate: **the agent proposes, you confirm, then it acts.**
-3. **Local-First & Offline-First**: Your conversations, memories, tasks, and daily logs are stored as plain Markdown files on your disk. You own your data.
-
+1. **It Knows You**: Dialogue is a single AI companion that remembers what matters to you and gets better at it over time. It doesn't switch "modes" or "personas" — it adapts its behavior naturally depending on your active context, like a person would.
+2. **Active, Not Passive**: Traditional apps wait for your input. Dialogue pays attention. It notices patterns, tracks habit consistency, and raises observations — always with a strict consent gate: **the agent proposes, you confirm, then it acts.**
+3. **Local-First & Offline-First**: Your conversations, memories, tasks, and daily logs live as plain Markdown files on your disk. No cloud dependency. No telemetry. You own everything.
 
 ---
 
@@ -57,13 +60,13 @@ dialogue-folio/
 
 ## Architectural Pillars
 
-Dialogue's technical architecture is intentionally designed to serve our core philosophy: **"Let your personal growth be assisted."**
+Dialogue's architecture is built around one goal: **an AI that actually knows you — and proves it.**
 
-| Architectural Pillar | How It Serves Personal Growth |
+| Architectural Pillar | Why It Matters |
 | :--- | :--- |
-| **1. Everything is a Workspace** | Growth is contextual. Mapping every conversation to a workspace (e.g., Health, Career, Study) allows the agent to dynamically weight its behavior to match your active mindset. You get tailored companionship instead of generic advice. |
-| **2. Chat vs. Observer Decoupling** | Empathetic relationships require presence. The Chat Agent is freed from the distraction of writing logs or updating databases mid-chat. It focuses 100% on listening and responding, while the Observer handles the bookkeeping asynchronously. |
-| **3. Memory Tier Differentiation** | Trust is built on transparency and control. By storing long-term memories in flat, human-readable Markdown files (`system/MEMORIES.md`), we eliminate the "black box." You can audit, edit, or erase what the agent knows at any time. |
+| **1. Everything is a Workspace** | Your life has contexts — health, work, study, personal. Each workspace gives the AI the right lens to understand you in that context, instead of treating every conversation the same. |
+| **2. Chat vs. Observer Decoupling** | The AI that talks to you should be fully present. It doesn't multitask mid-conversation — a separate Observer handles all the learning and bookkeeping in the background. |
+| **3. Memory Tier Differentiation** | What the AI knows about you is stored in plain Markdown files you can read, edit, or delete. No black box. No hidden embeddings you can't inspect. Full transparency. |
 
 ---
 

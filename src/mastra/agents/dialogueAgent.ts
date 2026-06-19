@@ -248,6 +248,26 @@ export async function createDialogueAgent(
     if (userName) instructions += `- Name: ${userName}\n`;
     if (userBio) instructions += `- Bio/Facts: ${userBio}\n`;
   }
+
+  // 3. Workspace Context backing (CONTEXT.md)
+  let workspaceContext = '';
+  if (workspace) {
+    const wsBasePath = (workspace as any).filesystem?.basePath;
+    if (wsBasePath) {
+      const contextMdPath = join(wsBasePath, 'CONTEXT.md');
+      if (existsSync(contextMdPath)) {
+        try {
+          workspaceContext = readFileSync(contextMdPath, 'utf8').trim();
+        } catch (err) {
+          console.warn(`[Dialogue Agent] Failed to read workspace CONTEXT.md:`, err);
+        }
+      }
+    }
+  }
+
+  if (workspaceContext) {
+    instructions += `\n\n## Workspace Context\n${workspaceContext}`;
+  }
   
   if (monthlyDigest || latestWeeklyDigest) {
     instructions += `\n\n## Context\n`;

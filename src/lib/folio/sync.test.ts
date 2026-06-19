@@ -1,6 +1,6 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
 import { parseMarkdownFile, serializeMarkdownFile } from './parser';
-import { resolveEntityFromPath, syncMemoriesFileToDb, folioRequestContext } from './sync';
+import { resolveEntityFromPath, syncMemoriesFileToDb, folioRequestContext, syncFolioFileToDb, reconcileFolio } from './sync';
 import fs from 'fs';
 import PocketBase from 'pocketbase';
 import crypto from 'crypto';
@@ -421,6 +421,30 @@ describe('Path to Entity Resolver', () => {
       workspaceId: 'lh7p5oqw2n8xxyz',
     });
   });
+
+  test('resolves new-style workspace CONTEXT.md file path', () => {
+    const resolved = resolveEntityFromPath(
+      'C:/Users/user/Dialogue Folio/workspaces/my-new-workspace-lh7p5oqw2n8xxyz/CONTEXT.md',
+      folioRoot
+    );
+    expect(resolved).toEqual({
+      id: 'lh7p5oqw2n8xxyz',
+      collectionName: 'workspaces',
+      workspaceId: 'lh7p5oqw2n8xxyz',
+    });
+  });
+
+  test('resolves old-style workspace CONTEXT.md file path', () => {
+    const resolved = resolveEntityFromPath(
+      'C:/Users/user/Dialogue Folio/work-123/CONTEXT.md',
+      folioRoot
+    );
+    expect(resolved).toEqual({
+      id: 'work-123',
+      collectionName: 'workspaces',
+      workspaceId: 'work-123',
+    });
+  });
 });
 
 describe('Sync memories file to DB', () => {
@@ -703,6 +727,93 @@ type: daily-log
     expect(updatedWaterHabit.currentStreak).toBe(1);
     expect(updatedWaterHabit.longestStreak).toBe(1);
     expect(updatedWaterHabit.lastLoggedDate).toBe('2026-06-17');
+  });
+});
+
+describe('Workspace CONTEXT.md Sync', () => {
+  const folioRoot = 'C:/Users/user/Dialogue Folio';
+
+  beforeEach(() => {
+    mockPb.collections.workspaces = createMockCollection([
+      {
+        id: 'abc',
+        user: 'user123',
+        name: 'Project ABC',
+        icon: 'Briefcase',
+        color: '#d4a373',
+        context: 'Initial context',
+      }
+    ]);
+    mockFiles['C:/Users/user/Dialogue Folio'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces/project-abc-abc'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces/project-abc-abc/.workspace.yaml'] = `id: abc\nname: Project ABC\ncontext: Initial context\n`;
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces/project-abc-abc/CONTEXT.md'] = `# Project ABC\n\n## Purpose\nInitial context\n`;
+  });
+
+  test('syncs CONTEXT.md changes to DB workspaces collection and updates .workspace.yaml', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/workspaces/project-abc-abc/CONTEXT.md';
+    mockFiles[filePath] = `# Project ABC\n\n## Purpose\nUpdated context on disk\n`;
+
+    await syncFolioFileToDb(filePath, mockPb, folioRoot);
+
+    const ws = mockPb.collection('workspaces').items.find((w: any) => w.id === 'abc');
+    expect(ws.context).toBe('# Project ABC\n\n## Purpose\nUpdated context on disk\n');
+
+    const yamlContent = mockFiles['C:/Users/user/Dialogue Folio/workspaces/project-abc-abc/.workspace.yaml'];
+    expect(yamlContent).toContain('Updated context on disk');
+  });
+
+  test('pruning CONTEXT.md clears context in DB and .workspace.yaml instead of deleting workspace', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/workspaces/project-abc-abc/CONTEXT.md';
+    delete mockFiles[filePath];
+
+    const { pruneFolioFileFromDb } = await import('./sync');
+    await pruneFolioFileFromDb(filePath, mockPb, folioRoot);
+
+    // Workspace should NOT be deleted
+    const ws = mockPb.collection('workspaces').items.find((w: any) => w.id === 'abc');
+    expect(ws).toBeDefined();
+    // Context should be cleared
+    expect(ws.context).toBe('');
+
+    const yamlContent = mockFiles['C:/Users/user/Dialogue Folio/workspaces/project-abc-abc/.workspace.yaml'];
+    expect(yamlContent).not.toContain('Initial context');
+  });
+
+  test('reconcileFolio restores missing CONTEXT.md from DB or generates default', async () => {
+    // 1. Missing CONTEXT.md, exists in DB
+    const path1 = 'C:/Users/user/Dialogue Folio/workspaces/project-abc-abc/CONTEXT.md';
+    delete mockFiles[path1];
+
+    mockPb.collections.workspaces = createMockCollection([
+      {
+        id: 'abc',
+        user: 'user123',
+        name: 'Project ABC',
+        icon: 'Briefcase',
+        color: '#d4a373',
+        context: 'Existing context in DB',
+      },
+      {
+        id: 'xyz',
+        user: 'user123',
+        name: 'Personal',
+        context: '',
+      }
+    ]);
+
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces/personal-xyz'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces/personal-xyz/.workspace.yaml'] = `id: xyz\nname: Personal\n`;
+    const path2 = 'C:/Users/user/Dialogue Folio/workspaces/personal-xyz/CONTEXT.md';
+
+    await reconcileFolio(folioRoot, mockPb);
+
+    // Should restore path1 from DB
+    expect(mockFiles[path1]).toBe('Existing context in DB');
+
+    // Should generate default for path2 (Personal workspace)
+    expect(mockFiles[path2]).toContain('Casual daily companion space');
   });
 });
 

@@ -100,8 +100,8 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
     } else if (parts[1] === 'workspace_memories.md' || parts[1] === 'MEMORIES.md') {
       // Old style: [workspaceId]/MEMORIES.md
       return { id: parts[0], collectionName: 'memories', workspaceId: parts[0] };
-    } else if (parts[1] === '.workspace.yaml') {
-      // Old style workspace config
+    } else if (parts[1] === '.workspace.yaml' || parts[1] === 'CONTEXT.md') {
+      // Old style workspace config or context
       return { id: parts[0], collectionName: 'workspaces', workspaceId: parts[0] };
     }
   } else if (parts.length === 3) {
@@ -111,8 +111,8 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
       const dashIndex = folderName.lastIndexOf('-');
       const parsedId = dashIndex !== -1 ? folderName.slice(dashIndex + 1) : folderName;
       return { id: parsedId, collectionName: 'memories', workspaceId: parsedId };
-    } else if (parts[0] === 'workspaces' && parts[2] === '.workspace.yaml') {
-      // New style: workspaces/[name-id]/.workspace.yaml
+    } else if (parts[0] === 'workspaces' && (parts[2] === '.workspace.yaml' || parts[2] === 'CONTEXT.md')) {
+      // New style: workspaces/[name-id]/.workspace.yaml or CONTEXT.md
       const folderName = parts[1];
       const dashIndex = folderName.lastIndexOf('-');
       const parsedId = dashIndex !== -1 ? folderName.slice(dashIndex + 1) : folderName;
@@ -410,7 +410,62 @@ export async function syncFolioFileToDb(
   } else if (collectionName === 'daily_logs') {
     await syncDailyLogFileToDb(filePath, pb, id);
   } else if (collectionName === 'workspaces') {
-    await syncWorkspaceFileToDb(filePath, pb, id);
+    if (basename(filePath) === 'CONTEXT.md') {
+      await syncWorkspaceContextFileToDb(filePath, pb, id);
+    } else {
+      await syncWorkspaceFileToDb(filePath, pb, id);
+    }
+  }
+}
+
+export async function syncWorkspaceContextFileToDb(
+  filePath: string,
+  pb: PocketBase,
+  id: string
+): Promise<void> {
+  if (!existsSync(filePath)) return;
+
+  const fileContent = readFileSync(filePath, 'utf8');
+
+  // Resolve user ID
+  const userId = await getActiveUserId(pb);
+  if (!userId) {
+    console.warn('[Sync Engine] No active user found for workspace context sync:', filePath);
+    return;
+  }
+
+  let existingRecord;
+  try {
+    existingRecord = await pb.collection('workspaces').getOne(id);
+  } catch (err: any) {
+    if (err?.status !== 404) {
+      throw err;
+    }
+  }
+
+  if (existingRecord) {
+    if (existingRecord.context === fileContent) {
+      return;
+    }
+
+    console.log(`[Sync Engine] Syncing CONTEXT.md for workspace ${id} to DB`);
+    await pb.collection('workspaces').update(id, { context: fileContent });
+
+    // Keep .workspace.yaml in sync
+    const configFilePath = join(dirname(filePath), '.workspace.yaml');
+    if (existsSync(configFilePath)) {
+      try {
+        const { parseWorkspaceYaml, serializeWorkspaceYaml } = await import('./parser');
+        const configContent = readFileSync(configFilePath, 'utf8');
+        const metadata = parseWorkspaceYaml(configContent);
+        if (metadata.context !== fileContent) {
+          metadata.context = fileContent;
+          writeFileSync(configFilePath, serializeWorkspaceYaml(metadata), 'utf8');
+        }
+      } catch (err) {
+        console.warn(`[Sync Engine] Failed to update .workspace.yaml context during CONTEXT.md sync:`, err);
+      }
+    }
   }
 }
 
@@ -913,6 +968,46 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
             }
           }
         }
+
+        const wsContextPath = join(fullPath, 'CONTEXT.md');
+        if (!existsSync(wsContextPath)) {
+          try {
+            const dbWs = await pb.collection('workspaces').getOne(workspaceId);
+            if (dbWs && dbWs.context) {
+              console.log(`[Sync Engine] Restoring missing CONTEXT.md for workspace ${workspaceId}`);
+              writeFileSync(wsContextPath, dbWs.context, 'utf8');
+            } else {
+              console.log(`[Sync Engine] Generating default CONTEXT.md for workspace folder: ${folder}`);
+              const namePart = dashIndex !== -1 ? folder.slice(0, dashIndex) : folder;
+              const name = namePart.replace(/-/g, ' ');
+              const nameCapitalized = name.charAt(0).toUpperCase() + name.slice(1);
+              
+              let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
+              if (nameCapitalized.toLowerCase() === 'personal') {
+                defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+              } else {
+                defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
+              }
+              writeFileSync(wsContextPath, defaultContext, 'utf8');
+            }
+          } catch (err: any) {
+            console.log(`[Sync Engine] Generating default CONTEXT.md for workspace folder: ${folder} (DB workspace check failed: ${err.message || err})`);
+            const namePart = dashIndex !== -1 ? folder.slice(0, dashIndex) : folder;
+            const name = namePart.replace(/-/g, ' ');
+            const nameCapitalized = name.charAt(0).toUpperCase() + name.slice(1);
+            
+            let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
+            if (nameCapitalized.toLowerCase() === 'personal') {
+              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+            } else {
+              defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
+            }
+            writeFileSync(wsContextPath, defaultContext, 'utf8');
+          }
+        }
+        if (existsSync(wsContextPath)) {
+          filesToSync.push(wsContextPath);
+        }
       }
     }
   }
@@ -952,9 +1047,47 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
         filesToSync.push(newRootWsMemories);
       }
 
-      const wsConfigPath = join(fullPath, '.workspace.yaml');
+       const wsConfigPath = join(fullPath, '.workspace.yaml');
       if (existsSync(wsConfigPath)) {
         filesToSync.push(wsConfigPath);
+      }
+
+      const oldRootWsContext = join(fullPath, 'CONTEXT.md');
+      if (!existsSync(oldRootWsContext)) {
+        try {
+          const dbWs = await pb.collection('workspaces').getOne(item);
+          if (dbWs && dbWs.context) {
+            console.log(`[Sync Engine] Restoring missing CONTEXT.md for workspace ${item}`);
+            writeFileSync(oldRootWsContext, dbWs.context, 'utf8');
+          } else {
+            console.log(`[Sync Engine] Generating default CONTEXT.md for workspace: ${item}`);
+            const name = item.replace(/-/g, ' ');
+            const nameCapitalized = name.charAt(0).toUpperCase() + name.slice(1);
+            let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
+            if (nameCapitalized.toLowerCase() === 'personal') {
+              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+            } else {
+              defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
+            }
+            writeFileSync(oldRootWsContext, defaultContext, 'utf8');
+          }
+        } catch (err: any) {
+          console.log(`[Sync Engine] Generating default CONTEXT.md for workspace: ${item} (DB workspace check failed: ${err.message || err})`);
+          const name = item.replace(/-/g, ' ');
+          const nameCapitalized = name.charAt(0).toUpperCase() + name.slice(1);
+          let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
+          if (nameCapitalized.toLowerCase() === 'personal') {
+            defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+          } else {
+            defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
+          }
+          try {
+            writeFileSync(oldRootWsContext, defaultContext, 'utf8');
+          } catch {}
+        }
+      }
+      if (existsSync(oldRootWsContext)) {
+        filesToSync.push(oldRootWsContext);
       }
     }
   }
@@ -1290,10 +1423,13 @@ export async function pruneFolioFileFromDb(
   }
 
   // Check if the entity still exists somewhere on disk (e.g. if it was renamed/moved)
-  const existingPath = findEntityFileOnDisk(id, collectionName, folioRootPath);
-  if (existingPath) {
-    console.log(`[Sync Engine] Entity ${id} in ${collectionName} still exists on disk at ${existingPath}, skipping DB pruning.`);
-    return;
+  const isContextMd = collectionName === 'workspaces' && basename(filePath) === 'CONTEXT.md';
+  if (!isContextMd) {
+    const existingPath = findEntityFileOnDisk(id, collectionName, folioRootPath);
+    if (existingPath) {
+      console.log(`[Sync Engine] Entity ${id} in ${collectionName} still exists on disk at ${existingPath}, skipping DB pruning.`);
+      return;
+    }
   }
 
   if (collectionName === 'memories') {
@@ -1309,7 +1445,30 @@ export async function pruneFolioFileFromDb(
       console.warn(`[Sync Engine] Failed to prune memories for file ${sourceId}:`, err);
     }
   } else if (collectionName === 'workspaces') {
-    await pruneWorkspaceFromDb(pb, id);
+    if (basename(filePath) === 'CONTEXT.md') {
+      try {
+        const record = await pb.collection('workspaces').getOne(id);
+        if (record && record.context !== '') {
+          console.log(`[Sync Engine] CONTEXT.md deleted. Clearing context for workspace ${id}`);
+          await pb.collection('workspaces').update(id, { context: '' });
+
+          const configFilePath = findEntityFileOnDisk(id, 'workspaces', folioRootPath);
+          if (configFilePath && existsSync(configFilePath)) {
+            const { parseWorkspaceYaml, serializeWorkspaceYaml } = await import('./parser');
+            const fileContent = readFileSync(configFilePath, 'utf8');
+            const metadata = parseWorkspaceYaml(fileContent);
+            if (metadata.context !== '') {
+              metadata.context = '';
+              writeFileSync(configFilePath, serializeWorkspaceYaml(metadata), 'utf8');
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Sync Engine] Failed to clear context on workspace record ${id}:`, err);
+      }
+    } else {
+      await pruneWorkspaceFromDb(pb, id);
+    }
   } else {
     const sourceType = collectionName === 'tasks' ? 'Task' : 'Event';
     await deleteSourceMemories(pb, id, sourceType);
