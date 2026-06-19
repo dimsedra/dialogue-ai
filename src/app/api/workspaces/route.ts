@@ -83,7 +83,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Write initial CONTEXT.md file
     let defaultContext = `# ${name}\n\n## Purpose\n`;
     if (name.toLowerCase() === 'personal') {
-      defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+      defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
     } else {
       defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
     }

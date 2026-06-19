@@ -13,6 +13,7 @@
     "test:stress:messages": "node scripts/stress-pb-messages.mjs",
     "test:smoke": "node scripts/smoke-pb-userprofile.mjs",
     "test:smoke:profile": "npx tsx scripts/smoke-pb-profile-sync.ts",
+    "test:smoke:workspace-init": "npx tsx scripts/smoke-pb-workspace-init.ts",
     "test:smoke:reads": "node scripts/smoke-pb-readpaths.mjs",
     "test:smoke:dashboard": "node scripts/smoke-pb-dashboard.mjs",
     "test:smoke:jobs": "node scripts/smoke-pb-jobs.mjs",

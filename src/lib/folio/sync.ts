@@ -831,6 +831,88 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
     }
   }
 
+  // Ensure default "Personal" workspace exists on first launch
+  const workspacesParentPath = join(folioRootPath, 'workspaces');
+  const activeUserIdForWs = await getActiveUserId(pb);
+  if (activeUserIdForWs) {
+    let hasWorkspacesOnDisk = false;
+    if (existsSync(workspacesParentPath)) {
+      const folders = readdirSync(workspacesParentPath);
+      for (const folder of folders) {
+        const fullPath = join(workspacesParentPath, folder);
+        if (statSync(fullPath).isDirectory()) {
+          hasWorkspacesOnDisk = true;
+          break;
+        }
+      }
+    }
+    
+    if (!hasWorkspacesOnDisk) {
+      const rootItems = readdirSync(folioRootPath);
+      for (const item of rootItems) {
+        if (item === 'tasks' || item === 'events' || item === 'system' || item === 'workspaces' || item === '.git' || item === '.convex' || item === '.dialogue' || item === 'node_modules' || item === '.trash') continue;
+        const fullPath = join(folioRootPath, item);
+        if (statSync(fullPath).isDirectory()) {
+          hasWorkspacesOnDisk = true;
+          break;
+        }
+      }
+    }
+
+    let hasWorkspacesInDb = false;
+    try {
+      const userWorkspaces = await pb.collection('workspaces').getList(1, 1, {
+        filter: `user = "${activeUserIdForWs.replace(/"/g, '\\"')}"`,
+      });
+      if (userWorkspaces.totalItems > 0) {
+        hasWorkspacesInDb = true;
+      }
+    } catch (err) {
+      console.warn('[Sync Engine] Failed to query workspaces list from PocketBase during reconciliation:', err);
+    }
+
+    if (!hasWorkspacesOnDisk && !hasWorkspacesInDb) {
+      console.log('[Sync Engine] First launch detected (no workspaces found). Auto-creating default "Personal" workspace...');
+      try {
+        const personalRecord = await pb.collection('workspaces').create({
+          user: activeUserIdForWs,
+          name: 'Personal',
+          icon: 'Briefcase',
+          color: '#d4a373',
+          createdAt: Date.now(),
+        });
+        
+        if (!existsSync(workspacesParentPath)) {
+          mkdirSync(workspacesParentPath, { recursive: true });
+        }
+        
+        const folderName = `personal-${personalRecord.id}`;
+        const personalPath = join(workspacesParentPath, folderName);
+        if (!existsSync(personalPath)) {
+          mkdirSync(personalPath, { recursive: true });
+        }
+        
+        const { serializeWorkspaceYaml } = await import('./parser');
+        const configContent = serializeWorkspaceYaml({
+          id: personalRecord.id,
+          name: 'Personal',
+          icon: 'Briefcase',
+          color: '#d4a373',
+          createdAt: personalRecord.createdAt,
+          archived: false,
+        });
+        writeFileSync(join(personalPath, '.workspace.yaml'), configContent, 'utf8');
+        
+        const defaultContext = `# Personal\n\n## Purpose\nCasual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
+        writeFileSync(join(personalPath, 'CONTEXT.md'), defaultContext, 'utf8');
+        
+        console.log(`[Sync Engine] Successfully auto-created default "Personal" workspace at workspaces/${folderName}`);
+      } catch (err) {
+        console.error('[Sync Engine] Failed to auto-create default "Personal" workspace:', err);
+      }
+    }
+  }
+
   // Migrate existing memories' source_id if their workspace folder is now in workspaces/
   const wsParentPath = join(folioRootPath, 'workspaces');
   if (existsSync(wsParentPath)) {
@@ -908,7 +990,6 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
 
   // Workspace folders
   // 1. New style workspaces folder
-  const workspacesParentPath = join(folioRootPath, 'workspaces');
   if (existsSync(workspacesParentPath)) {
     const wsFolders = readdirSync(workspacesParentPath);
     for (const folder of wsFolders) {
@@ -981,7 +1062,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
               
               let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
               if (nameCapitalized.toLowerCase() === 'personal') {
-                defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+                defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
               } else {
                 defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
               }
@@ -995,7 +1076,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
             
             let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
             if (nameCapitalized.toLowerCase() === 'personal') {
-              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
             } else {
               defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
             }
@@ -1062,7 +1143,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
             const nameCapitalized = name.charAt(0).toUpperCase() + name.slice(1);
             let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
             if (nameCapitalized.toLowerCase() === 'personal') {
-              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
             } else {
               defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
             }
@@ -1074,7 +1155,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
           const nameCapitalized = name.charAt(0).toUpperCase() + name.slice(1);
           let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
           if (nameCapitalized.toLowerCase() === 'personal') {
-            defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers English\n`;
+            defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
           } else {
             defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
           }

@@ -90,6 +90,20 @@ function createMockCollection(initialItems: any[]) {
       }
       return item;
     },
+    getList: async (page: number, limit: number, options: any) => {
+      let filtered = [...items];
+      if (options?.filter) {
+        const match = options.filter.match(/^user = "([^"]+)"$/);
+        if (match) {
+          const userId = match[1];
+          filtered = filtered.filter(i => i.user === userId);
+        }
+      }
+      return {
+        items: filtered.slice((page - 1) * limit, page * limit),
+        totalItems: filtered.length,
+      };
+    },
     getFirstListItem: async (filter: string) => {
       const match = filter.match(/user = "([^"]+)"/);
       if (match) {
@@ -105,7 +119,7 @@ function createMockCollection(initialItems: any[]) {
       throw new Error("Mock getFirstListItem filter not supported: " + filter);
     },
     create: async (data: any) => {
-      const newItem = { id: data.id || `id-${Math.random()}`, ...data };
+      const newItem = { id: data.id || Math.random().toString(36).substring(2, 17).padEnd(15, '0'), ...data };
       items.push(newItem);
       return newItem;
     },
@@ -114,6 +128,13 @@ function createMockCollection(initialItems: any[]) {
       if (!item) throw new Error("404 Not Found");
       Object.assign(item, data);
       return item;
+    },
+    delete: async (id: string) => {
+      const idx = items.findIndex(item => item.id === id);
+      if (idx !== -1) {
+        items.splice(idx, 1);
+      }
+      return true;
     },
     getFullList: async () => items,
   };

@@ -138,7 +138,7 @@ function createMockCollection(initialItems: any[]) {
       return item;
     },
     create: async (data: any) => {
-      const newItem = { id: data.id || `id-${Math.random()}`, ...data };
+      const newItem = { id: data.id || Math.random().toString(36).substring(2, 17).padEnd(15, '0'), ...data };
       items.push(newItem);
       return newItem;
     },
@@ -226,7 +226,12 @@ vi.mock('fs', async (importOriginal) => {
         return;
       }
     },
-    mkdirSync: () => undefined,
+    mkdirSync: (p: any) => {
+      const norm = String(p).replace(/\\/g, '/');
+      if (norm.includes('Dialogue Folio') || norm.includes('dialogue-folio')) {
+        mockFiles[norm] = 'directory';
+      }
+    },
     readdirSync: (p: any) => {
       const norm = String(p).replace(/\\/g, '/');
       const prefix = norm + '/';
@@ -814,6 +819,35 @@ describe('Workspace CONTEXT.md Sync', () => {
 
     // Should generate default for path2 (Personal workspace)
     expect(mockFiles[path2]).toContain('Casual daily companion space');
+  });
+
+  test('reconcileFolio auto-creates default Personal workspace on first launch', async () => {
+    // Both disk and DB are completely empty of workspaces
+    for (const key of Object.keys(mockFiles)) {
+      delete mockFiles[key];
+    }
+    mockFiles['C:/Users/user/Dialogue Folio'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/system'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/system/CORE.md'] = '# Core Identity\n';
+    mockFiles['C:/Users/user/Dialogue Folio/system/USER.md'] = '# User Profile\n';
+    
+    mockPb.collections.workspaces = createMockCollection([]);
+
+    await reconcileFolio(folioRoot, mockPb);
+
+    // It should create the Personal workspace record in DB
+    const dbWorkspaces = mockPb.collection('workspaces').items;
+    expect(dbWorkspaces).toHaveLength(1);
+    expect(dbWorkspaces[0].name).toBe('Personal');
+
+    // It should create workspaces/personal-[id] folder and files on disk
+    const wsId = dbWorkspaces[0].id;
+    const personalFolder = `C:/Users/user/Dialogue Folio/workspaces/personal-${wsId}`;
+    expect(mockFiles[`${personalFolder}/.workspace.yaml`]).toBeDefined();
+    expect(mockFiles[`${personalFolder}/.workspace.yaml`]).toContain('name: Personal');
+    expect(mockFiles[`${personalFolder}/CONTEXT.md`]).toBeDefined();
+    expect(mockFiles[`${personalFolder}/CONTEXT.md`]).toContain('Casual daily companion space');
+    expect(mockFiles[`${personalFolder}/CONTEXT.md`]).toContain('Indonesian mixed with English');
   });
 });
 
