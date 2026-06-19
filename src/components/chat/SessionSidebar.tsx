@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard, ChevronDown, Bot } from "lucide-react";
 import { motion } from "framer-motion";
-import { usePbPersonasList, usePbSessionRename, usePbSessionTogglePin, PbChatSessions, PbWorkspaces } from "@/pb-compat";
+import { usePbSessionRename, usePbSessionTogglePin, PbChatSessions, PbWorkspaces } from "@/pb-compat";
 
 interface SessionSidebarProps {
   isLoaded?: boolean;
@@ -15,7 +15,7 @@ interface SessionSidebarProps {
   isLargeViewport: boolean;
   onSelectSession: (id: string) => void;
   onSelectWorkspaceSession: (workspaceId: string, sessionId: string) => void;
-  onNewChat: (workspaceId?: string | null, agentPersonaId?: string) => void;
+  onNewChat: (workspaceId?: string | null) => void;
   onDeleteChat: (id: string, e: React.MouseEvent) => void;
   onSelectWorkspace: (id: string | undefined) => void;
   onOpenCreateWorkspace: () => void;
@@ -43,13 +43,7 @@ export function SessionSidebar({
   const [editTitle, setEditTitle] = useState("");
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
   const [selectedWsId, setSelectedWsId] = useState<string | undefined>(undefined);
-  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
-  const [selectedPersonaId, setSelectedPersonaId] = useState<string | undefined>(undefined);
-
-  const personas = usePbPersonasList();
   const activeSession = sessions?.find(s => s._id === activeSessionId);
-  const activeSessionPersona = personas?.find(p => p._id === activeSession?.agentPersona) || personas?.find(p => p.isDefault);
-  const activePersona = personas?.find(p => p._id === selectedPersonaId) || personas?.find(p => p.isDefault);
 
   const renameSession = usePbSessionRename();
   const togglePinSession = usePbSessionTogglePin();
@@ -304,65 +298,13 @@ export function SessionSidebar({
             <div className="px-4 pb-4 pt-1 shrink-0 bg-transparent">
               {!activeWorkspaceId ? (
                 <div className="flex flex-col gap-2 w-full">
-                  <div className="relative flex items-center w-full">
-                    <button 
-                      onClick={() => {
-                        onNewChat(null, activePersona?._id);
-                      }}
-                      className="flex items-center justify-start gap-2.5 py-2 pl-4 flex-1 rounded-l-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      New Session
-                    </button>
-                    <button
-                      onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-r-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300 border-l border-[#1a1814] shrink-0"
-                      title="Select Agent Persona"
-                    >
-                      <span className="text-[10px] uppercase font-bold text-[#d4a373]">
-                        {activePersona ? activePersona.name.substring(0, 2) : "DI"}
-                      </span>
-                      <ChevronDown className="w-3 h-3 text-[#a8a29e]" />
-                    </button>
-                    
-                    {agentDropdownOpen && personas && personas.length > 0 && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setAgentDropdownOpen(false)} />
-                        <div className="absolute right-0 top-full mt-1 w-full rounded-xl border border-[#2a2723] bg-[#1a1814] shadow-2xl z-50 overflow-hidden">
-                          {personas.map((p) => (
-                            <button
-                              key={p._id}
-                              onClick={() => {
-                                setSelectedPersonaId(p._id);
-                                setAgentDropdownOpen(false);
-                                onNewChat(null, p._id);
-                              }}
-                              className="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-bold transition-all hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb] text-left"
-                            >
-                              <div className="flex items-center gap-2 truncate">
-                                <div className="w-5 h-5 rounded-md bg-[#2a2723] text-[#d4a373] flex items-center justify-center text-[9px] uppercase font-bold shrink-0">
-                                  {p.name.substring(0, 2)}
-                                </div>
-                                <span className="truncate">{p.name}</span>
-                              </div>
-                              {p.isDefault && (
-                                <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded-sm bg-[#2a2723] text-[#a8a29e]/50 shrink-0">
-                                  Default
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <Link
-                    href="/agent"
-                    className="w-full flex items-center justify-start gap-2.5 py-1.5 px-4 rounded-lg border border-[#2a2723]/50 hover:border-[#d4a373]/30 text-[#a8a29e] hover:text-[#d4a373] text-[10px] font-bold tracking-wider uppercase transition-all duration-300"
+                  <button 
+                    onClick={() => onNewChat(null)}
+                    className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
                   >
-                    <Bot className="w-3.5 h-3.5" />
-                    Agent Personas
-                  </Link>
+                    <Plus className="w-3.5 h-3.5" />
+                    New Session
+                  </button>
                 </div>
               ) : (
                 (() => {
@@ -376,13 +318,6 @@ export function SessionSidebar({
                         <Plus className="w-3.5 h-3.5" />
                         New Session
                       </button>
-                      <Link
-                        href="/agent"
-                        className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
-                      >
-                        <Bot className="w-3.5 h-3.5" />
-                        Agent Personas
-                      </Link>
                       {ws && (
                         <Link
                           href={`/workspace/${ws._id}`}

@@ -31,7 +31,7 @@ export function getFolioContext(): FolioContext {
 
 export interface EntityInfo {
   id: string;
-  collectionName: 'tasks' | 'events' | 'memories' | 'daily_logs' | 'workspaces';
+  collectionName: 'tasks' | 'events' | 'memories' | 'daily_logs' | 'workspaces' | 'user_profile';
   workspaceId: string | null;
 }
 
@@ -494,7 +494,6 @@ export async function syncWorkspaceFileToDb(
     color: metadata.color || '#d4a373',
     context: metadata.context || '',
     agentName: metadata.agentName || '',
-    defaultAgentPersona: metadata.defaultAgentPersona || null,
     createdAt: metadata.createdAt || Date.now(),
     archived: metadata.archived === true,
   };
@@ -515,7 +514,6 @@ export async function syncWorkspaceFileToDb(
       existingRecord.color === data.color &&
       existingRecord.context === data.context &&
       existingRecord.agentName === data.agentName &&
-      existingRecord.defaultAgentPersona === data.defaultAgentPersona &&
       existingRecord.archived === data.archived;
 
     if (isIdentical) {
@@ -942,7 +940,6 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
                 color: dbWs.color,
                 context: dbWs.context || '',
                 agentName: dbWs.agentName || '',
-                defaultAgentPersona: dbWs.defaultAgentPersona || '',
                 createdAt: dbWs.createdAt,
                 archived: dbWs.archived || false,
               });

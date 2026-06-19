@@ -63,8 +63,6 @@ export async function createDialogueAgent(
   monthlyDigest?: string | null,
   latestWeeklyDigest?: string | null,
   timezone: string = 'UTC',
-  personaName: string = 'Dialogue',
-  personaPrompt: string = 'You build relationships through concrete behaviors, not prescribed tones.',
   scope?: { type: string; id: string; title: string } | null,
   mcpToolsets?: Record<string, Record<string, unknown>> | null,
   timeFormat: "auto" | "12h" | "24h" = "auto",
@@ -72,6 +70,9 @@ export async function createDialogueAgent(
   folioName?: string | null,
   folioRootPath?: string | null,
 ) {
+  const personaName = 'Dialogue';
+  const personaPrompt = 'You build relationships through concrete behaviors, not prescribed tones.';
+
   let model;
   const opts = {
     apiKey: apiKey || undefined,

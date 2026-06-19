@@ -57,8 +57,6 @@ export async function POST(req: Request) {
     let latestWeeklyDigest = null;
     let timeFormat: "auto" | "12h" | "24h" = "auto";
     let folioName: string | null = null;
-    let personaName = "Dialogue";
-    let personaPrompt = "You build relationships through concrete behaviors, not prescribed tones.";
     
     try {
       if (isPb && pbClient?.authStore.isValid) {
@@ -104,23 +102,6 @@ export async function POST(req: Request) {
       console.warn("Could not fetch user profile for agent context", err);
     }
 
-    // Look up the session's persona
-    if (sessionId) {
-      try {
-        if (isPb && pbClient?.authStore.isValid) {
-          const session = await pbClient.collection('chat_sessions').getOne(sessionId as string);
-          if (session?.agentPersona) {
-            const persona = await pbClient.collection('agent_personas').getOne(session.agentPersona);
-            if (persona) {
-              personaName = persona.name;
-              personaPrompt = persona.prompt;
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Could not fetch session persona, using default:", err);
-      }
-    }
 
     // Load MCP server config from user preferences and create toolsets
     const mcpServerDefs = parseMcpServers(userPreferences as Record<string, unknown> | null);
@@ -287,8 +268,6 @@ export async function POST(req: Request) {
       monthlyDigest,
       latestWeeklyDigest,
       timezone,
-      personaName,
-      personaPrompt,
       scope,
       mcpToolsets,
       timeFormat,

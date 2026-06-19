@@ -5,7 +5,6 @@ import {
   usePbProfile,
   usePbWorkspacesList,
   usePbSessionsList,
-  usePbPersonasList,
   usePbWorkspaceCreate,
   usePbMessageSend,
   usePbMessageUpdate,
@@ -29,7 +28,6 @@ import {
   PbId,
   PbWorkspaces,
   PbChatSessions,
-  PbAgentPersonas,
   PbTasks,
   PbEvents,
   PbMemories,
@@ -106,12 +104,7 @@ export function Chat({
   const allSessions = usePbSessionsList({ allWorkspaces: true });
 
   const profile = usePbProfile();
-  const personas = usePbPersonasList();
-
   const activeSession = sessions?.find((s) => s._id === activeSessionId);
-  const activePersona =
-    personas?.find((p) => p._id === activeSession?.agentPersona) ||
-    personas?.find((p) => p.isDefault);
 
   const createWorkspace = usePbWorkspaceCreate();
   const sendMessage = usePbMessageSend();
@@ -329,7 +322,6 @@ export function Chat({
 
   const handleNewChat = async (
     workspaceOverride?: string | null,
-    agentPersonaId?: string,
     initialMessage?: string,
   ) => {
     const wsId = workspaceOverride === null ? undefined : workspaceOverride || activeWorkspaceId;
@@ -342,7 +334,6 @@ export function Chat({
     const id = await createSession({
       title,
       workspaceId: wsId,
-      agentPersonaId: agentPersonaId === "default_dialogue" ? undefined : agentPersonaId,
     });
     if (wsId !== activeWorkspaceId && wsId) {
       setActiveWorkspaceIdAction(wsId);
@@ -437,7 +428,6 @@ export function Chat({
             workspaces={workspaces}
             sessions={sessions}
             profile={profile}
-            activePersona={activePersona}
             provider={provider}
             getActiveModelName={getActiveModelName}
             getActiveConfig={getActiveConfig}
@@ -496,7 +486,6 @@ interface ActiveChatProps {
   workspaces: PbWorkspaces[] | undefined;
   sessions: PbChatSessions[] | undefined;
   profile: any;
-  activePersona: any;
   provider: AIProvider;
   getActiveModelName: string;
   getActiveConfig: any;
@@ -535,7 +524,6 @@ function ActiveChat({
   workspaces,
   sessions,
   profile,
-  activePersona,
   provider,
   getActiveModelName,
   getActiveConfig,
@@ -1063,7 +1051,7 @@ function ActiveChat({
         isLargeViewport={isLargeViewport}
         keyboardOffset={keyboardOffset}
         onTypingDone={handleTypingDone}
-        agentName={activePersona?.name}
+        agentName={workspaces?.find((w) => w._id === activeWorkspaceId)?.agentName || "Dialogue"}
         onLoadOlder={loadOlderMessages}
         canLoadOlder={messagesPaginated.status === "CanLoadMore"}
         isLoadingOlder={false}

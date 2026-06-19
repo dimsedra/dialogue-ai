@@ -58,15 +58,6 @@ export interface PbUsers extends PbRecord {
   isAnonymous?: boolean;
 }
 
-export interface PbAgentPersonas extends PbRecord {
-  collectionName: "agent_personas";
-  user: PbId<"users">;
-  name: string;
-  prompt: string;
-  description?: string;
-  isDefault?: boolean;
-  createdAt: number;
-}
 
 export interface PbWorkspaces extends PbRecord {
   collectionName: "workspaces";
@@ -76,7 +67,7 @@ export interface PbWorkspaces extends PbRecord {
   color: string;
   context?: string;
   agentName?: string;
-  defaultAgentPersona?: PbId<"agent_personas">;
+
   createdAt: number;
   archived?: boolean;
 }
@@ -86,7 +77,7 @@ export interface PbChatSessions extends PbRecord {
   user: PbId<"users">;
   title?: string;
   workspace?: PbId<"workspaces">;
-  agentPersona?: PbId<"agent_personas">;
+
   timezone?: string;
   createdAt: number;
   lastActivity: number;
@@ -385,7 +376,7 @@ export interface PbResource {
 
 export interface PbRecordMap {
   users: PbUsers;
-  agent_personas: PbAgentPersonas;
+
   workspaces: PbWorkspaces;
   chat_sessions: PbChatSessions;
   messages: PbMessages;

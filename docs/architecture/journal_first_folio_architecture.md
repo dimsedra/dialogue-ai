@@ -504,4 +504,3 @@ To make Dialogue extensible and support custom agentic behaviors, the system wil
 To safely execute tasks requiring file operations or terminal commands, workspaces can define isolated runtime environments.
 - **Workspace-Scoped Sandbox**: A dedicated `/sandbox` directory inside a workspace provides a containerized terminal and filesystem access.
 - **Agent Executions**: The agent can run compiler commands, execution tools, or test applications safely within this sandbox, preventing arbitrary code execution from impacting the host machine.
-

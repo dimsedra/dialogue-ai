@@ -712,18 +712,18 @@ type: daily-log
     const logs = mockPb.collection('habit_logs').items;
     expect(logs).toHaveLength(2);
 
-    const waterLog = logs.find(l => l.habit === 'habit-water');
+    const waterLog = logs.find((l: any) => l.habit === 'habit-water');
     expect(waterLog).toBeDefined();
     expect(waterLog.status).toBe('completed');
     expect(waterLog.dateString).toBe('2026-06-17');
 
-    const gymLog = logs.find(l => l.habit === 'habit-gym');
+    const gymLog = logs.find((l: any) => l.habit === 'habit-gym');
     expect(gymLog).toBeDefined();
     expect(gymLog.status).toBe('skipped');
     expect(gymLog.dateString).toBe('2026-06-17');
 
     // Check streak updates
-    const updatedWaterHabit = mockPb.collection('habits').items.find(h => h.id === 'habit-water');
+    const updatedWaterHabit = mockPb.collection('habits').items.find((h: any) => h.id === 'habit-water');
     expect(updatedWaterHabit.currentStreak).toBe(1);
     expect(updatedWaterHabit.longestStreak).toBe(1);
     expect(updatedWaterHabit.lastLoggedDate).toBe('2026-06-17');

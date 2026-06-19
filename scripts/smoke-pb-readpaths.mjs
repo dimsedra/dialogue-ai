@@ -3,8 +3,7 @@
 // Validates filter building and record retrieval for all Phase 3 read paths:
 //   1. Workspace list/get
 //   2. Chat Session list/get
-//   3. Persona list
-//   4. Task list/get/searchHistory
+//   3. Task list/get/searchHistory
 //   5. Event list/get/searchHistory
 //   6. Habit list/get, Habit log list, Habit consistency
 //   7. Proactive dashboard states (Attention Needed, Morning Brief, Event Prep, etc.)
@@ -217,23 +216,10 @@ try {
   const wsId = workspace.id;
   console.log(`  Seeded workspace (id=${wsId})`);
 
-  // 2. Seed Persona
-  const persona = await userPb.collection("agent_personas").create({
-    user: userId,
-    name: "Tech Lead",
-    prompt: "Be precise and analytical.",
-    description: "Technical mentor",
-    isDefault: false,
-    createdAt: Date.now(),
-  });
-  const personaId = persona.id;
-  console.log(`  Seeded persona (id=${personaId})`);
-
-  // 3. Seed Session
+  // 2. Seed Session
   const session = await userPb.collection("chat_sessions").create({
     user: userId,
     workspace: wsId,
-    agentPersona: personaId,
     title: "Refactoring Phase 3",
     lastActivity: Date.now(),
     createdAt: Date.now(),

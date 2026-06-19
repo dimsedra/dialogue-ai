@@ -10,11 +10,15 @@ const mockWatcher = {
   close: vi.fn().mockResolvedValue(undefined),
 };
 
-vi.mock('chokidar', () => ({
-  default: {
-    watch: vi.fn(() => mockWatcher),
-  },
-}));
+vi.mock('chokidar', () => {
+  const watch = vi.fn(() => mockWatcher);
+  return {
+    watch,
+    default: {
+      watch,
+    },
+  };
+});
 
 vi.mock('../pb-server-admin', () => ({
   getPbAdmin: vi.fn().mockResolvedValue({ id: 'mock-pb' }),
@@ -37,12 +41,12 @@ describe('Folio File Watcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    process.env.NODE_ENV = 'development';
+    (process.env as any).NODE_ENV = 'development';
     process.env.DEV_LOCAL_PATH = '/test/folio';
   });
 
   afterEach(async () => {
-    process.env.NODE_ENV = originalEnv;
+    (process.env as any).NODE_ENV = originalEnv;
     vi.useRealTimers();
     await stopWatcher();
   });
@@ -68,9 +72,11 @@ describe('Folio File Watcher', () => {
     await startWatcher();
 
     // Get the registered 'add' callback
-    const addCallback = mockWatcher.on.mock.calls.find(
+    const addCall = mockWatcher.on.mock.calls.find(
       (call: any) => call[0] === 'add'
-    )[1];
+    );
+    expect(addCall).toBeDefined();
+    const addCallback = addCall![1];
 
     // Trigger callback with valid path
     addCallback('/test/folio/tasks/task-123.md');
@@ -92,9 +98,11 @@ describe('Folio File Watcher', () => {
   test('should ignore add event on invalid path', async () => {
     await startWatcher();
 
-    const addCallback = mockWatcher.on.mock.calls.find(
+    const addCall = mockWatcher.on.mock.calls.find(
       (call: any) => call[0] === 'add'
-    )[1];
+    );
+    expect(addCall).toBeDefined();
+    const addCallback = addCall![1];
 
     addCallback('/test/folio/some-random-file.txt');
     await vi.advanceTimersByTimeAsync(250);
@@ -105,9 +113,11 @@ describe('Folio File Watcher', () => {
   test('should trigger pruneFolioFileFromDb on unlink event', async () => {
     await startWatcher();
 
-    const unlinkCallback = mockWatcher.on.mock.calls.find(
+    const unlinkCall = mockWatcher.on.mock.calls.find(
       (call: any) => call[0] === 'unlink'
-    )[1];
+    );
+    expect(unlinkCall).toBeDefined();
+    const unlinkCallback = unlinkCall![1];
 
     // Await the async handler directly
     await unlinkCallback('/test/folio/tasks/task-123.md');

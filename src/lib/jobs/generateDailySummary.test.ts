@@ -194,7 +194,9 @@ describe("generateDailySummary Synthesis Engine", () => {
     });
 
     expect(result.status).toBe("created");
-    expect(result.summary).toContain("Reflected chat session thoughts summary.");
+    if (result.status === "created") {
+      expect(result.summary).toContain("Reflected chat session thoughts summary.");
+    }
 
     // Retrieve today's date string
     const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "UTC" });

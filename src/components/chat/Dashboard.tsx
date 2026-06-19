@@ -1,5 +1,4 @@
 import {
-  usePbPersonasList,
   useQuery as usePbQuery,
   api as pbApi,
   usePbHabitLog,
@@ -9,7 +8,6 @@ import {
   PbId,
   PbWorkspaces,
   PbChatSessions,
-  PbAgentPersonas,
   PbHabits,
   PbTasks,
   PbEvents,
@@ -156,7 +154,6 @@ interface DashboardProps {
   profile: { name?: string; bio?: string } | null | undefined;
   onNewChat: (
     workspaceId?: string | null,
-    agentPersonaId?: string,
     initialMessage?: string,
   ) => void;
   onSelectSession: (id: string) => void;
@@ -175,27 +172,19 @@ export function Dashboard({
   onShowTasks,
   onOpenReflection,
 }: DashboardProps) {
-  const [showBgEditor, setShowBgEditor] = useState(false);
   const [bgSettings, updateBgSettings] = usePageSettings(
     "dashboard",
     DASHBOARD_DEFAULTS,
   );
 
-  const [selectedPersonaId, setSelectedPersonaId] = useState<
-    string | undefined
-  >(undefined);
-  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [inputText, setInputText] = useState("");
+  const [showBgEditor, setShowBgEditor] = useState(false);
 
-  const personas = usePbPersonasList();
   const logHabit = usePbHabitLog();
   const markCardShown = usePbMarkCardShown();
   const scheduleFocusBlock = usePbEventScheduleFocusBlock();
   const rollOverTasks = usePbTasksRollOver();
-  const activePersona =
-    personas?.find((p) => p._id === selectedPersonaId) ||
-    personas?.find((p) => p.isDefault);
-  const activePersonaName = activePersona?.name || "Dialogue";
+  const activePersonaName = "Dialogue";
 
   const bgUrl = bgSettings.url;
 
@@ -1004,76 +993,13 @@ export function Dashboard({
               onSubmit={(e) => {
                 e.preventDefault();
                 if (inputText.trim()) {
-                  onNewChat(null, activePersona?._id, inputText.trim());
+                  onNewChat(null, inputText.trim());
                   setInputText("");
                 }
               }}
               className="relative flex items-center w-full rounded-full border border-[#2a2723]/60 p-1.5 transition-all duration-300 focus-within:border-[#d4a373]/60 focus-within:shadow-[0_0_20px_rgba(212,163,115,0.08)]"
               style={cardBgStyle}
             >
-              {/* Agent Persona Switcher */}
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
-                  className="w-8 h-8 rounded-full bg-[#2a2723] hover:bg-[#3a3733] text-[#d4a373] flex items-center justify-center text-[10px] font-black uppercase transition-all duration-300 cursor-pointer"
-                  title="Change Agent Persona"
-                >
-                  {activePersona ? activePersona.name.substring(0, 2) : "DI"}
-                </button>
-
-                {agentDropdownOpen && personas && personas.length > 0 && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setAgentDropdownOpen(false)}
-                    />
-                    <div
-                      className="absolute left-0 bottom-full mb-3.5 w-60 rounded-2xl border border-[#2a2723] shadow-2xl z-50 overflow-hidden"
-                      style={cardBgStyle}
-                    >
-                      <div className="px-3 py-2 border-b border-[#2a2723]/50">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-[#a8a29e]/50">
-                          Switch Persona
-                        </span>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto custom-scrollbar py-1">
-                        {personas.map((p) => (
-                          <button
-                            key={p._id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedPersonaId(p._id);
-                              setAgentDropdownOpen(false);
-                            }}
-                            className="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-bold transition-all hover:bg-[#2a2723]/50 text-left"
-                            style={{
-                              color:
-                                selectedPersonaId === p._id ||
-                                (!selectedPersonaId && p.isDefault)
-                                  ? "#d4a373"
-                                  : "#a8a29e",
-                            }}
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              <div className="w-5 h-5 rounded-md bg-[#2a2723] text-[#d4a373] flex items-center justify-center text-[9px] uppercase font-bold shrink-0">
-                                {p.name.substring(0, 2)}
-                              </div>
-                              <span className="truncate">{p.name}</span>
-                            </div>
-                            {p.isDefault && (
-                              <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded-sm bg-[#2a2723] text-[#a8a29e]/50 shrink-0">
-                                Default
-                              </span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
               {/* Input field */}
               <input
                 type="text"

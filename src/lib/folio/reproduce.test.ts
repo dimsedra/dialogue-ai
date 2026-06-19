@@ -126,7 +126,7 @@ describe('Sync Engine - Admin User ID Reproduction Test', () => {
     expect(savedMemories.length).toBeGreaterThan(0);
     
     // Assert on the user ID assigned to the memory
-    const userIdsUsed = savedMemories.map(m => m.user);
+    const userIdsUsed = savedMemories.map((m: any) => m.user);
     console.log('User IDs assigned in DB memories:', userIdsUsed);
     
     // FIXED BEHAVIOR: It should fallback to the user record 'real-user-999'

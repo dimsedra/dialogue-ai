@@ -38,7 +38,7 @@ export const addEventTool = createTool({
     const { getPbClient } = await import('../../lib/pb-server');
     const { getFolioContext, syncFolioFileToDb } = await import('../../lib/folio/sync');
     const { serializeMarkdownFile } = await import('../../lib/folio/parser');
-    const { existsSync, mkdirSync, statSync, writeFileSync } = await import('fs');
+    const { existsSync, mkdirSync, statSync, writeFileSync, readdirSync } = await import('fs');
     const { join } = await import('path');
 
     const startMs = parseDateTime(input.startTime, input.timezone).getTime();
@@ -67,8 +67,8 @@ export const addEventTool = createTool({
         const workspacesParent = join(folioRootPath, "workspaces");
         let matchedFolder: string | null = null;
         if (existsSync(workspacesParent)) {
-          const folders = fs.readdirSync(workspacesParent);
-          const matched = folders.find((f) => f.endsWith(`-${activeWorkspace}`));
+          const folders = readdirSync(workspacesParent);
+          const matched = folders.find((f: string) => f.endsWith(`-${activeWorkspace}`));
           if (matched) {
             matchedFolder = matched;
           }

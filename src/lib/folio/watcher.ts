@@ -1,13 +1,13 @@
-import chokidar from 'chokidar';
+import { watch, FSWatcher } from 'chokidar';
 import { join } from 'path';
 import { getPbAdmin } from '../pb-server-admin';
 import { syncFolioFileToDb, pruneFolioFileFromDb, resolveEntityFromPath } from './sync';
 import { DEFAULT_FOLIO_DIR } from './constants';
 
-let watcherInstance: chokidar.FSWatcher | null = null;
+let watcherInstance: FSWatcher | null = null;
 const debouncedSyncs = new Map<string, NodeJS.Timeout>();
 
-export async function startWatcher(): Promise<chokidar.FSWatcher> {
+export async function startWatcher(): Promise<FSWatcher> {
   if (watcherInstance) {
     return watcherInstance;
   }
@@ -21,7 +21,7 @@ export async function startWatcher(): Promise<chokidar.FSWatcher> {
 
   console.log(`[Sync Engine Watcher] Starting file watcher on: ${folioRootPath}`);
 
-  watcherInstance = chokidar.watch(folioRootPath, {
+  watcherInstance = watch(folioRootPath, {
     ignored: /(^|[\/\\])\.(?!workspace\.yaml)/, // ignore dotfiles/folders except .workspace.yaml
     persistent: true,
     ignoreInitial: true, // initial startup reconciliation is handled by reconcileFolio
@@ -74,7 +74,7 @@ export async function startWatcher(): Promise<chokidar.FSWatcher> {
     .on('add', handleAddOrChange)
     .on('change', handleAddOrChange)
     .on('unlink', handleUnlink)
-    .on('error', (error) => {
+    .on('error', (error: any) => {
       console.error('[Sync Engine Watcher] Watcher error:', error);
     });
 

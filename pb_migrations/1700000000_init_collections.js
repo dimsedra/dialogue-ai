@@ -82,36 +82,9 @@ migrate(
     const userCollectionId = users.id;
 
     // ========================================================================
-    // 2. agent_personas (depends on users)
-    //    Convex: agentPersonas { userId, name, prompt, description?, isDefault?, createdAt }
-    //           .index("by_user", ["userId"])
-    // ========================================================================
-    collections.agent_personas = new Collection({
-      name: "agent_personas",
-      type: "base",
-      listRule: "user = @request.auth.id",
-      viewRule: "user = @request.auth.id",
-      createRule: "@request.auth.id != ''",
-      updateRule: "user = @request.auth.id",
-      deleteRule: "user = @request.auth.id",
-      fields: [
-        { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
-        { name: "name", type: "text", required: true, max: 256 },
-        { name: "prompt", type: "text", required: true, max: 65535 },
-        { name: "description", type: "text", required: false, max: 1024 },
-        { name: "isDefault", type: "bool", required: false },
-        { name: "createdAt", type: "number", required: true },
-      ],
-      indexes: [
-        "CREATE INDEX idx_agent_personas_user ON agent_personas (user)",
-      ],
-    });
-    app.save(collections.agent_personas);
-
-    // ========================================================================
-    // 3. workspaces (depends on users, agent_personas)
+    // 2. workspaces (depends on users)
     //    Convex: workspaces { userId, name, icon, color, context?, agentName?,
-    //                        defaultAgentPersonaId?, createdAt }
+    //                        createdAt }
     //           .index("by_user", ["userId"])
     // ========================================================================
     collections.workspaces = new Collection({
@@ -129,7 +102,6 @@ migrate(
         { name: "color", type: "text", required: true, max: 32 },
         { name: "context", type: "text", required: false, max: 65535 },
         { name: "agentName", type: "text", required: false, max: 256 },
-        { name: "defaultAgentPersona", type: "relation", required: false, collectionId: collections.agent_personas.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
         { name: "createdAt", type: "number", required: true },
       ],
       indexes: [
@@ -139,8 +111,8 @@ migrate(
     app.save(collections.workspaces);
 
     // ========================================================================
-    // 4. chat_sessions (depends on users, workspaces, agent_personas)
-    //    Convex: chatSessions { userId, title?, workspaceId?, agentPersonaId?,
+    // 3. chat_sessions (depends on users, workspaces)
+    //    Convex: chatSessions { userId, title?, workspaceId?,
     //                          timezone?, createdAt, lastActivity, pinned? }
     //           .index("by_user", ["userId"])
     //           .index("by_workspace", ["workspaceId"])
@@ -157,7 +129,6 @@ migrate(
         { name: "user", type: "relation", required: true, collectionId: userCollectionId, cascadeDelete: true, maxSelect: 1, minSelect: 1 },
         { name: "title", type: "text", required: false, max: 512 },
         { name: "workspace", type: "relation", required: false, collectionId: collections.workspaces.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
-        { name: "agentPersona", type: "relation", required: false, collectionId: collections.agent_personas.id, cascadeDelete: false, maxSelect: 1, minSelect: 0 },
         { name: "timezone", type: "text", required: false, max: 64 },
         { name: "createdAt", type: "number", required: true },
         { name: "lastActivity", type: "number", required: true },
@@ -783,7 +754,6 @@ migrate(
       "messages",
       "chat_sessions",
       "workspaces",
-      "agent_personas",
     ];
     for (const name of collectionNames) {
       const c = app.findCollectionByNameOrId(name);

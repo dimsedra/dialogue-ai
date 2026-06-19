@@ -13,7 +13,6 @@ interface UpdateWorkspaceArgs {
   color?: string;
   context?: string;
   agentName?: string;
-  defaultAgentPersonaId?: string | null;
   archived?: boolean;
 }
 
@@ -65,7 +64,6 @@ export const updateWorkspace: PbActionHandler<
       color: record.color,
       context: record.context || "",
       agentName: record.agentName || "",
-      defaultAgentPersona: record.defaultAgentPersona || "",
       createdAt: record.createdAt,
       archived: record.archived || false,
     };
@@ -77,9 +75,6 @@ export const updateWorkspace: PbActionHandler<
   if (args.color !== undefined) metadata.color = args.color;
   if (args.context !== undefined) metadata.context = args.context;
   if (args.agentName !== undefined) metadata.agentName = args.agentName;
-  if (args.defaultAgentPersonaId !== undefined) {
-    metadata.defaultAgentPersona = args.defaultAgentPersonaId === null ? "" : args.defaultAgentPersonaId;
-  }
   if (args.archived !== undefined) metadata.archived = args.archived;
 
   const serialized = serializeWorkspaceYaml(metadata);

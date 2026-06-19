@@ -30,7 +30,6 @@ import type { PbCollectionName, PbId, PbRecord } from "./_generated/dataModel";
 import { userProfileGetQuery } from "./descriptors/userProfile";
 import { pageSettingsGetQuery } from "./descriptors/pageSettings";
 import { workspacesListQuery, workspacesGetQuery } from "./descriptors/workspaces";
-import { personasListQuery } from "./descriptors/personas";
 import { listSessionsQuery, getSessionQuery } from "./descriptors/chatSessions";
 import { tasksListQuery, tasksGetQuery, tasksSearchHistoryQuery } from "./descriptors/tasks";
 import { eventsListQuery, eventsGetQuery, eventsSearchHistoryQuery } from "./descriptors/events";
@@ -78,9 +77,6 @@ export const api = {
     get: workspacesGetQuery,
   },
   chatSessions: {} as StubNamespace,
-  agentPersonas: {
-    list: personasListQuery,
-  },
   messages: {
     listSessions: listSessionsQuery,
     getSession: getSessionQuery,

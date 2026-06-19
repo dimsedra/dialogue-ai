@@ -80,9 +80,8 @@ console.log(up.stdout.trim() || "(no output)");
 const db = new DatabaseSync(join(workDir, "data.db"), { readOnly: true });
 
 const EXPECTED_APP_COLLECTIONS = [
-  { name: 'agent_personas', minFields: 7, minIndexes: 1 },
-  { name: 'workspaces', minFields: 9, minIndexes: 1 },
-  { name: 'chat_sessions', minFields: 9, minIndexes: 3 },
+  { name: 'workspaces', minFields: 8, minIndexes: 1 },
+  { name: 'chat_sessions', minFields: 8, minIndexes: 3 },
   { name: 'messages', minFields: 14, minIndexes: 2 },
   { name: 'tasks', minFields: 18, minIndexes: 4 },
   { name: 'events', minFields: 19, minIndexes: 4 },
@@ -128,7 +127,6 @@ const FIELD_CHECKS = [
   ['scheduled_notifications', 'triggerAt', 'number'],
   ['scheduled_notifications', 'delivered', 'bool'],
   ['user_profile', 'preferences', 'json'],
-  ['workspaces', 'defaultAgentPersona', 'relation'],
   ['notifications', 'type', 'select'],
   ['page_settings', 'settings', 'json'],
 ];
@@ -199,7 +197,7 @@ for (const [coll, fieldName, expectedType] of FIELD_CHECKS) {
 
 // 4. Rules
 console.log("\n4. Access rules:");
-for (const coll of ['agent_personas', 'workspaces', 'chat_sessions', 'messages', 'tasks', 'events', 'memories', 'habits', 'notifications']) {
+for (const coll of ['workspaces', 'chat_sessions', 'messages', 'tasks', 'events', 'memories', 'habits', 'notifications']) {
   const c = byName[coll];
   const expectedListRule = coll === 'messages' ? "@request.auth.id" : "user";
   assert(c.listRule && c.listRule.includes(expectedListRule),
@@ -247,7 +245,7 @@ assert(broken === 0, "all " + relCount + " relation field targets exist (broken:
 
 // 8. Cascade delete
 console.log("\n8. Cascade delete (user-owned collections):");
-for (const coll of ['agent_personas', 'workspaces', 'chat_sessions', 'tasks', 'events', 'memories', 'user_profile', 'user_images', 'habits', 'habit_logs', 'reflections', 'page_settings', 'session_summaries', 'weekly_digests', 'archived_summaries', 'notifications', 'push_subscriptions', 'card_state', 'scheduled_notifications']) {
+for (const coll of ['workspaces', 'chat_sessions', 'tasks', 'events', 'memories', 'user_profile', 'user_images', 'habits', 'habit_logs', 'reflections', 'page_settings', 'session_summaries', 'weekly_digests', 'archived_summaries', 'notifications', 'push_subscriptions', 'card_state', 'scheduled_notifications']) {
   const c = byName[coll];
   if (!c) continue;
   const fields = JSON.parse(c.fields);

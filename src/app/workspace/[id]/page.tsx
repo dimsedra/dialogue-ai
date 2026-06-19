@@ -1,6 +1,6 @@
 "use client";
 
-import { usePbWorkspace, usePbPersonasList, usePbWorkspaceUpdate, usePbWorkspaceDelete } from "@/pb-compat";
+import { usePbWorkspace, usePbWorkspaceUpdate, usePbWorkspaceDelete } from "@/pb-compat";
 import type { PbId } from "@/pb-compat/_generated/dataModel";
 import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check, Archive, ArchiveRestore, Trash2, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -14,18 +14,15 @@ export default function WorkspaceSettingsPage() {
   const workspaceId = params.id as string;
 
   const workspace = usePbWorkspace(workspaceId);
-  const personas = usePbPersonasList();
   const updateSettings = usePbWorkspaceUpdate();
   const deleteWorkspace = usePbWorkspaceDelete();
 
-  const [defaultAgentPersonaId, setDefaultAgentPersonaId] = useState<string | "default_dialogue">("default_dialogue");
   const [workspaceColor, setWorkspaceColor] = useState("#d4a373");
   const [isArchived, setIsArchived] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [prevId, setPrevId] = useState<string | null>(null);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -51,7 +48,6 @@ export default function WorkspaceSettingsPage() {
 
   if (workspace && workspace.id !== prevId) {
     setPrevId(workspace.id);
-    setDefaultAgentPersonaId(workspace.defaultAgentPersona || "default_dialogue");
     setWorkspaceColor(workspace.color || "#d4a373");
     setIsArchived(!!workspace.archived);
   }
@@ -62,15 +58,12 @@ export default function WorkspaceSettingsPage() {
     return null;
   }
 
-  const currentPersona = personas?.find(p => p.id === defaultAgentPersonaId) || personas?.find(p => p.isDefault);
-
   const handleSave = async () => {
     setIsSaving(true);
     try {
       await updateSettings({
         id: workspaceId,
         color: workspaceColor,
-        defaultAgentPersonaId: defaultAgentPersonaId === "default_dialogue" ? null : defaultAgentPersonaId,
         archived: isArchived,
       });
       if (isArchived) {
@@ -129,72 +122,7 @@ export default function WorkspaceSettingsPage() {
 
             {/* Content */}
             <div className="space-y-4">
-              {/* Default Agent Persona */}
-              <motion.section
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg relative"
-              >
-                <div className="mb-4">
-                  <div className="flex items-center gap-2">
-                    <Bot className="w-4 h-4 text-[#d4a373]" />
-                    <h2 className="text-base font-bold text-[#f2efeb]">Default Agent Persona</h2>
-                  </div>
-                  <p className="text-[#a8a29e] text-[10px] mt-1">
-                    Select the default agent persona to automatically load when creating a new session in this workspace.
-                  </p>
-                </div>
 
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="w-full flex items-center justify-between bg-[#0f0e0c] border border-[#2a2723] rounded-lg px-3.5 py-2 text-sm focus:outline-none focus:border-[#d4a373]/40 transition-all text-left"
-                  >
-                    <div className="flex items-center gap-2.5 truncate">
-                      <div className="w-5 h-5 rounded bg-[#2a2723] text-[#d4a373] flex items-center justify-center text-[10px] font-black uppercase shrink-0">
-                        {currentPersona ? currentPersona.name.substring(0, 2) : "DI"}
-                      </div>
-                      <span className="text-[#f2efeb] font-medium text-xs">
-                        {currentPersona ? currentPersona.name : "Dialogue"}
-                      </span>
-                    </div>
-                    <ChevronDown className="w-4 h-4 text-[#a8a29e]" />
-                  </button>
-
-                  {dropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 mt-1.5 rounded-xl border border-[#2a2723] bg-[#1a1814] shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto custom-scrollbar">
-                        {personas === undefined ? (
-                          <div className="p-4 text-center text-xs text-[#a8a29e]">Loading personas...</div>
-                        ) : personas.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => {
-                              setDefaultAgentPersonaId(p.id);
-                              setDropdownOpen(false);
-                            }}
-                            className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold transition-all hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#f2efeb] text-left border-b border-[#2a2723]/30 last:border-none"
-                          >
-                            <div className="flex items-center gap-2.5 truncate">
-                              <div className="w-5 h-5 rounded bg-[#2a2723] text-[#d4a373] flex items-center justify-center text-[9px] uppercase font-bold shrink-0">
-                                {p.name.substring(0, 2)}
-                              </div>
-                              <span className="truncate">{p.name}</span>
-                            </div>
-                            {defaultAgentPersonaId === p.id && (
-                              <Check className="w-3.5 h-3.5 text-[#d4a373]" />
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </motion.section>
 
               {/* Workspace Color */}
               <motion.section

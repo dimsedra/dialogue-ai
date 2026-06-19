@@ -1,4 +1,4 @@
-process.env.NODE_ENV = "test";
+(process.env as any).NODE_ENV = "test";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";

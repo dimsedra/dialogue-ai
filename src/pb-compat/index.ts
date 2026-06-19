@@ -54,7 +54,7 @@ export { usePbProfile } from "./hooks/use-pb-profile";
 export { pageSettingsGetQuery } from "./descriptors/pageSettings";
 export { usePbWorkspacesList, usePbWorkspace } from "./hooks/use-pb-workspaces";
 export { usePbSessionsList, usePbSession } from "./hooks/use-pb-sessions";
-export { usePbPersonasList } from "./hooks/use-pb-personas";
+
 export { usePbTasksList, usePbTask, usePbTasksSearchHistory } from "./hooks/use-pb-tasks";
 export { usePbEventsList, usePbEvent, usePbEventsSearchHistory } from "./hooks/use-pb-events";
 export { usePbHabitsList, usePbHabit, usePbHabitConsistency } from "./hooks/use-pb-habits";
@@ -64,7 +64,7 @@ export { usePbUserImagesList } from "./hooks/use-pb-images";
 
 // Mutations
 export { usePbWorkspaceCreate, usePbWorkspaceUpdate, usePbWorkspaceDelete } from "./hooks/use-pb-workspace-mutations";
-export { usePbPersonaCreate, usePbPersonaUpdate, usePbPersonaDelete } from "./hooks/use-pb-persona-mutations";
+
 export { usePbSessionCreate, usePbSessionDelete, usePbSessionRename, usePbSessionTogglePin } from "./hooks/use-pb-session-mutations";
 export { usePbTaskCreate, usePbTaskUpdate, usePbTaskToggleCompleted, usePbTaskDelete, usePbTasksRollOver } from "./hooks/use-pb-task-mutations";
 export { usePbEventCreate, usePbEventUpdate, usePbEventDelete, usePbEventCancelOccurrence, usePbEventUpdateOccurrence, usePbEventScheduleFocusBlock } from "./hooks/use-pb-event-mutations";
@@ -86,7 +86,7 @@ export type {
 export {
   pbId,
   type PbUsers,
-  type PbAgentPersonas,
+
   type PbWorkspaces,
   type PbChatSessions,
   type PbMessages,
