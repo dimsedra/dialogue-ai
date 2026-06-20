@@ -37,7 +37,7 @@
 | 2.8 | Create CONTEXT.md per workspace + sync to/from disk | ✅ | Medium |
 | 2.9 | `notes/` subfolder per workspace (manual, no CRUD UI yet) | ❌ | Small |
 | 2.10 | `system/habits.md` global habit registry | ❌ | Medium |
-| 2.11 | Eliminate global `tasks/` and `events/` root folders ([sync.ts:82-83](file:///d:/Project%20Hub/Dialogue-AI/src/lib/folio/sync.ts#L82-L83)) | ✅ | Small |
+| 2.11 | Eliminate global `tasks/` and `events/` root folders, and workspace-scoped `tasks/`, `events/`, and `activity/` folders | ✅ | Small |
 
 ---
 
@@ -54,7 +54,7 @@
 
 ---
 
-## 🟡 §4 — Daily Log Specification
+## 🔵 §4 — Daily Log Specification
 
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
@@ -67,7 +67,7 @@
 
 ---
 
-## 🟡 §5 — Sync & Watcher Protocol
+## 🔵 §5 — Sync & Watcher Protocol
 
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
@@ -76,7 +76,7 @@
 | 5.3 | Task/event `[x]`/`[ ]` checkbox status sync from daily log (habits-only currently) | ✅ | Medium |
 | 5.4 | Inline title change detection + DB update | ✅ | Medium |
 | 5.5 | Child-bullet notes ingestion → `history_logs` (requires 4.5) | ✅ | Large |
-| 5.6 | Automatic task rollover on startup (currently client-side button only) | 🟡 | Medium |
+| 5.6 | Automatic task rollover (handled during Daily Log generation) | ✅ | Medium |
 | 5.7 | Recurrence for habits in daily log generation (events have it, habits don't) | ✅ | Small |
 
 ---
