@@ -8,20 +8,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 **`README.md` is the end-goal source of truth.** It defines the product (a relationship-first AI companion), the agentic capabilities, the on-device architecture, and the install story. Read it before making product, UX, or architecture decisions — every change should be measured against the relationship it serves, not the features it adds.
 
-The current technical work to reach that end goal lives in `docs/MIGRATION_POCKETBASE.md` (Convex → Tauri + PocketBase, phased plan, risks, cutover strategy).
+# Workflow Guidelines
 
-<!-- convex-ai-start -->
-
-This project uses [Convex](https://convex.dev) as its backend.
-
-When working on Convex code, **always read
-`convex/_generated/ai/guidelines.md` first** for important guidelines on
-how to correctly use Convex APIs and patterns. The file contains rules that
-override what you may have learned about Convex from training data.
-
-Convex agent skills for common tasks can be installed by running
-`npx convex ai-files install`.
-
-<!-- convex-ai-end -->
-
-All runtime env vars are listed in `.env.example`. `.env.local` is gitignored. VAPID keys and `ENCRYPTION_KEY` must also be set in the Convex dashboard — the Convex Node runtime does not read Next.js's env.
+- **Implementation Plan**: For any meaningful changes, always ensure there is an implementation plan.
+- **Friction Resolution**: If any friction arises that needed a resolution (e.g., due to a mismatch/disconnection between the user's intent and the project's Source of Truth), inform the user and present clear options within a discussion.
+- **Automated Testing**: For any meaningful changes, always ensure there are automated tests verifying the changes before they are considered valid, official, and functional.
+- **Git Operations**: Never commit or push changes without explicit instructions/permission from the user.

@@ -16,7 +16,7 @@
 
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
-| 1.1 | Eliminate workspace-agnostic session mode (`workspace = null` filter in [chatSessions.ts:33](file:///d:/Project%20Hub/Dialogue-AI/src/pb-compat/descriptors/chatSessions.ts#L33)) | ⚠️ | Small |
+| 1.1 | Eliminate workspace-agnostic session mode (`workspace = null` filter in [chatSessions.ts:33](file:///d:/Project%20Hub/Dialogue-AI/src/pb-compat/descriptors/chatSessions.ts#L33)) | ✅ | Small |
 | 1.2 | Auto-create "Personal" workspace on first launch (in `reconcileFolio`) | ✅ | Medium |
 | 1.3 | Create CONTEXT.md per workspace when workspace is created | ✅ | Small |
 | 1.4 | Onboarding wizard prompt for additional workspaces | ❌ | Medium |
@@ -37,7 +37,7 @@
 | 2.8 | Create CONTEXT.md per workspace + sync to/from disk | ✅ | Medium |
 | 2.9 | `notes/` subfolder per workspace (manual, no CRUD UI yet) | ❌ | Small |
 | 2.10 | `system/habits.md` global habit registry | ❌ | Medium |
-| 2.11 | Eliminate global `tasks/` and `events/` root folders ([sync.ts:82-83](file:///d:/Project%20Hub/Dialogue-AI/src/lib/folio/sync.ts#L82-L83)) | ⚠️ | Small |
+| 2.11 | Eliminate global `tasks/` and `events/` root folders ([sync.ts:82-83](file:///d:/Project%20Hub/Dialogue-AI/src/lib/folio/sync.ts#L82-L83)) | ✅ | Small |
 
 ---
 
@@ -85,15 +85,15 @@
 
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
-| 6.1 | Schema: `isTrunk`, `parentSession`, `branchedFromMessage`, `sessionType` on `chat_sessions` | ❌ | Medium |
-| 6.2 | Auto-create trunk session per workspace on workspace creation | ❌ | Medium |
-| 6.3 | Branch creation UI (button + slash command) | ❌ | Large |
-| 6.4 | Context inheritance: branch agent loads trunk context at branch point | ❌ | Large |
-| 6.5 | Focus lock: disable proactive alerts inside branches | ❌ | Medium |
-| 6.6 | Branch merge: synthesize summary → post to trunk as "Merge Commit" block | ❌ | Large |
-| 6.7 | Branch archive: read-only mode, collapsed in sidebar | ❌ | Medium |
-| 6.8 | Active branch limit enforcement (3 default, 5 max) | ❌ | Small |
-| 6.9 | `origin_branch` field on tasks/events for "Jump to Context" | ❌ | Small |
+| 6.1 | Schema: `isTrunk`, `parentSession`, `branchedFromMessage`, `sessionType` on `chat_sessions` | ✅ | Medium |
+| 6.2 | Auto-create trunk session per workspace on workspace creation | ✅ | Medium |
+| 6.3 | Branch creation UI (button + slash command) | 🟡 | Large |
+| 6.4 | Context inheritance: branch agent loads trunk context at branch point | ✅ | Large |
+| 6.5 | Focus lock: disable proactive alerts inside branches | ✅ | Medium |
+| 6.6 | Branch merge: synthesize summary → post to trunk as "Merge Commit" block | ✅ | Large |
+| 6.7 | Branch archive: read-only mode, collapsed in sidebar | ✅ | Medium |
+| 6.8 | Active branch limit enforcement (3 default, 5 max) | ✅ | Small |
+| 6.9 | `origin_branch` field on tasks/events for "Jump to Context" | ✅ | Small |
 | 6.10 | Multi-day log date-slicing by session group | ❌ | Large |
 
 ---
@@ -143,11 +143,9 @@
 
 | Priority | Item(s) | Why |
 |----------|---------|-----|
-| 🥇 **Next** | **2.8 + 3.4** — CONTEXT.md per workspace + load into prompt | Additive, low risk. Completes Three-Layer Identity. Natural continuation of USER.md/CORE.md. |
-| 🥈 | **3.1–3.3** — Eliminate persona system | Biggest ⚠️ contradiction. Dead-end code. CORE.md already replaces it. |
-| 🥉 | **1.2 + 1.3** — Auto-create Personal workspace + CONTEXT.md on first launch | Prerequisite for eliminating workspace-agnostic sessions (1.1) and trunk sessions (6.2) |
-| 4 | **2.11 + 1.1** — Eliminate global tasks/events folders + workspace-agnostic sessions | Small cleanup, high alignment. Needs 1.2 first. |
-| 5 | **4.6 + 5.7** — Small daily log fixes (section rename, habit recurrence) | Quick wins |
-| 6 | **§4 + §5** — Daily log suffix IDs, child-bullet ingestion, watcher protocol | Large effort, high user value. Core of the journal-first vision. |
-| 7 | **§6** — Branching chat sessions | Very large, but unlocks intrusion protection + focus model |
-| 8 | **§8** — Observer agent | Architectural shift. Do last, after everything else is stable. |
+| 🥇 **Next** | **3.1–3.3** — Eliminate custom persona system | Direct architectural contradiction. CORE.md already replaces it. Unlocks clean prompt assembly. |
+| 🥈 | **7.6 + 7.7** — Cognitive Inertia (Profile & Context synthesis) | Unlocks Level 1 (USER.md) and Level 2 (CONTEXT.md) automated update pipelines. |
+| 🥉 | **9.2, 9.3, 9.6** — Proactive Behaviors & Intrusion Protection | Builds directly on the new branching session architecture to block/delay intrusion alerts and suggest branches. |
+| 4 | **1.4 + 2.9** — Onboarding wizard & Workspace `notes/` CRUD UI | UI refinements to complete the workspace-first flow. |
+| 5 | **§8** — Background Observer Agent | Core architectural shift. Decouples logging/synthesis from chat session execution. |
+| 6 | **3.6 + 8.7** — Eliminate Chat Agent Write Tools | Enforces 100% separation of concerns: Chat Agent becomes purely conversational, Observer handles all mutations. |
