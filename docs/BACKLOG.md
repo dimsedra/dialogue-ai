@@ -1,6 +1,6 @@
 # Dialogue-AI Product Backlog
 > Measured against [`docs/architecture/journal_first_folio_architecture.md`](file:///d:/Project%20Hub/Dialogue-AI/docs/architecture/journal_first_folio_architecture.md)
-> Last updated: 2026-06-19
+> Last updated: 2026-06-20
 
 ---
 
@@ -17,8 +17,8 @@
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
 | 1.1 | Eliminate workspace-agnostic session mode (`workspace = null` filter in [chatSessions.ts:33](file:///d:/Project%20Hub/Dialogue-AI/src/pb-compat/descriptors/chatSessions.ts#L33)) | ⚠️ | Small |
-| 1.2 | Auto-create "Personal" workspace on first launch (in `reconcileFolio`) | ❌ | Medium |
-| 1.3 | Create CONTEXT.md per workspace when workspace is created | ❌ | Small |
+| 1.2 | Auto-create "Personal" workspace on first launch (in `reconcileFolio`) | ✅ | Medium |
+| 1.3 | Create CONTEXT.md per workspace when workspace is created | ✅ | Small |
 | 1.4 | Onboarding wizard prompt for additional workspaces | ❌ | Medium |
 
 ---
@@ -60,10 +60,10 @@
 |---|------|--------|------------|
 | 4.1 | Frontmatter (`date`, `type: daily-log`) | ✅ | — |
 | 4.2 | `## Habits` section with checkboxes | ✅ | — |
-| 4.3 | Suffix ID tags (`#tsk-xxx`, `#evt-xxx`, `#hab-xxx`) in generated logs | ❌ | Large |
-| 4.4 | `@workspace-slug` binding on tasks/events in daily log | ❌ | Medium |
-| 4.5 | Child-bullet notes (`* note`) → `history_logs` JSON field in PocketBase | ❌ | Large |
-| 4.6 | Rename section to `## Journal & Raw Notes` (currently `## Chat Activity`) | ❌ | Small |
+| 4.3 | Suffix ID tags (`#tsk-xxx`, `#evt-xxx`, `#hab-xxx`) in generated logs | ✅ | Large |
+| 4.4 | `@workspace-slug` binding on tasks/events in daily log | ✅ | Medium |
+| 4.5 | Child-bullet notes (`* note`) → `history_logs` JSON field in PocketBase | ✅ | Large |
+| 4.6 | Rename section to `## Journal & Raw Notes` (currently `## Chat Activity`) | ✅ | Small |
 
 ---
 
@@ -72,12 +72,12 @@
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
 | 5.1 | Chokidar watcher (bidirectional sync) | ✅ | — |
-| 5.2 | Suffix ID scanning (`#tsk-`, `#evt-`, `#hab-`) in daily log watcher | ❌ | Large |
-| 5.3 | Task/event `[x]`/`[ ]` checkbox status sync from daily log (habits-only currently) | 🟡 | Medium |
-| 5.4 | Inline title change detection + DB update | ❌ | Medium |
-| 5.5 | Child-bullet notes ingestion → `history_logs` (requires 4.5) | ❌ | Large |
+| 5.2 | Suffix ID scanning (`#tsk-`, `#evt-`, `#hab-`) in daily log watcher | ✅ | Large |
+| 5.3 | Task/event `[x]`/`[ ]` checkbox status sync from daily log (habits-only currently) | ✅ | Medium |
+| 5.4 | Inline title change detection + DB update | ✅ | Medium |
+| 5.5 | Child-bullet notes ingestion → `history_logs` (requires 4.5) | ✅ | Large |
 | 5.6 | Automatic task rollover on startup (currently client-side button only) | 🟡 | Medium |
-| 5.7 | Recurrence for habits in daily log generation (events have it, habits don't) | 🟡 | Small |
+| 5.7 | Recurrence for habits in daily log generation (events have it, habits don't) | ✅ | Small |
 
 ---
 
@@ -103,7 +103,7 @@
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
 | 7.1 | Level 1: USER.md startup profile (creation + agent loading) | ✅ | — |
-| 7.2 | Level 2: Workspace CONTEXT.md (see 2.8 + 3.4) | ❌ | Medium |
+| 7.2 | Level 2: Workspace CONTEXT.md (see 2.8 + 3.4) | ✅ | Medium |
 | 7.3 | Level 3A: Daily Logs | ✅ | — |
 | 7.4 | Level 3B: Workspace-scoped tasks/events | ✅ | — |
 | 7.5 | Level 4: Semantic memories with embeddings | ✅ | — |
