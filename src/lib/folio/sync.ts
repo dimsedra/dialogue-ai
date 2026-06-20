@@ -498,7 +498,7 @@ export async function syncWorkspaceFileToDb(
     agentName: metadata.agentName || '',
     createdAt: metadata.createdAt || Date.now(),
     archived: metadata.archived === true,
-    activeBranchLimit: typeof metadata.activeBranchLimit === 'number' ? metadata.activeBranchLimit : 3,
+    activeBranchLimit: typeof metadata.activeBranchLimit === 'number' && metadata.activeBranchLimit > 0 ? metadata.activeBranchLimit : 3,
   };
 
   let existingRecord;

@@ -51,7 +51,7 @@ export default function WorkspaceSettingsPage() {
     setPrevId(workspace.id);
     setWorkspaceColor(workspace.color || "#d4a373");
     setIsArchived(!!workspace.archived);
-    setActiveBranchLimit(workspace.activeBranchLimit ?? 3);
+    setActiveBranchLimit(workspace.activeBranchLimit || 3);
   }
 
   const isSpecialView = typeof workspaceId === "string" && ["calendar", "tasks", "events", "habits"].includes(workspaceId);

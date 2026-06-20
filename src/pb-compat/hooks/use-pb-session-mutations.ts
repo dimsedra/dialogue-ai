@@ -28,13 +28,13 @@ export function usePbSessionCreate() {
       let limit = 3;
       try {
         const ws = await pb.collection("workspaces").getOne(args.workspaceId);
-        if (ws && typeof ws.activeBranchLimit === 'number') {
+        if (ws && typeof ws.activeBranchLimit === 'number' && ws.activeBranchLimit > 0) {
           limit = ws.activeBranchLimit;
         } else {
           const profile = await pb.collection("user_profile").getFirstListItem(`user = "${user.id}"`);
           if (profile?.preferences && typeof profile.preferences === 'object') {
             const limitPref = (profile.preferences as any).activeBranchLimit;
-            if (typeof limitPref === 'number') {
+            if (typeof limitPref === 'number' && limitPref > 0) {
               limit = limitPref;
             }
           }
