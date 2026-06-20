@@ -112,14 +112,14 @@
 
 ---
 
-## 🔴 §8 — The Observer (Background Synthesizer)
+## 🟡 §8 — The Observer (Background Synthesizer)
 
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
-| 8.1 | Design Observer agent (Mastra workflow or plain job) | ❌ | Very Large |
-| 8.2 | Trigger Observer on conversation idle / session end | ❌ | Large |
-| 8.3 | Observer: daily log generation from conversation transcript | ❌ | Large |
-| 8.4 | Observer: memory extraction → PocketBase + MEMORIES.md | ❌ | Large |
+| 8.1 | Design Observer agent (Mastra workflow or plain job) | ✅ | Very Large |
+| 8.2 | Trigger Observer on conversation idle / session end | ✅ | Large |
+| 8.3 | Observer: daily log generation from conversation transcript | ✅ | Large |
+| 8.4 | Observer: memory extraction → PocketBase + MEMORIES.md | ✅ | Large |
 | 8.5 | Observer: CONTEXT.md synthesis on milestone | ❌ | Large |
 | 8.6 | Observer: USER.md synthesis on weekly/N-log cadence | ❌ | Large |
 | 8.7 | Remove write tools from Chat Agent (post-Observer) | ⚠️ | Large |
@@ -143,9 +143,8 @@
 
 | Priority | Item(s) | Why |
 |----------|---------|-----|
-| 🥇 **Next** | **3.1–3.3** — Eliminate custom persona system | Direct architectural contradiction. CORE.md already replaces it. Unlocks clean prompt assembly. |
-| 🥈 | **7.6 + 7.7** — Cognitive Inertia (Profile & Context synthesis) | Unlocks Level 1 (USER.md) and Level 2 (CONTEXT.md) automated update pipelines. |
-| 🥉 | **9.2, 9.3, 9.6** — Proactive Behaviors & Intrusion Protection | Builds directly on the new branching session architecture to block/delay intrusion alerts and suggest branches. |
-| 4 | **1.4 + 2.9** — Onboarding wizard & Workspace `notes/` CRUD UI | UI refinements to complete the workspace-first flow. |
-| 5 | **§8** — Background Observer Agent | Core architectural shift. Decouples logging/synthesis from chat session execution. |
-| 6 | **3.6 + 8.7** — Eliminate Chat Agent Write Tools | Enforces 100% separation of concerns: Chat Agent becomes purely conversational, Observer handles all mutations. |
+| 🥇 **Next** | **§8 + 7.6/7.7** — Observer Agent & Cognitive Inertia | Building the Observer skeleton first allows synthesis pipelines (USER.md / CONTEXT.md) to be implemented natively inside it without throwaway work. |
+| 🥈 | **9.2, 9.3, 9.6** — Proactive Behaviors & Intrusion Protection | Builds directly on the new branching session architecture to block/delay intrusion alerts and suggest branches. |
+| 🥉 | **1.4 + 2.9** — Onboarding wizard & Workspace `notes/` CRUD UI | UI refinements to complete the workspace-first flow. |
+| 4 | **3.6 + 8.7** — Eliminate Chat Agent Write Tools | Enforces 100% separation of concerns: Chat Agent becomes purely conversational, Observer handles all mutations. |
+

@@ -13,6 +13,7 @@ import { join } from 'path';
 import { parseMcpServers, createMcpClient, getToolsets } from '@/mastra/mcp/client';
 import { reconcileFolio, folioRequestContext } from '@/lib/folio/sync';
 import { DEFAULT_FOLIO_DIR } from '@/lib/folio/constants';
+import { runObserver } from '@/lib/jobs/observer';
 
 
 export async function POST(req: Request) {
@@ -350,8 +351,8 @@ export async function POST(req: Request) {
     // Return the response back in Vercel AI SDK UI streaming format
     const response = createUIMessageStreamResponse({ stream: stream as any });
 
-    // Wrap response body to disconnect MCPClient after streaming completes
-    if (response.body && mcpClient) {
+    // Wrap response body to run Observer and disconnect MCPClient after streaming completes
+    if (response.body) {
       const reader = response.body.getReader();
       const wrappedStream = new ReadableStream({
         async pull(controller) {
@@ -359,18 +360,37 @@ export async function POST(req: Request) {
             const { done, value } = await reader.read();
             if (done) {
               controller.close();
-              await mcpClient.disconnect();
+              if (mcpClient) {
+                await mcpClient.disconnect();
+              }
+
+              // Trigger Observer asynchronously in the background
+              if (isPb && pbClient && pbClient.authStore.record?.id) {
+                const userId = pbClient.authStore.record.id;
+                runObserver(pbClient, {
+                  userId,
+                  timezone,
+                  sessionId: sessionId || undefined,
+                }).catch((err) => {
+                  console.error("[Observer] Background execution failed:", err);
+                });
+              }
+
               return;
             }
             controller.enqueue(value);
           } catch (e) {
             controller.error(e);
-            await mcpClient.disconnect();
+            if (mcpClient) {
+              await mcpClient.disconnect();
+            }
           }
         },
         cancel() {
           reader.cancel();
-          mcpClient.disconnect();
+          if (mcpClient) {
+            mcpClient.disconnect();
+          }
         },
       });
       return new Response(wrappedStream, {

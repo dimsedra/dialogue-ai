@@ -146,16 +146,45 @@ describe("generateDailySummary Synthesis Engine", () => {
       ],
     });
 
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "UTC" });
+
     const tasksCollection = mockCollection({
       items: [
-        { id: "task-1", text: "Release app", completed: true, completedAt: Date.now(), user: "user-1" },
-        { id: "task-2", text: "Run test suite", completed: true, completedAt: Date.now(), user: "user-1", workspace: "ws-1" },
+        {
+          id: "task-1",
+          text: "Release app",
+          completed: true,
+          completedAt: Date.now(),
+          user: "user-1",
+          notes: "Duplicate note line\nStatic note for task 1",
+          history_logs: [
+            { date: todayStr, note: "Today's progress notes for task 1\nDuplicate note line" },
+            { date: "2026-06-19", note: "Yesterday's note" }
+          ]
+        },
+        {
+          id: "task-2",
+          text: "Run test suite",
+          completed: true,
+          completedAt: Date.now(),
+          user: "user-1",
+          workspace: "ws-1",
+          notes: "Notes for task 2"
+        },
+        {
+          id: "task-3",
+          text: "Incomplete coding task",
+          completed: false,
+          user: "user-1",
+          workspace: "ws-1",
+          notes: "Task 3 detail notes"
+        },
       ],
     });
 
     const eventsCollection = mockCollection({
       items: [
-        { id: "event-1", title: "Global Sync", startTime: Date.now(), user: "user-1" },
+        { id: "event-1", title: "Global Sync", startTime: Date.now(), user: "user-1", notes: "Notes for event 1" },
         { id: "event-2", title: "Sprint Backlog", startTime: Date.now(), user: "user-1", workspace: "ws-1" },
       ],
     });
@@ -198,8 +227,14 @@ describe("generateDailySummary Synthesis Engine", () => {
       expect(result.summary).toContain("Reflected chat session thoughts summary.");
     }
 
-    // Retrieve today's date string
-    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "UTC" });
+    // Retrieve today's date string (already declared as todayStr)
+    const friendlyDateStr = new Date().toLocaleDateString("en-US", {
+      timeZone: "UTC",
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
 
     // Verify global daily log file
     const globalLogPath = `${process.cwd().replace(/\\/g, "/")}/dialogue-folio/daily-logs/${todayStr}.md`;
@@ -207,30 +242,45 @@ describe("generateDailySummary Synthesis Engine", () => {
 
     const globalContent = mockFiles[globalLogPath];
     expect(globalContent).toContain("type: daily-log");
-    expect(globalContent).toContain("## Journal & Raw Notes");
+    expect(globalContent).toContain(`# ${friendlyDateStr}`);
+
+    expect(globalContent).toContain("## Habits");
     expect(globalContent).toContain("- [x] Drink Water #hab-habit-1");
     expect(globalContent).toContain("- [ ] Workout #hab-habit-2");
+
+    expect(globalContent).toContain("## Journal & Raw Notes");
     expect(globalContent).toContain("- **General Discussion**: Reflected chat session thoughts summary.");
-    expect(globalContent).not.toContain("Chat Activity & Reflected Thoughts");
+    expect(globalContent).toContain("- **Coding Tasks** @dialogue-app: Reflected chat session thoughts summary.");
+
+    expect(globalContent).toContain("## Tasks");
     expect(globalContent).toContain(`Release app`);
     expect(globalContent).toContain(`#tsk-task-1`);
+    expect(globalContent).toContain("  * Duplicate note line");
+    expect(globalContent).toContain("  * Static note for task 1");
+    expect(globalContent).toContain("  * Today's progress notes for task 1");
+    expect(globalContent).not.toContain("Yesterday's note");
+
+    // Workspace task should be here in the global daily log
+    expect(globalContent).toContain("Run test suite");
+    expect(globalContent).toContain(`#tsk-task-2 @dialogue-app`);
+    expect(globalContent).toContain("  * Notes for task 2");
+
+    // Incomplete task should be here in the global daily log
+    expect(globalContent).toContain("- [ ] Incomplete coding task #tsk-task-3 @dialogue-app");
+    expect(globalContent).toContain("  * Task 3 detail notes");
+
+    expect(globalContent).toContain("## Events");
     expect(globalContent).toContain(`Global Sync`);
     expect(globalContent).toContain(`#evt-event-1`);
+    expect(globalContent).toContain("  * Notes for event 1");
 
-    // Verify workspace activity log file
+    // Workspace event should be here in the global daily log
+    expect(globalContent).toContain(`Sprint Backlog`);
+    expect(globalContent).toContain(`#evt-event-2 @dialogue-app`);
+
+    // Verify workspace activity log file is NOT created (it was eliminated)
     const wsLogPath = `${process.cwd().replace(/\\/g, "/")}/dialogue-folio/workspaces/dialogue-app-ws-1/activity/${todayStr}.md`;
-    expect(mockFiles[wsLogPath]).toBeDefined();
-
-    const wsContent = mockFiles[wsLogPath];
-    expect(wsContent).toContain("type: workspace-activity");
-    expect(wsContent).toContain("workspace: ws-1");
-    expect(wsContent).toContain("## Journal & Raw Notes");
-    expect(wsContent).toContain("- **Coding Tasks**: Reflected chat session thoughts summary.");
-    expect(wsContent).not.toContain("Chat Activity & Reflected Thoughts");
-    expect(wsContent).toContain(`Run test suite`);
-    expect(wsContent).toContain(`#tsk-task-2 @dialogue-app`);
-    expect(wsContent).toContain(`Sprint Backlog`);
-    expect(wsContent).toContain(`#evt-event-2 @dialogue-app`);
+    expect(mockFiles[wsLogPath]).toBeUndefined();
 
     // Verify DB cache updated
     expect(sessionSummariesCollection.create).toHaveBeenCalled();

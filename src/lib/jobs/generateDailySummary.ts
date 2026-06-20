@@ -147,11 +147,11 @@ export async function generateDailySummary(
     console.error("[generateDailySummary] fetch messages failed:", err);
   }
 
-  // 5. Fetch completed tasks today
-  let completedTasks: any[] = [];
+  // 5. Fetch tasks for the daily log (completed today + all incomplete tasks)
+  let activeTasks: any[] = [];
   try {
-    completedTasks = await pb.collection("tasks").getFullList({
-      filter: `user = "${escapedUser}" && completed = true && completedAt >= ${startOfDay} && completedAt <= ${endOfDay}`,
+    activeTasks = await pb.collection("tasks").getFullList({
+      filter: `user = "${escapedUser}" && (completed = false || (completed = true && completedAt >= ${startOfDay} && completedAt <= ${endOfDay}))`,
     });
   } catch (err) {
     console.error("[generateDailySummary] fetch tasks failed:", err);
@@ -169,7 +169,7 @@ export async function generateDailySummary(
   }
 
   // Check if we have any activity at all
-  if (messages.length === 0 && completedTasks.length === 0 && todayEvents.length === 0) {
+  if (messages.length === 0 && activeTasks.length === 0 && todayEvents.length === 0) {
     // Check if there are active habits. If not, skip daily log generation
     let habitsCount = 0;
     try {
@@ -201,8 +201,8 @@ export async function generateDailySummary(
   for (const [sessionId, sessionMsgs] of messagesBySession.entries()) {
     sessionMsgs.sort((a, b) => a.timestamp - b.timestamp);
     const transcript = sessionMsgs
-      .map((m) => `${m.author === "user" ? "User" : "Companion"}: ${m.text}`)
-      .join("\n");
+        .map((m) => `${m.author === "user" ? "User" : "Companion"}: ${m.text}`)
+        .join("\n");
 
     const prompt = `You are a helpful AI productivity assistant. Read the following chat transcript from today for a single conversation session. Write a brief, high-density summary (1-2 sentences) of what was discussed, accomplished, or decided in this thread today. Do not include past context, meta-commentary, or introductory phrases. Be direct.
 
@@ -223,58 +223,23 @@ ${transcript}`;
     }
   }
 
-  // 8. Group activities into global vs. workspace scopes
-  const globalReflections: string[] = [];
-  const globalTasks: any[] = [];
-  const globalEvents: any[] = [];
-
-  const workspaceReflections = new Map<string, string[]>(); // workspaceId -> reflections
-  const workspaceTasks = new Map<string, any[]>(); // workspaceId -> tasks
-  const workspaceEvents = new Map<string, any[]>(); // workspaceId -> events
-
-  // Group Reflections
-  for (const [sessionId, reflection] of sessionReflections.entries()) {
-    const session = sessionMap.get(sessionId);
-    const title = session?.title || "Untitled Session";
-    const wsId = session?.workspace;
-    const bullet = `- **${title}**: ${reflection}`;
-
-    if (wsId) {
-      if (!workspaceReflections.has(wsId)) workspaceReflections.set(wsId, []);
-      workspaceReflections.get(wsId)!.push(bullet);
-    } else {
-      globalReflections.push(bullet);
-    }
-  }
-
-  // Group Completed Tasks
-  for (const task of completedTasks) {
-    const wsId = task.workspace;
-    if (wsId) {
-      if (!workspaceTasks.has(wsId)) workspaceTasks.set(wsId, []);
-      workspaceTasks.get(wsId)!.push(task);
-    } else {
-      globalTasks.push(task);
-    }
-  }
-
-  // Group Events
-  for (const event of todayEvents) {
-    const wsId = event.workspace;
-    if (wsId) {
-      if (!workspaceEvents.has(wsId)) workspaceEvents.set(wsId, []);
-      workspaceEvents.get(wsId)!.push(event);
-    } else {
-      globalEvents.push(event);
-    }
-  }
-
   const getWorkspaceSlug = (workspaceId?: string): string => {
     if (!workspaceId) return "";
     const ws = workspaceMap.get(workspaceId);
     if (!ws) return "";
     return ws.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "";
   };
+
+  // Compile flat reflections
+  const reflectionsLines: string[] = [];
+  for (const [sessionId, reflection] of sessionReflections.entries()) {
+    const session = sessionMap.get(sessionId);
+    const title = session?.title || "Untitled Session";
+    const wsId = session?.workspace;
+    const wsSlug = getWorkspaceSlug(wsId);
+    const wsPart = wsSlug ? ` @${wsSlug}` : "";
+    reflectionsLines.push(`- **${title}**${wsPart}: ${reflection}`);
+  }
 
   // Helper to format time in user timezone
   const formatTime = (ts: number): string => {
@@ -287,18 +252,99 @@ ${transcript}`;
   };
 
   const formatTaskBullet = (task: any): string => {
-    const timeStr = task.completedAt ? ` (Completed: ${formatTime(task.completedAt)})` : "";
+    const checkbox = task.completed ? "[x]" : "[ ]";
+    const timeStr = (task.completed && task.completedAt) ? ` (Completed: ${formatTime(task.completedAt)})` : "";
     const wsSlug = getWorkspaceSlug(task.workspace);
     const wsPart = wsSlug ? ` @${wsSlug}` : "";
-    return `- [x] ${task.text}${timeStr} #tsk-${task.id}${wsPart}`;
+    let bullet = `- ${checkbox} ${task.text}${timeStr} #tsk-${task.id}${wsPart}`;
+
+    const noteLines: string[] = [];
+    const seen = new Set<string>();
+
+    const addLines = (rawText: string) => {
+      if (!rawText) return;
+      const lines = rawText
+        .split("\n")
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 0);
+      for (const line of lines) {
+        if (!seen.has(line)) {
+          seen.add(line);
+          noteLines.push(line);
+        }
+      }
+    };
+
+    // 1. Add static task notes
+    addLines(task.notes);
+
+    // 2. Add history logs for today
+    let historyLogs: any[] = [];
+    if (task.history_logs) {
+      try {
+        historyLogs = typeof task.history_logs === "string" ? JSON.parse(task.history_logs) : task.history_logs;
+      } catch {}
+    }
+
+    if (Array.isArray(historyLogs)) {
+      const todayLog = historyLogs.find((h: any) => h.date === dateString);
+      if (todayLog && todayLog.note) {
+        addLines(todayLog.note);
+      }
+    }
+
+    for (const line of noteLines) {
+      bullet += `\n  * ${line}`;
+    }
+    return bullet;
   };
 
   const formatEventBullet = (event: any): string => {
     const startStr = formatTime(event.startTime);
-    const endStr = event.endTime ? ` - ${formatTime(event.endTime)}` : "";
+    const timeRange = event.endTime ? `${startStr}-${formatTime(event.endTime)}` : startStr;
     const wsSlug = getWorkspaceSlug(event.workspace);
     const wsPart = wsSlug ? ` @${wsSlug}` : "";
-    return `- [x] ${event.title} (Time: ${startStr}${endStr}) #evt-${event.id}${wsPart}`;
+    let bullet = `- ${timeRange} - ${event.title} #evt-${event.id}${wsPart}`;
+
+    const noteLines: string[] = [];
+    const seen = new Set<string>();
+
+    const addLines = (rawText: string) => {
+      if (!rawText) return;
+      const lines = rawText
+        .split("\n")
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 0);
+      for (const line of lines) {
+        if (!seen.has(line)) {
+          seen.add(line);
+          noteLines.push(line);
+        }
+      }
+    };
+
+    // 1. Add static event notes
+    addLines(event.notes);
+
+    // 2. Add history logs for today
+    let historyLogs: any[] = [];
+    if (event.history_logs) {
+      try {
+        historyLogs = typeof event.history_logs === "string" ? JSON.parse(event.history_logs) : event.history_logs;
+      } catch {}
+    }
+
+    if (Array.isArray(historyLogs)) {
+      const todayLog = historyLogs.find((h: any) => h.date === dateString);
+      if (todayLog && todayLog.note) {
+        addLines(todayLog.note);
+      }
+    }
+
+    for (const line of noteLines) {
+      bullet += `\n  * ${line}`;
+    }
+    return bullet;
   };
 
   // 9. Generate and Write Global Daily Log
@@ -368,24 +414,36 @@ ${transcript}`;
     habitsLines.push(`- [${checked ? "x" : " "}] ${habit.name} #hab-${habit.id}`);
   }
 
+  // Format human-friendly header date
+  const friendlyDate = dateObj.toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const taskLines = activeTasks.map(formatTaskBullet);
+  const eventLines = todayEvents.map(formatEventBullet);
+
   const globalMarkdown = `---
 date: ${dateString}
 type: daily-log
 ---
 
-# Daily Log - ${dateString}
+# ${friendlyDate}
 
-## Today's Habits
+## Habits
 ${habitsLines.length > 0 ? habitsLines.join("\n") : "No active habits."}
 
+## Tasks
+${taskLines.length > 0 ? taskLines.join("\n") : "No tasks."}
+
+## Events
+${eventLines.length > 0 ? eventLines.join("\n") : "No events."}
+
 ## Journal & Raw Notes
-${globalReflections.length > 0 ? globalReflections.join("\n") : "No global chat activity today."}
-
-## Tasks Completed Today
-${globalTasks.length > 0 ? globalTasks.map(formatTaskBullet).join("\n") : "No tasks completed today."}
-
-## Events Today
-${globalEvents.length > 0 ? globalEvents.map(formatEventBullet).join("\n") : "No events today."}
+${reflectionsLines.length > 0 ? reflectionsLines.join("\n") : "No chat activity today."}
 `;
 
   try {
@@ -394,50 +452,7 @@ ${globalEvents.length > 0 ? globalEvents.map(formatEventBullet).join("\n") : "No
     console.error("[generateDailySummary] Failed writing global daily log:", err);
   }
 
-  // 10. Generate and Write Workspace Activity Logs
-  for (const ws of workspaces) {
-    const wsReflections = workspaceReflections.get(ws.id) || [];
-    const wsTasks = workspaceTasks.get(ws.id) || [];
-    const wsEvents = workspaceEvents.get(ws.id) || [];
-
-    // Skip creating workspace activity log if no activity exists for this workspace today
-    if (wsReflections.length === 0 && wsTasks.length === 0 && wsEvents.length === 0) {
-      continue;
-    }
-
-    const wsPath = resolveWorkspacePath(folioRootPath, ws.id, ws.name);
-    const wsActivityDir = join(wsPath, "activity");
-    if (!existsSync(wsActivityDir)) {
-      mkdirSync(wsActivityDir, { recursive: true });
-    }
-    const wsActivityPath = join(wsActivityDir, `${dateString}.md`);
-
-    const wsMarkdown = `---
-date: ${dateString}
-type: workspace-activity
-workspace: ${ws.id}
----
-
-# Workspace Activity - ${dateString}
-
-## Journal & Raw Notes
-${wsReflections.length > 0 ? wsReflections.join("\n") : "No chat activity today."}
-
-## Tasks Completed Today
-${wsTasks.length > 0 ? wsTasks.map(formatTaskBullet).join("\n") : "No tasks completed today."}
-
-## Events Today
-${wsEvents.length > 0 ? wsEvents.map(formatEventBullet).join("\n") : "No events today."}
-`;
-
-    try {
-      writeFileSync(wsActivityPath, wsMarkdown, "utf8");
-    } catch (err) {
-      console.error(`[generateDailySummary] Failed writing workspace activity log for ${ws.id}:`, err);
-    }
-  }
-
-  // 11. Compile single overall summary for session_summaries table
+  // 10. Compile single overall summary for session_summaries table
   const allReflections = [...sessionReflections.values()];
   let finalSummaryText = "No activity.";
   if (allReflections.length > 0) {
@@ -458,8 +473,9 @@ ${allReflections.join("\n")}`;
       console.error("[generateDailySummary] Failed compiling overall summary:", err);
       finalSummaryText = allReflections.slice(0, 2).join(" ");
     }
-  } else if (completedTasks.length > 0 || todayEvents.length > 0) {
-    finalSummaryText = `Completed ${completedTasks.length} task(s) and scheduled ${todayEvents.length} event(s) today.`;
+  } else if (activeTasks.length > 0 || todayEvents.length > 0) {
+    const completedCount = activeTasks.filter((t) => t.completed).length;
+    finalSummaryText = `Completed ${completedCount} task(s) and scheduled ${todayEvents.length} event(s) today.`;
   }
 
   // Save/Update in PB cache

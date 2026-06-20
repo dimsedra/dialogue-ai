@@ -87,8 +87,8 @@ export async function GET(req: NextRequest) {
 
       // Daily session summary
       if (await checkCron("daily-session-summary", 24 * 60 * 60 * 1000)) {
-        const { generateDailySummary } = await import("@/lib/jobs/generateDailySummary");
-        await generateDailySummary(pb, { userId: user.id, timezone });
+        const { runObserver } = await import("@/lib/jobs/observer");
+        await runObserver(pb, { userId: user.id, timezone });
       }
     }
 
