@@ -208,12 +208,14 @@ describe("generateDailySummary Synthesis Engine", () => {
     const globalContent = mockFiles[globalLogPath];
     expect(globalContent).toContain("type: daily-log");
     expect(globalContent).toContain("## Journal & Raw Notes");
-    expect(globalContent).toContain("- [x] Drink Water");
-    expect(globalContent).toContain("- [ ] Workout");
+    expect(globalContent).toContain("- [x] Drink Water #hab-habit-1");
+    expect(globalContent).toContain("- [ ] Workout #hab-habit-2");
     expect(globalContent).toContain("- **General Discussion**: Reflected chat session thoughts summary.");
     expect(globalContent).not.toContain("Chat Activity & Reflected Thoughts");
-    expect(globalContent).toContain(`- [x] task-task-1: Release app`);
-    expect(globalContent).toContain(`- [x] event-event-1: Global Sync`);
+    expect(globalContent).toContain(`Release app`);
+    expect(globalContent).toContain(`#tsk-task-1`);
+    expect(globalContent).toContain(`Global Sync`);
+    expect(globalContent).toContain(`#evt-event-1`);
 
     // Verify workspace activity log file
     const wsLogPath = `${process.cwd().replace(/\\/g, "/")}/dialogue-folio/workspaces/dialogue-app-ws-1/activity/${todayStr}.md`;
@@ -225,8 +227,10 @@ describe("generateDailySummary Synthesis Engine", () => {
     expect(wsContent).toContain("## Journal & Raw Notes");
     expect(wsContent).toContain("- **Coding Tasks**: Reflected chat session thoughts summary.");
     expect(wsContent).not.toContain("Chat Activity & Reflected Thoughts");
-    expect(wsContent).toContain(`- [x] task-task-2: Run test suite`);
-    expect(wsContent).toContain(`- [x] event-event-2: Sprint Backlog`);
+    expect(wsContent).toContain(`Run test suite`);
+    expect(wsContent).toContain(`#tsk-task-2 @dialogue-app`);
+    expect(wsContent).toContain(`Sprint Backlog`);
+    expect(wsContent).toContain(`#evt-event-2 @dialogue-app`);
 
     // Verify DB cache updated
     expect(sessionSummariesCollection.create).toHaveBeenCalled();
@@ -286,8 +290,8 @@ type: daily-log
 
     const updatedContent = mockFiles[globalLogPath];
     // habit-2 must remain checked, and habit-1 remains unchecked
-    expect(updatedContent).toContain("- [ ] Drink Water");
-    expect(updatedContent).toContain("- [x] Workout");
+    expect(updatedContent).toContain("- [ ] Drink Water #hab-habit-1");
+    expect(updatedContent).toContain("- [x] Workout #hab-habit-2");
   });
 
   it("should respect habit recurrence custom schedule and preserve existing", async () => {
@@ -351,12 +355,12 @@ type: daily-log
     const updatedContent = mockFiles[globalLogPath];
     
     // Habit 1 (Daily) should appear (pending/unchecked since no logs exist)
-    expect(updatedContent).toContain("- [ ] Habit 1 (Daily)");
+    expect(updatedContent).toContain("- [ ] Habit 1 (Daily) #hab-habit-1");
     // Habit 2 (Today) should appear
-    expect(updatedContent).toContain("- [ ] Habit 2 (Today)");
+    expect(updatedContent).toContain("- [ ] Habit 2 (Today) #hab-habit-2");
     // Habit 3 (Future) should NOT appear
     expect(updatedContent).not.toContain("Habit 3 (Future)");
     // Habit 4 (Preserved) should appear and remain checked [x]
-    expect(updatedContent).toContain("- [x] Habit 4 (Preserved)");
+    expect(updatedContent).toContain("- [x] Habit 4 (Preserved) #hab-habit-4");
   });
 });

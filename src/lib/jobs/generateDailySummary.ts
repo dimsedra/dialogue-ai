@@ -269,6 +269,13 @@ ${transcript}`;
     }
   }
 
+  const getWorkspaceSlug = (workspaceId?: string): string => {
+    if (!workspaceId) return "";
+    const ws = workspaceMap.get(workspaceId);
+    if (!ws) return "";
+    return ws.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "";
+  };
+
   // Helper to format time in user timezone
   const formatTime = (ts: number): string => {
     return new Date(ts).toLocaleTimeString("en-US", {
@@ -281,13 +288,17 @@ ${transcript}`;
 
   const formatTaskBullet = (task: any): string => {
     const timeStr = task.completedAt ? ` (Completed: ${formatTime(task.completedAt)})` : "";
-    return `- [x] task-${task.id}: ${task.text}${timeStr}`;
+    const wsSlug = getWorkspaceSlug(task.workspace);
+    const wsPart = wsSlug ? ` @${wsSlug}` : "";
+    return `- [x] ${task.text}${timeStr} #tsk-${task.id}${wsPart}`;
   };
 
   const formatEventBullet = (event: any): string => {
     const startStr = formatTime(event.startTime);
     const endStr = event.endTime ? ` - ${formatTime(event.endTime)}` : "";
-    return `- [x] event-${event.id}: ${event.title} (Time: ${startStr}${endStr})`;
+    const wsSlug = getWorkspaceSlug(event.workspace);
+    const wsPart = wsSlug ? ` @${wsSlug}` : "";
+    return `- [x] ${event.title} (Time: ${startStr}${endStr}) #evt-${event.id}${wsPart}`;
   };
 
   // 9. Generate and Write Global Daily Log
@@ -354,7 +365,7 @@ ${transcript}`;
       const dbStatus = todayHabitLogs.get(habit.id);
       checked = dbStatus === "completed";
     }
-    habitsLines.push(`- [${checked ? "x" : " "}] ${habit.name}`);
+    habitsLines.push(`- [${checked ? "x" : " "}] ${habit.name} #hab-${habit.id}`);
   }
 
   const globalMarkdown = `---

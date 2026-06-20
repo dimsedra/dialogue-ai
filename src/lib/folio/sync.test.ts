@@ -197,7 +197,9 @@ vi.mock('fs', async (importOriginal) => {
     existsSync: (p: any) => {
       const norm = String(p).replace(/\\/g, '/');
       if (norm.includes('Dialogue Folio') || norm.includes('dialogue-folio')) {
-        return !!mockFiles[norm];
+        if (mockFiles[norm]) return true;
+        const prefix = norm + '/';
+        return Object.keys(mockFiles).some(k => k.startsWith(prefix));
       }
       return actual.existsSync(p);
     },
@@ -224,6 +226,12 @@ vi.mock('fs', async (importOriginal) => {
         mockFiles[normNew] = mockFiles[normOld];
         delete mockFiles[normOld];
         return;
+      }
+    },
+    unlinkSync: (p: any) => {
+      const norm = String(p).replace(/\\/g, '/');
+      if (mockFiles[norm]) {
+        delete mockFiles[norm];
       }
     },
     mkdirSync: (p: any) => {
@@ -708,7 +716,7 @@ type: daily-log
 `;
 
     const { syncDailyLogFileToDb } = await import('./sync');
-    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17');
+    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17', folioRoot);
 
     const logs = mockPb.collection('habit_logs').items;
     expect(logs).toHaveLength(2);
@@ -728,6 +736,161 @@ type: daily-log
     expect(updatedWaterHabit.currentStreak).toBe(1);
     expect(updatedWaterHabit.longestStreak).toBe(1);
     expect(updatedWaterHabit.lastLoggedDate).toBe('2026-06-17');
+  });
+
+  test('syncs task status, title, and progress notes from global daily log', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/daily-logs/2026-06-17.md';
+    mockPb.collections.tasks = createMockCollection([
+      { id: 'task-1', text: 'Old Task Title', completed: false, user: 'test-user-id', workspace: 'ws-1', history_logs: [] }
+    ]);
+    mockPb.collections.workspaces = createMockCollection([
+      { id: 'ws-1', name: 'My Workspace' }
+    ]);
+
+    // Mock individual task file on disk
+    const taskDiskPath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws-1/tasks/old-task-title-task-1.md';
+    mockFiles[taskDiskPath] = `---
+id: task-1
+title: Old Task Title
+completed: false
+status: todo
+---
+Initial notes body
+`;
+
+    // Seed daily log with updated checkbox, updated title, and progress notes
+    mockFiles[filePath] = `---
+date: 2026-06-17
+type: daily-log
+---
+
+# Daily Log - 2026-06-17
+
+## Journal & Raw Notes
+Some notes here.
+
+## Tasks completed today
+- [x] New Task Title #tsk-task-1 @my-workspace
+  * Progress note line 1
+  * Progress note line 2
+`;
+
+    const { syncDailyLogFileToDb } = await import('./sync');
+    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17', folioRoot);
+
+    // Verify task updated in DB
+    const task = mockPb.collection('tasks').items[0];
+    expect(task.completed).toBe(true);
+    expect(task.text).toBe('New Task Title');
+    expect(task.history_logs).toBeDefined();
+    expect(task.history_logs).toHaveLength(1);
+    expect(task.history_logs[0]).toEqual({
+      date: '2026-06-17',
+      note: 'Progress note line 1\nProgress note line 2'
+    });
+
+    // Verify old task file is deleted and new task file is written on disk
+    expect(mockFiles[taskDiskPath]).toBeUndefined();
+
+    const newTaskDiskPath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws-1/tasks/new-task-title-task-1.md';
+    expect(mockFiles[newTaskDiskPath]).toBeDefined();
+    expect(mockFiles[newTaskDiskPath]).toContain('completed: true');
+    expect(mockFiles[newTaskDiskPath]).toContain('status: completed');
+    expect(mockFiles[newTaskDiskPath]).toContain('title: New Task Title');
+  });
+
+  test('syncs event cancellation status, title, and progress notes from global daily log', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/daily-logs/2026-06-17.md';
+    mockPb.collections.events = createMockCollection([
+      { id: 'event-1', title: 'Old Event Title', cancelled: false, startTime: Date.now(), user: 'test-user-id', workspace: 'ws-1', history_logs: [] }
+    ]);
+    mockPb.collections.workspaces = createMockCollection([
+      { id: 'ws-1', name: 'My Workspace' }
+    ]);
+
+    const eventDiskPath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws-1/events/old-event-title-event-1.md';
+    mockFiles[eventDiskPath] = `---
+id: event-1
+title: Old Event Title
+cancelled: false
+startTime: 2026-06-17T10:00:00Z
+---
+Initial event details
+`;
+
+    mockFiles[filePath] = `---
+date: 2026-06-17
+type: daily-log
+---
+
+# Daily Log - 2026-06-17
+
+## Events Today
+- [ ] New Event Title (Time: 10:00) #evt-event-1 @my-workspace
+  * Cancelled due to conflict
+`;
+
+    const { syncDailyLogFileToDb } = await import('./sync');
+    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17', folioRoot);
+
+    const event = mockPb.collection('events').items[0];
+    expect(event.cancelled).toBe(true);
+    expect(event.title).toBe('New Event Title');
+    expect(event.history_logs).toBeDefined();
+    expect(event.history_logs[0]).toEqual({
+      date: '2026-06-17',
+      note: 'Cancelled due to conflict'
+    });
+
+    // Check disk file renamed
+    expect(mockFiles[eventDiskPath]).toBeUndefined();
+
+    const newEventDiskPath = 'C:/Users/user/Dialogue Folio/workspaces/my-workspace-ws-1/events/new-event-title-event-1.md';
+    expect(mockFiles[newEventDiskPath]).toBeDefined();
+    expect(mockFiles[newEventDiskPath]).toContain('cancelled: true');
+    expect(mockFiles[newEventDiskPath]).toContain('title: New Event Title');
+  });
+
+  test('child bullets notes ingestion is idempotent', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/daily-logs/2026-06-17.md';
+    mockPb.collections.tasks = createMockCollection([
+      { 
+        id: 'task-1', 
+        text: 'Task 1', 
+        completed: false, 
+        user: 'test-user-id', 
+        workspace: 'ws-1', 
+        history_logs: [
+          { date: '2026-06-16', note: 'Yesterday note' },
+          { date: '2026-06-17', note: 'Old today note' }
+        ] 
+      }
+    ]);
+    mockPb.collections.workspaces = createMockCollection([
+      { id: 'ws-1', name: 'My Workspace' }
+    ]);
+
+    mockFiles[filePath] = `---
+date: 2026-06-17
+type: daily-log
+---
+
+# Daily Log - 2026-06-17
+
+## Tasks Completed Today
+- [x] Task 1 #tsk-task-1
+  * Updated today note
+`;
+
+    const { syncDailyLogFileToDb } = await import('./sync');
+    // Run twice to ensure idempotency
+    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17', folioRoot);
+    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17', folioRoot);
+
+    const task = mockPb.collection('tasks').items[0];
+    expect(task.history_logs).toHaveLength(2); // One for 2026-06-16, one for 2026-06-17
+    expect(task.history_logs[0]).toEqual({ date: '2026-06-16', note: 'Yesterday note' });
+    expect(task.history_logs[1]).toEqual({ date: '2026-06-17', note: 'Updated today note' });
   });
 });
 

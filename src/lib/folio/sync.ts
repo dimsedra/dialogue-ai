@@ -1,9 +1,9 @@
 import { join, relative, basename, dirname } from 'path';
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, renameSync, mkdirSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, renameSync, mkdirSync, unlinkSync } from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
 import PocketBase from 'pocketbase';
 import { getActiveUserId } from '../pb-server';
-import { parseMarkdownFile } from './parser';
+import { parseMarkdownFile, serializeMarkdownFile } from './parser';
 import { ingestTaskNotes, ingestEventNotes, deleteSourceMemories } from '../graph/ingest';
 import crypto from 'crypto';
 import { getLocalEmbedding } from '../graph/embedding';
@@ -405,7 +405,7 @@ export async function syncFolioFileToDb(
   } else if (collectionName === 'memories') {
     await syncMemoriesFileToDb(filePath, pb, folioRootPath);
   } else if (collectionName === 'daily_logs') {
-    await syncDailyLogFileToDb(filePath, pb, id);
+    await syncDailyLogFileToDb(filePath, pb, id, folioRootPath);
   } else if (collectionName === 'workspaces') {
     if (basename(filePath) === 'CONTEXT.md') {
       await syncWorkspaceContextFileToDb(filePath, pb, id);
@@ -1417,15 +1417,183 @@ function calculateNewStreak(
   }
 }
 
+interface ParsedEntity {
+  id: string;
+  type: "tsk" | "evt" | "hab";
+  checked: boolean;
+  title: string;
+  notes: string[];
+}
+
+export function parseDailyLogFile(content: string): ParsedEntity[] {
+  const normalized = content.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+
+  const entities: ParsedEntity[] = [];
+  let currentEntity: ParsedEntity | null = null;
+
+  const entityRegex = /^-\s*\[([ xX])\]\s*(.+?)#(tsk|evt|hab)-([a-zA-Z0-9_-]+)(?:\s+@[a-zA-Z0-9_-]+)?\s*$/;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Check if it's a new entity line
+    const match = line.match(entityRegex);
+    if (match) {
+      const checked = match[1].toLowerCase() === "x";
+      const rawTitle = match[2];
+      const type = match[3] as "tsk" | "evt" | "hab";
+      const id = match[4];
+
+      // Clean the title
+      const title = rawTitle
+        .replace(/@[a-zA-Z0-9_-]+/g, "")
+        .replace(/\(Completed: [^)]+\)/gi, "")
+        .replace(/\(Time: [^)]+\)/gi, "")
+        .trim();
+
+      currentEntity = {
+        id,
+        type,
+        checked,
+        title,
+        notes: []
+      };
+      entities.push(currentEntity);
+      continue;
+    }
+
+    // Check if it's a child bullet note under the current entity
+    // Indented by spaces/tabs, starting with * or - (but not - [ ] or - [x])
+    if (currentEntity) {
+      const noteMatch = line.match(/^(\s+)([*+-])\s+(.+)$/);
+      if (noteMatch) {
+        // Ensure it's not a checkbox task line
+        if (!noteMatch[3].startsWith("[ ]") && !noteMatch[3].toLowerCase().startsWith("[x]")) {
+          const noteText = noteMatch[3].trim();
+          currentEntity.notes.push(noteText);
+          continue;
+        }
+      }
+    }
+
+    // If it's a blank line, continue
+    if (!trimmed) {
+      continue;
+    }
+
+    // If it's a header or anything else, reset currentEntity
+    if (trimmed.startsWith("#")) {
+      currentEntity = null;
+    }
+  }
+
+  return entities;
+}
+
+export async function updateDiskFileForEntity(
+  collectionName: 'tasks' | 'events',
+  id: string,
+  pb: PocketBase,
+  folioRootPath: string,
+  updates: { text?: string; title?: string; completed?: boolean; completedAt?: number | null; cancelled?: boolean }
+) {
+  try {
+    const record = await pb.collection(collectionName).getOne(id);
+    const workspaceId = record.workspace;
+
+    let basePath = folioRootPath;
+    if (workspaceId) {
+      const workspace = await pb.collection('workspaces').getOne(workspaceId);
+      const slug = workspace.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "workspace";
+      basePath = join(folioRootPath, 'workspaces', `${slug}-${workspaceId}`);
+    }
+
+    const folderName = collectionName === 'tasks' ? 'tasks' : 'events';
+    const entityDir = join(basePath, folderName);
+    if (!existsSync(entityDir)) return;
+
+    const files = readdirSync(entityDir);
+    const targetFile = files.find((f) => f.endsWith(`-${id}.md`) || f === `${collectionName.slice(0, -1)}-${id}.md`);
+    if (!targetFile) return;
+
+    const filePath = join(entityDir, targetFile);
+    const content = readFileSync(filePath, 'utf8');
+    const { metadata, body } = parseMarkdownFile(content);
+
+    let renamed = false;
+    let newFilePath = filePath;
+
+    if (collectionName === 'tasks') {
+      if (updates.text !== undefined) {
+        metadata.title = updates.text;
+      }
+      if (updates.completed !== undefined) {
+        metadata.completed = updates.completed;
+        metadata.status = updates.completed ? 'completed' : 'todo';
+        metadata.completedAt = updates.completedAt ? new Date(updates.completedAt).toISOString() : null;
+        metadata.progress = updates.completed ? 100 : (metadata.progress || 0);
+      }
+      const serialized = serializeMarkdownFile(metadata, body);
+      const newSlug = (metadata.title || id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "task";
+      const newFilename = `${newSlug}-${id}.md`;
+      newFilePath = join(entityDir, newFilename);
+
+      if (newFilePath !== filePath) {
+        renamed = true;
+        writeFileSync(newFilePath, serialized, 'utf8');
+        try {
+          unlinkSync(filePath);
+        } catch {}
+      } else {
+        writeFileSync(filePath, serialized, 'utf8');
+      }
+    } else if (collectionName === 'events') {
+      if (updates.title !== undefined) {
+        metadata.title = updates.title;
+      }
+      if (updates.cancelled !== undefined) {
+        metadata.cancelled = updates.cancelled;
+      }
+      const serialized = serializeMarkdownFile(metadata, body);
+      const newSlug = (metadata.title || id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "event";
+      const newFilename = `${newSlug}-${id}.md`;
+      newFilePath = join(entityDir, newFilename);
+
+      if (newFilePath !== filePath) {
+        renamed = true;
+        writeFileSync(newFilePath, serialized, 'utf8');
+        try {
+          unlinkSync(filePath);
+        } catch {}
+      } else {
+        writeFileSync(filePath, serialized, 'utf8');
+      }
+    }
+
+    if (renamed) {
+      await pruneFolioFileFromDb(filePath, pb, folioRootPath);
+      await syncFolioFileToDb(newFilePath, pb, folioRootPath);
+    }
+  } catch (err) {
+    console.error(`[Sync Engine] Failed updating disk file for ${collectionName} ${id}:`, err);
+  }
+}
+
 export async function syncDailyLogFileToDb(
   filePath: string,
   pb: PocketBase,
-  dateString: string
+  dateString: string,
+  folioRootPath: string
 ): Promise<void> {
   if (!existsSync(filePath)) return;
 
   const content = readFileSync(filePath, 'utf8');
-  const parsedHabits = parseHabitsFromMarkdown(content);
+  
+  // Parse all entities (tasks, events, habits with ID tags)
+  const parsedEntities = parseDailyLogFile(content);
+  // Legacy habits by name mapping
+  const legacyHabitChecks = parseHabitsFromMarkdown(content);
 
   // Resolve user ID
   const userId = await getActiveUserId(pb);
@@ -1434,15 +1602,40 @@ export async function syncDailyLogFileToDb(
     return;
   }
 
-  // Fetch all active habits for the user
+  // Group entities
+  const parsedHabits = new Map<string, { checked: boolean; name: string }>();
+  const parsedTasks = new Map<string, { checked: boolean; title: string; notes: string[] }>();
+  const parsedEvents = new Map<string, { checked: boolean; title: string; notes: string[] }>();
+
+  for (const ent of parsedEntities) {
+    if (ent.type === 'hab') {
+      parsedHabits.set(ent.id, { checked: ent.checked, name: ent.title });
+    } else if (ent.type === 'tsk') {
+      parsedTasks.set(ent.id, { checked: ent.checked, title: ent.title, notes: ent.notes });
+    } else if (ent.type === 'evt') {
+      parsedEvents.set(ent.id, { checked: ent.checked, title: ent.title, notes: ent.notes });
+    }
+  }
+
+  // 1. Sync habits
   const habits = await pb.collection('habits').getFullList({
     filter: `user = "${userId}" && archived = false`,
   });
 
   for (const habit of habits) {
-    if (!parsedHabits.has(habit.name)) continue;
+    let checked = false;
+    let hasLogValue = false;
 
-    const checked = parsedHabits.get(habit.name)!;
+    if (parsedHabits.has(habit.id)) {
+      checked = parsedHabits.get(habit.id)!.checked;
+      hasLogValue = true;
+    } else if (legacyHabitChecks.has(habit.name)) {
+      checked = legacyHabitChecks.get(habit.name)!;
+      hasLogValue = true;
+    }
+
+    if (!hasLogValue) continue;
+
     const status = checked ? 'completed' : 'skipped';
 
     // Check if there is an existing log for this date and habit
@@ -1514,6 +1707,143 @@ export async function syncDailyLogFileToDb(
         lastLoggedDate,
         lastLoggedAt: Date.now(),
       });
+    }
+  }
+
+  // 2. Sync tasks
+  for (const [id, taskData] of parsedTasks.entries()) {
+    try {
+      const task = await pb.collection('tasks').getOne(id);
+      if (!task) continue;
+
+      let taskUpdated = false;
+      const updates: Record<string, any> = {};
+
+      if (task.completed !== taskData.checked) {
+        updates.completed = taskData.checked;
+        updates.completedAt = taskData.checked ? Date.now() : null;
+        taskUpdated = true;
+      }
+
+      if (task.text !== taskData.title) {
+        updates.text = taskData.title;
+        taskUpdated = true;
+      }
+
+      // Sync progress notes into history_logs
+      let historyLogs: any[] = [];
+      if (task.history_logs) {
+        historyLogs = typeof task.history_logs === 'string' ? JSON.parse(task.history_logs) : task.history_logs;
+      }
+      if (!Array.isArray(historyLogs)) {
+        historyLogs = [];
+      }
+
+      const filtered = historyLogs.filter((entry: any) => entry.date !== dateString);
+      
+      let notesChanged = false;
+      if (taskData.notes.length > 0) {
+        const todayNote = taskData.notes.join('\n');
+        const existingTodayEntry = historyLogs.find((entry: any) => entry.date === dateString);
+        if (!existingTodayEntry || existingTodayEntry.note !== todayNote) {
+          filtered.push({ date: dateString, note: todayNote });
+          updates.history_logs = filtered;
+          taskUpdated = true;
+          notesChanged = true;
+        }
+      } else {
+        const existingTodayEntry = historyLogs.find((entry: any) => entry.date === dateString);
+        if (existingTodayEntry) {
+          updates.history_logs = filtered;
+          taskUpdated = true;
+          notesChanged = true;
+        }
+      }
+
+      if (taskUpdated) {
+        await pb.collection('tasks').update(id, updates);
+
+        await updateDiskFileForEntity('tasks', id, pb, folioRootPath, {
+          text: updates.text,
+          completed: updates.completed,
+          completedAt: updates.completedAt,
+        });
+
+        if (notesChanged && taskData.notes.length > 0) {
+          const todayNote = taskData.notes.join('\n');
+          await ingestTaskNotes(pb, id, todayNote);
+        }
+      }
+    } catch (err) {
+      console.error(`[Sync Engine] Error syncing task ${id} from daily log:`, err);
+    }
+  }
+
+  // 3. Sync events
+  for (const [id, eventData] of parsedEvents.entries()) {
+    try {
+      const event = await pb.collection('events').getOne(id);
+      if (!event) continue;
+
+      let eventUpdated = false;
+      const updates: Record<string, any> = {};
+
+      const newCancelled = !eventData.checked;
+      if (event.cancelled !== newCancelled) {
+        updates.cancelled = newCancelled;
+        eventUpdated = true;
+      }
+
+      if (event.title !== eventData.title) {
+        updates.title = eventData.title;
+        eventUpdated = true;
+      }
+
+      // Sync progress notes into history_logs
+      let historyLogs: any[] = [];
+      if (event.history_logs) {
+        historyLogs = typeof event.history_logs === 'string' ? JSON.parse(event.history_logs) : event.history_logs;
+      }
+      if (!Array.isArray(historyLogs)) {
+        historyLogs = [];
+      }
+
+      const filtered = historyLogs.filter((entry: any) => entry.date !== dateString);
+
+      let notesChanged = false;
+      if (eventData.notes.length > 0) {
+        const todayNote = eventData.notes.join('\n');
+        const existingTodayEntry = historyLogs.find((entry: any) => entry.date === dateString);
+        if (!existingTodayEntry || existingTodayEntry.note !== todayNote) {
+          filtered.push({ date: dateString, note: todayNote });
+          updates.history_logs = filtered;
+          eventUpdated = true;
+          notesChanged = true;
+        }
+      } else {
+        const existingTodayEntry = historyLogs.find((entry: any) => entry.date === dateString);
+        if (existingTodayEntry) {
+          updates.history_logs = filtered;
+          eventUpdated = true;
+          notesChanged = true;
+        }
+      }
+
+      if (eventUpdated) {
+        await pb.collection('events').update(id, updates);
+
+        await updateDiskFileForEntity('events', id, pb, folioRootPath, {
+          title: updates.title,
+          cancelled: updates.cancelled,
+        });
+
+        if (notesChanged && eventData.notes.length > 0) {
+          const todayNote = eventData.notes.join('\n');
+          await ingestEventNotes(pb, id, todayNote, event.outcome || '');
+        }
+      }
+    } catch (err) {
+      console.error(`[Sync Engine] Error syncing event ${id} from daily log:`, err);
     }
   }
 }

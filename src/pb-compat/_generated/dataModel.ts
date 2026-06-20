@@ -118,6 +118,11 @@ export interface PbMessages extends PbRecord {
   };
 }
 
+export interface HistoryLogEntry {
+  date: string;
+  note: string;
+}
+
 export interface PbTasks extends PbRecord {
   collectionName: "tasks";
   user: PbId<"users">;
@@ -137,6 +142,7 @@ export interface PbTasks extends PbRecord {
   resources?: Array<PbResource>;
   reminderOffset?: number;
   scheduledNotificationId?: string;
+  history_logs?: Array<HistoryLogEntry>;
 }
 
 export interface PbUserProfile extends PbRecord {
@@ -195,6 +201,7 @@ export interface PbEvents extends PbRecord {
   resources?: Array<PbResource>;
   reminderOffset?: number;
   scheduledNotificationId?: string;
+  history_logs?: Array<HistoryLogEntry>;
 }
 
 export interface PbReflections extends PbRecord {
