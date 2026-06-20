@@ -70,6 +70,7 @@ export interface PbWorkspaces extends PbRecord {
 
   createdAt: number;
   archived?: boolean;
+  activeBranchLimit?: number;
 }
 
 export interface PbChatSessions extends PbRecord {
@@ -82,6 +83,13 @@ export interface PbChatSessions extends PbRecord {
   createdAt: number;
   lastActivity: number;
   pinned?: boolean;
+
+  isTrunk?: boolean;
+  parentSession?: PbId<"chat_sessions">;
+  branchedFromMessage?: PbId<"messages">;
+  branchedFromTimestamp?: number;
+  sessionType?: string;
+  archived?: boolean;
 }
 
 export interface PbMessages extends PbRecord {
@@ -143,6 +151,7 @@ export interface PbTasks extends PbRecord {
   reminderOffset?: number;
   scheduledNotificationId?: string;
   history_logs?: Array<HistoryLogEntry>;
+  origin_branch?: PbId<"chat_sessions">;
 }
 
 export interface PbUserProfile extends PbRecord {
@@ -202,6 +211,7 @@ export interface PbEvents extends PbRecord {
   reminderOffset?: number;
   scheduledNotificationId?: string;
   history_logs?: Array<HistoryLogEntry>;
+  origin_branch?: PbId<"chat_sessions">;
 }
 
 export interface PbReflections extends PbRecord {

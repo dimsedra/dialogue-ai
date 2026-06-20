@@ -2,7 +2,7 @@
 
 import { usePbWorkspace, usePbWorkspaceUpdate, usePbWorkspaceDelete } from "@/pb-compat";
 import type { PbId } from "@/pb-compat/_generated/dataModel";
-import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check, Archive, ArchiveRestore, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Bot, Palette, Sparkles, ChevronDown, Check, Archive, ArchiveRestore, Trash2, AlertTriangle, GitBranch } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -19,6 +19,7 @@ export default function WorkspaceSettingsPage() {
 
   const [workspaceColor, setWorkspaceColor] = useState("#d4a373");
   const [isArchived, setIsArchived] = useState(false);
+  const [activeBranchLimit, setActiveBranchLimit] = useState(3);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -50,6 +51,7 @@ export default function WorkspaceSettingsPage() {
     setPrevId(workspace.id);
     setWorkspaceColor(workspace.color || "#d4a373");
     setIsArchived(!!workspace.archived);
+    setActiveBranchLimit(workspace.activeBranchLimit ?? 3);
   }
 
   const isSpecialView = typeof workspaceId === "string" && ["calendar", "tasks", "events", "habits"].includes(workspaceId);
@@ -65,6 +67,7 @@ export default function WorkspaceSettingsPage() {
         id: workspaceId,
         color: workspaceColor,
         archived: isArchived,
+        activeBranchLimit: activeBranchLimit,
       });
       if (isArchived) {
         router.push("/");
@@ -147,6 +150,39 @@ export default function WorkspaceSettingsPage() {
                   onChange={(e) => setWorkspaceColor(e.target.value)}
                   className="w-full h-9 rounded-lg border border-[#2a2723] cursor-pointer bg-transparent [&::-webkit-color-swatch-wrapper]:p-1 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-none"
                 />
+                </div>
+              </motion.section>
+
+              {/* Active Branch Limit */}
+              <motion.section
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.038 }}
+                className="bg-[#1a1814] p-5 rounded-xl border border-[#2a2723] shadow-lg"
+              >
+                <div className="mb-4">
+                  <div className="flex items-center gap-2">
+                    <GitBranch className="w-4 h-4 text-[#d4a373]" />
+                    <h2 className="text-base font-bold text-[#f2efeb]">Active Branch Limit</h2>
+                  </div>
+                  <p className="text-[#a8a29e] text-[10px] mt-1">
+                    Set the maximum number of active topic branches allowed for this workspace (minimum 1, maximum 5).
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={activeBranchLimit}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val)) {
+                        setActiveBranchLimit(Math.max(1, Math.min(5, val)));
+                      }
+                    }}
+                    className="w-24 px-4 py-2 rounded-xl bg-[#0f0e0c] border border-[#2a2723] text-[#f2efeb] text-sm outline-none focus:border-[#d4a373]/50 transition-all font-medium"
+                  />
                 </div>
               </motion.section>
 

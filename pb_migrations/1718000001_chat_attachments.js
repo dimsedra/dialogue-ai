@@ -23,7 +23,7 @@ migrate(
     
     // Revert back to JSON
     messages.fields.removeByName("attachments");
-    messages.fields.add(new JsonField({ 
+    messages.fields.add(new JSONField({ 
       name: "attachments", 
       required: false 
     }));

@@ -152,7 +152,7 @@ export { usePbUserImagesList } from "./hooks/use-pb-images";
 // Mutations
 export { usePbWorkspaceCreate, usePbWorkspaceUpdate, usePbWorkspaceDelete } from "./hooks/use-pb-workspace-mutations";
 
-export { usePbSessionCreate, usePbSessionDelete, usePbSessionRename, usePbSessionTogglePin } from "./hooks/use-pb-session-mutations";
+export { usePbSessionCreate, usePbSessionDelete, usePbSessionRename, usePbSessionTogglePin, usePbSessionMerge } from "./hooks/use-pb-session-mutations";
 export { usePbTaskCreate, usePbTaskUpdate, usePbTaskToggleCompleted, usePbTaskDelete, usePbTasksRollOver } from "./hooks/use-pb-task-mutations";
 export { usePbEventCreate, usePbEventUpdate, usePbEventDelete, usePbEventCancelOccurrence, usePbEventUpdateOccurrence, usePbEventScheduleFocusBlock } from "./hooks/use-pb-event-mutations";
 export { usePbHabitCreate, usePbHabitLog, usePbHabitArchive, usePbHabitDelete } from "./hooks/use-pb-habit-mutations";

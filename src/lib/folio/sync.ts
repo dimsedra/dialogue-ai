@@ -306,6 +306,7 @@ export async function syncFolioFileToDb(
       reminderOffset,
       createdAt,
       completedAt,
+      origin_branch: metadata.origin_branch || null,
     };
 
     // Prevent circular writes & save processing if identical
@@ -322,7 +323,8 @@ export async function syncFolioFileToDb(
         existingRecord.progress === data.progress &&
         existingRecord.statusHook === data.statusHook &&
         existingRecord.reminderOffset === data.reminderOffset &&
-        existingRecord.completedAt === data.completedAt;
+        existingRecord.completedAt === data.completedAt &&
+        existingRecord.origin_branch === data.origin_branch;
 
       if (isIdentical) {
         return; // Skip update
@@ -371,6 +373,7 @@ export async function syncFolioFileToDb(
       reminderOffset,
       resources,
       series: metadata.series || null,
+      origin_branch: metadata.origin_branch || null,
     };
 
     if (existingRecord) {
@@ -389,7 +392,8 @@ export async function syncFolioFileToDb(
         JSON.stringify(existingRecord.recurrence) === JSON.stringify(data.recurrence) &&
         existingRecord.reminderOffset === data.reminderOffset &&
         JSON.stringify(existingRecord.resources) === JSON.stringify(data.resources) &&
-        existingRecord.series === data.series;
+        existingRecord.series === data.series &&
+        existingRecord.origin_branch === data.origin_branch;
 
       if (isIdentical) {
         return;
@@ -493,6 +497,7 @@ export async function syncWorkspaceFileToDb(
     agentName: metadata.agentName || '',
     createdAt: metadata.createdAt || Date.now(),
     archived: metadata.archived === true,
+    activeBranchLimit: typeof metadata.activeBranchLimit === 'number' ? metadata.activeBranchLimit : 3,
   };
 
   let existingRecord;
@@ -511,7 +516,8 @@ export async function syncWorkspaceFileToDb(
       existingRecord.color === data.color &&
       existingRecord.context === data.context &&
       existingRecord.agentName === data.agentName &&
-      existingRecord.archived === data.archived;
+      existingRecord.archived === data.archived &&
+      existingRecord.activeBranchLimit === data.activeBranchLimit;
 
     if (isIdentical) {
       return;
@@ -869,6 +875,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
           icon: 'Briefcase',
           color: '#d4a373',
           createdAt: Date.now(),
+          activeBranchLimit: 3,
         });
         
         if (!existsSync(workspacesParentPath)) {
@@ -889,6 +896,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
           color: '#d4a373',
           createdAt: personalRecord.createdAt,
           archived: false,
+          activeBranchLimit: 3,
         });
         writeFileSync(join(personalPath, '.workspace.yaml'), configContent, 'utf8');
         
@@ -947,6 +955,35 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
       }
     } catch (err) {
       console.error('[Sync Engine] Failed to migrate orphan records to Personal workspace:', err);
+    }
+  }
+
+  // Ensure every workspace has exactly one trunk session
+  if (activeUserIdForWs) {
+    try {
+      const userWorkspaces = await pb.collection('workspaces').getFullList({
+        filter: `user = "${activeUserIdForWs.replace(/"/g, '\\"')}"`,
+      });
+      for (const ws of userWorkspaces) {
+        const trunkSessionsList = await pb.collection('chat_sessions').getFullList({
+          filter: `workspace = "${ws.id}" && isTrunk = true`,
+        });
+        if (trunkSessionsList.length === 0) {
+          console.log(`[Sync Engine] Workspace ${ws.name} (${ws.id}) has no trunk session. Auto-creating one...`);
+          await pb.collection('chat_sessions').create({
+            user: activeUserIdForWs,
+            workspace: ws.id,
+            title: `${ws.name} Trunk`,
+            isTrunk: true,
+            sessionType: 'trunk',
+            pinned: true,
+            lastActivity: Date.now(),
+            createdAt: Date.now(),
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Sync Engine] Failed to reconcile workspace trunk sessions:', err);
     }
   }
 
@@ -1496,18 +1533,20 @@ export async function updateDiskFileForEntity(
   id: string,
   pb: PocketBase,
   folioRootPath: string,
-  updates: { text?: string; title?: string; completed?: boolean; completedAt?: number | null; cancelled?: boolean }
+  updates: { text?: string; title?: string; completed?: boolean; completedAt?: number | null; cancelled?: boolean; origin_branch?: string | null; appendNotes?: string }
 ) {
   try {
     const record = await pb.collection(collectionName).getOne(id);
     const workspaceId = record.workspace;
 
-    let basePath = folioRootPath;
-    if (workspaceId) {
-      const workspace = await pb.collection('workspaces').getOne(workspaceId);
-      const slug = workspace.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "workspace";
-      basePath = join(folioRootPath, 'workspaces', `${slug}-${workspaceId}`);
+    if (!workspaceId) {
+      console.warn(`[Sync Engine] Attempted to update disk file for ${collectionName} ${id} without workspace ID. Skipping.`);
+      return;
     }
+
+    const workspace = await pb.collection('workspaces').getOne(workspaceId);
+    const slug = workspace.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "workspace";
+    const basePath = join(folioRootPath, 'workspaces', `${slug}-${workspaceId}`);
 
     const folderName = collectionName === 'tasks' ? 'tasks' : 'events';
     const entityDir = join(basePath, folderName);
@@ -1520,6 +1559,16 @@ export async function updateDiskFileForEntity(
     const filePath = join(entityDir, targetFile);
     const content = readFileSync(filePath, 'utf8');
     const { metadata, body } = parseMarkdownFile(content);
+
+    let newBody = body;
+    if (updates.appendNotes) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      newBody = body.trim() + `\n\n[Activity Log - ${todayStr}]\n${updates.appendNotes}\n`;
+    }
+
+    if (updates.origin_branch !== undefined) {
+      metadata.origin_branch = updates.origin_branch;
+    }
 
     let renamed = false;
     let newFilePath = filePath;
@@ -1534,7 +1583,7 @@ export async function updateDiskFileForEntity(
         metadata.completedAt = updates.completedAt ? new Date(updates.completedAt).toISOString() : null;
         metadata.progress = updates.completed ? 100 : (metadata.progress || 0);
       }
-      const serialized = serializeMarkdownFile(metadata, body);
+      const serialized = serializeMarkdownFile(metadata, newBody);
       const newSlug = (metadata.title || id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "task";
       const newFilename = `${newSlug}-${id}.md`;
       newFilePath = join(entityDir, newFilename);
@@ -1555,7 +1604,7 @@ export async function updateDiskFileForEntity(
       if (updates.cancelled !== undefined) {
         metadata.cancelled = updates.cancelled;
       }
-      const serialized = serializeMarkdownFile(metadata, body);
+      const serialized = serializeMarkdownFile(metadata, newBody);
       const newSlug = (metadata.title || id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "event";
       const newFilename = `${newSlug}-${id}.md`;
       newFilePath = join(entityDir, newFilename);

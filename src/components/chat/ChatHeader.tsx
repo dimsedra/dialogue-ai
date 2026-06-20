@@ -1,4 +1,4 @@
-import { Menu, ClipboardList } from "lucide-react";
+import { Menu, ClipboardList, GitBranch } from "lucide-react";
 import { PbWorkspaces } from "@/pb-compat";
 import { NotificationBell } from "../notifications-bell";
 
@@ -15,6 +15,10 @@ interface ChatHeaderProps {
   onSignOut: () => void;
   onShowHistory: () => void;
   onShowTasks?: () => void;
+  isBranch?: boolean;
+  isArchived?: boolean;
+  onMerge?: () => void;
+  isMerging?: boolean;
 }
 
 export function ChatHeader(props: ChatHeaderProps) {
@@ -24,6 +28,10 @@ export function ChatHeader(props: ChatHeaderProps) {
     workspaces,
     onShowHistory,
     onShowTasks,
+    isBranch,
+    isArchived,
+    onMerge,
+    isMerging,
   } = props;
 
   return (
@@ -60,14 +68,30 @@ export function ChatHeader(props: ChatHeaderProps) {
           </div>
 
           {/* Column 2: Center (Session Title) */}
-          <div className="flex justify-center text-center">
+          <div className="flex justify-center text-center items-center gap-1.5">
+            {isBranch && <GitBranch className="w-4.5 h-4.5 text-[#d4a373] shrink-0" />}
             <h1 className="hidden lg:block text-xl font-bold text-[#f2efeb] tracking-tight truncate max-w-50 lg:max-w-md">
               {activeSessionTitle || "New Session"}
             </h1>
           </div>
 
-          {/* Column 3: Right (Planner Action Toggle & Notification Bell) */}
+          {/* Column 3: Right (Planner Action Toggle, Merge Branch, & Notification Bell) */}
           <div className="flex items-center justify-end gap-2">
+            {isBranch && !isArchived && onMerge && (
+              <button
+                onClick={onMerge}
+                disabled={isMerging}
+                className="py-1.5 px-3 rounded-lg bg-[#d4a373] text-[#0f0e0c] hover:bg-[#c39262] disabled:opacity-50 text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center shadow-md shrink-0"
+                title="Merge & Close Branch"
+              >
+                {isMerging ? "Merging..." : "Merge & Close"}
+              </button>
+            )}
+            {isBranch && isArchived && (
+              <span className="py-1.5 px-2.5 rounded-lg bg-[#2a2723] text-[#a8a29e] text-[9px] font-bold tracking-wider uppercase border border-[#2a2723]/80 select-none">
+                Archived
+              </span>
+            )}
             <NotificationBell />
             {onShowTasks && (
               <button
@@ -83,11 +107,29 @@ export function ChatHeader(props: ChatHeaderProps) {
       </header>
 
       {/* Mobile Session Title */}
-      <div className="lg:hidden px-6 py-1.5 border-b border-[#2a2723]/30 bg-[#12110e]">
-        <h1 className="text-xs font-bold text-[#a8a29e] uppercase tracking-[0.2em] truncate">
-          {activeSessionTitle || "New Session"}
-        </h1>
+      <div className="lg:hidden px-6 py-1.5 border-b border-[#2a2723]/30 bg-[#12110e] flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 truncate">
+          {isBranch && <GitBranch className="w-3.5 h-3.5 text-[#d4a373] shrink-0" />}
+          <h1 className="text-xs font-bold text-[#a8a29e] uppercase tracking-[0.2em] truncate">
+            {activeSessionTitle || "New Session"}
+          </h1>
+        </div>
+        {isBranch && !isArchived && onMerge && (
+          <button
+            onClick={onMerge}
+            disabled={isMerging}
+            className="py-1 px-2.5 rounded-md bg-[#d4a373] text-[#0f0e0c] text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 transition-all active:scale-95 shrink-0"
+          >
+            {isMerging ? "Merging..." : "Merge"}
+          </button>
+        )}
+        {isBranch && isArchived && (
+          <span className="py-0.5 px-2 rounded-md bg-[#2a2723] text-[#a8a29e] text-[9px] font-bold uppercase tracking-wider border border-[#2a2723]/80 select-none shrink-0">
+            Archived
+          </span>
+        )}
       </div>
     </>
   );
 }
+

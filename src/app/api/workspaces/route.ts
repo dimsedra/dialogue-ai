@@ -45,6 +45,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       icon,
       color,
       createdAt: Date.now(),
+      activeBranchLimit: 3,
+    });
+
+    // Create default trunk session for this workspace in PocketBase
+    await pb.collection('chat_sessions').create({
+      user: user.id,
+      workspace: record.id,
+      title: `${name} Trunk`,
+      isTrunk: true,
+      sessionType: 'trunk',
+      pinned: true,
+      lastActivity: Date.now(),
+      createdAt: Date.now(),
     });
 
     // Resolve folioRootPath
@@ -77,6 +90,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       color,
       createdAt: record.createdAt,
       archived: false,
+      activeBranchLimit: 3,
     });
     writeFileSync(join(workspacePath, '.workspace.yaml'), configContent, 'utf8');
 

@@ -1008,6 +1008,40 @@ describe('Workspace CONTEXT.md Sync', () => {
     expect(mockFiles[`${personalFolder}/CONTEXT.md`]).toContain('Casual daily companion space');
     expect(mockFiles[`${personalFolder}/CONTEXT.md`]).toContain('Indonesian mixed with English');
   });
+
+  test('reconcileFolio auto-creates trunk session if workspace lacks one', async () => {
+    // Disk and DB have workspace but no trunk session
+    for (const key of Object.keys(mockFiles)) {
+      delete mockFiles[key];
+    }
+    mockFiles['C:/Users/user/Dialogue Folio'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/system'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/system/CORE.md'] = '# Core Identity\n';
+    mockFiles['C:/Users/user/Dialogue Folio/system/USER.md'] = '# User Profile\n';
+
+    mockPb.collections.workspaces = createMockCollection([
+      {
+        id: 'wsnotrunk',
+        user: 'test-user-id',
+        name: 'Workspace No Trunk',
+      }
+    ]);
+    mockPb.collections.chat_sessions = createMockCollection([]);
+
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces/workspace-no-trunk-wsnotrunk'] = 'directory';
+    mockFiles['C:/Users/user/Dialogue Folio/workspaces/workspace-no-trunk-wsnotrunk/.workspace.yaml'] = `id: wsnotrunk\nname: Workspace No Trunk\n`;
+
+    await reconcileFolio(folioRoot, mockPb);
+
+    const trunkSessions = mockPb.collection('chat_sessions').items.filter(
+      (s: any) => s.workspace === 'wsnotrunk' && s.isTrunk === true
+    );
+    expect(trunkSessions).toHaveLength(1);
+    expect(trunkSessions[0].title).toBe('Workspace No Trunk Trunk');
+    expect(trunkSessions[0].sessionType).toBe('trunk');
+    expect(trunkSessions[0].pinned).toBe(true);
+  });
 });
+
 
 

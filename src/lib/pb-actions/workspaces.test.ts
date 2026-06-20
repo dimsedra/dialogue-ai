@@ -173,6 +173,7 @@ describe("PocketBase Actions: Workspaces & Configuration", () => {
       id: wsId,
       name: "Renamed Workspace",
       color: "#ffffff",
+      activeBranchLimit: 4,
     }, ctx);
 
     expect(result.success).toBe(true);
@@ -187,11 +188,13 @@ describe("PocketBase Actions: Workspaces & Configuration", () => {
     expect(yamlContent).toContain("name: Renamed Workspace");
     expect(yamlContent).toContain("color: \"#ffffff\"");
     expect(yamlContent).toContain("id: ws123");
+    expect(yamlContent).toContain("activeBranchLimit: 4");
 
     // Verify DB update
     const dbWs = mockCollections.workspaces.find(w => w.id === wsId);
     expect(dbWs.name).toBe("Renamed Workspace");
     expect(dbWs.color).toBe("#ffffff");
+    expect(dbWs.activeBranchLimit).toBe(4);
   });
 
   test("reconcileFolio auto-creates missing .workspace.yaml file from DB cache", async () => {

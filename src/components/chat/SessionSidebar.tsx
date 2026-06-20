@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard, ChevronDown, Bot } from "lucide-react";
+import { Plus, Settings, ChevronLeft, Edit3, X, Check, Pin, PinOff, MoreVertical, Trash2, LayoutDashboard, ChevronDown, Bot, GitBranch, Archive } from "lucide-react";
 import { motion } from "framer-motion";
 import { usePbSessionRename, usePbSessionTogglePin, PbChatSessions, PbWorkspaces } from "@/pb-compat";
 
@@ -47,6 +47,7 @@ export function SessionSidebar({
   const [editTitle, setEditTitle] = useState("");
   const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
   const [selectedWsId, setSelectedWsId] = useState<string | undefined>(undefined);
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const activeSession = sessions?.find(s => s._id === activeSessionId);
 
   const renameSession = usePbSessionRename();
@@ -93,17 +94,26 @@ export function SessionSidebar({
     };
   }, [actionMenuSessionId, isLargeViewport]);
 
-  const pinnedSessions = useMemo(() => {
-    if (!sessions) return [];
-    return sessions
-      .filter((s) => s.pinned)
-      .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
+  const trunkSession = useMemo(() => {
+    if (!sessions) return null;
+    return sessions.find((s) => s.isTrunk);
   }, [sessions]);
 
-  const historySessions = useMemo(() => {
+  const activeBranches = useMemo(() => {
     if (!sessions) return [];
     return sessions
-      .filter((s) => !s.pinned)
+      .filter((s) => !s.isTrunk && !s.archived)
+      .sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return (b.lastActivity || 0) - (a.lastActivity || 0);
+      });
+  }, [sessions]);
+
+  const archivedBranches = useMemo(() => {
+    if (!sessions) return [];
+    return sessions
+      .filter((s) => !s.isTrunk && s.archived)
       .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
   }, [sessions]);
 
@@ -142,6 +152,7 @@ export function SessionSidebar({
         ) : (
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1">
+                {!session.isTrunk && session.pinned && <Pin className="w-3 h-3 text-[#d4a373] shrink-0" />}
                 <span className="text-sm font-medium truncate">{session.title}</span>
               </div>
             </div>
@@ -315,26 +326,47 @@ export function SessionSidebar({
             .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #d4a373; }
           `}</style>
           <div className="flex-1 overflow-y-auto px-3 py-2 lg:py-4 space-y-0.5 lg:space-y-1 custom-scrollbar">
-            {pinnedSessions.length > 0 && (
+            {trunkSession && (
               <div className="mb-4">
-                <div className="px-3 sticky top-0 bg-[#1a1814] py-1.5 z-10 flex items-center gap-1">
-                  <Pin className="w-2.5 h-2.5 text-[#d4a373]" />
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#d4a373]">Pinned</span>
+                <div className="px-3 sticky top-0 bg-[#1a1814] py-1.5 z-10 flex items-center gap-1.5">
+                  <Bot className="w-2.5 h-2.5 text-[#d4a373]" />
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#d4a373]">Companion Trunk</span>
                 </div>
                 <div className="space-y-0.5 lg:space-y-1">
-                  {pinnedSessions.map(renderSessionItem)}
+                  {renderSessionItem(trunkSession)}
                 </div>
               </div>
             )}
 
-            {historySessions.length > 0 && (
-              <div>
-                <div className="px-3 sticky top-0 bg-[#1a1814] py-1.5 z-10">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/50">History</span>
+            {activeBranches.length > 0 && (
+              <div className="mb-4">
+                <div className="px-3 sticky top-0 bg-[#1a1814] py-1.5 z-10 flex items-center gap-1.5">
+                  <GitBranch className="w-2.5 h-2.5 text-[#a8a29e]/50" />
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/50">Active Branches</span>
                 </div>
                 <div className="space-y-0.5 lg:space-y-1">
-                  {historySessions.map(renderSessionItem)}
+                  {activeBranches.map(renderSessionItem)}
                 </div>
+              </div>
+            )}
+
+            {archivedBranches.length > 0 && (
+              <div className="mt-4 border-t border-[#2a2723]/30 pt-3">
+                <button
+                  onClick={() => setArchivedOpen(!archivedOpen)}
+                  className="w-full px-3 py-1.5 flex items-center justify-between text-[#a8a29e]/50 hover:text-[#a8a29e] transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Archive className="w-2.5 h-2.5" />
+                    <span className="text-[9px] font-bold uppercase tracking-widest">Archived ({archivedBranches.length})</span>
+                  </div>
+                  <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${archivedOpen ? "rotate-180" : ""}`} />
+                </button>
+                {archivedOpen && (
+                  <div className="space-y-0.5 lg:space-y-1 mt-1">
+                    {archivedBranches.map(renderSessionItem)}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -411,16 +443,18 @@ export function SessionSidebar({
               /* Actions Mode */
               <>
                 <div className="py-2">
-                  <button
-                    onClick={() => handleTogglePin(session._id)}
-                    className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-[#f2efeb] active:bg-[#2a2723] transition-all"
-                  >
-                    {session.pinned 
-                      ? <PinOff className="w-5 h-5 text-[#d4a373]" />
-                      : <Pin className="w-5 h-5 text-[#a8a29e]" />
-                    }
-                    <span className="text-sm font-medium">{session.pinned ? "Unpin Session" : "Pin Session"}</span>
-                  </button>
+                  {!session.isTrunk && (
+                    <button
+                      onClick={() => handleTogglePin(session._id)}
+                      className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-[#f2efeb] active:bg-[#2a2723] transition-all"
+                    >
+                      {session.pinned 
+                        ? <PinOff className="w-5 h-5 text-[#d4a373]" />
+                        : <Pin className="w-5 h-5 text-[#a8a29e]" />
+                      }
+                      <span className="text-sm font-medium">{session.pinned ? "Unpin Session" : "Pin Session"}</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => {
@@ -433,16 +467,18 @@ export function SessionSidebar({
                     <span className="text-sm font-medium">Rename Session</span>
                   </button>
 
-                  <button
-                    onClick={(e) => {
-                      setActionMenuSessionId(null);
-                      onDeleteChat(session._id, e as unknown as React.MouseEvent);
-                    }}
-                    className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-red-400 active:bg-[#2a2723] transition-all"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                    <span className="text-sm font-medium">Delete Session</span>
-                  </button>
+                  {!session.isTrunk && (
+                    <button
+                      onClick={(e) => {
+                        setActionMenuSessionId(null);
+                        onDeleteChat(session._id, e as unknown as React.MouseEvent);
+                      }}
+                      className="w-full flex items-center gap-4 px-5 py-3.5 text-left text-red-400 active:bg-[#2a2723] transition-all"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                      <span className="text-sm font-medium">Delete Session</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Cancel */}
@@ -472,13 +508,15 @@ export function SessionSidebar({
             style={{ top: dropdownAnchor.top, left: dropdownAnchor.left }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={(e) => { handleTogglePin(session._id, e); }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
-            >
-              {session.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-              {session.pinned ? "Unpin" : "Pin"}
-            </button>
+            {!session.isTrunk && (
+              <button
+                onClick={(e) => { handleTogglePin(session._id, e); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
+              >
+                {session.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                {session.pinned ? "Unpin" : "Pin"}
+              </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); startEditing(session._id, session.title || "", e); setActionMenuSessionId(null); setDropdownAnchor(null); }}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-[#f2efeb] hover:bg-[#d4a373]/10 hover:text-[#d4a373] transition-colors text-left"
@@ -486,14 +524,18 @@ export function SessionSidebar({
               <Edit3 className="w-3.5 h-3.5" />
               Rename
             </button>
-            <div className="border-t border-[#2a2723]/50 my-1" />
-            <button
-              onClick={(e) => { e.stopPropagation(); setActionMenuSessionId(null); setDropdownAnchor(null); onDeleteChat(session._id, e); }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-red-400 hover:bg-red-500/10 transition-colors text-left"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Delete
-            </button>
+            {!session.isTrunk && (
+              <>
+                <div className="border-t border-[#2a2723]/50 my-1" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); setActionMenuSessionId(null); setDropdownAnchor(null); onDeleteChat(session._id, e); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </>
+            )}
           </div>,
           document.body
         );

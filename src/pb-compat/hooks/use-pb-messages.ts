@@ -1,6 +1,16 @@
 import { definePaginatedQuery } from "../use-paginated-query";
 
-export const usePbMessagesPaginated = definePaginatedQuery<{ sessionId: string }>({
+export const usePbMessagesPaginated = definePaginatedQuery<{
+  sessionId: string;
+  parentSessionId?: string;
+  branchedFromTimestamp?: number;
+}>({
   collection: "messages",
-  buildFilter: (args) => `session = "${args.sessionId}"`,
+  buildFilter: (args) => {
+    if (args.parentSessionId && args.branchedFromTimestamp) {
+      return `session = "${args.sessionId}" || (session = "${args.parentSessionId}" && timestamp <= ${args.branchedFromTimestamp})`;
+    }
+    return `session = "${args.sessionId}"`;
+  },
 });
+

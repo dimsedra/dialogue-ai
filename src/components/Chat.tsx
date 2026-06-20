@@ -10,6 +10,7 @@ import {
   usePbMessageUpdate,
   usePbSessionCreate,
   usePbSessionDelete,
+  usePbSessionMerge,
   usePbTaskCreate,
   usePbEventCreate,
   usePbEventUpdate,
@@ -45,6 +46,7 @@ import { WorkspaceRail } from "./chat/WorkspaceRail";
 import { SessionSidebar } from "./chat/SessionSidebar";
 import { ChatHeader } from "./chat/ChatHeader";
 import { MessageStream } from "./chat/MessageStream";
+import { BranchSessionModal } from "./chat/BranchSessionModal";
 import { ChatInput } from "./chat/ChatInput";
 import { ToolApprovalCard } from "./chat/ToolApprovalCard";
 import { motion } from "framer-motion";
@@ -485,6 +487,8 @@ export function Chat({
             triggerAutoTitle={triggerAutoTitle}
             pendingInitialMessageRef={pendingInitialMessageRef}
             activeSyncRef={activeSyncRef}
+            setActiveSessionIdAction={setActiveSessionIdAction}
+            setActiveWorkspaceIdAction={setActiveWorkspaceIdAction}
           />
         )}
       </motion.div>
@@ -543,6 +547,8 @@ interface ActiveChatProps {
   triggerAutoTitle: any;
   pendingInitialMessageRef: React.MutableRefObject<{ sessionId: string; text: string } | null>;
   activeSyncRef: React.MutableRefObject<(() => void) | null>;
+  setActiveSessionIdAction: (id: string | null) => void;
+  setActiveWorkspaceIdAction: (id: string | undefined, sessionId?: string | null) => void;
 }
 
 function ActiveChat({
@@ -581,6 +587,8 @@ function ActiveChat({
   triggerAutoTitle,
   pendingInitialMessageRef,
   activeSyncRef,
+  setActiveSessionIdAction,
+  setActiveWorkspaceIdAction,
 }: ActiveChatProps) {
 
   const idMapRef = useRef<Map<string, string>>(new Map());
@@ -588,15 +596,42 @@ function ActiveChat({
   const [localScopes, setLocalScopes] = useState<Record<string, Scope>>({});
   const [isTyping, setIsTyping] = useState(false);
 
+  const mergeSession = usePbSessionMerge();
+  const createSession = usePbSessionCreate();
+
+  const [branchingMessage, setBranchingMessage] = useState<{ id: string; timestamp: number } | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
+
   // Clear local scopes and mappings when activeSessionId changes
   useEffect(() => {
     setLocalScopes({});
     sdkToDbIdRef.current.clear();
   }, [activeSessionId]);
 
+  const activeSession = useMemo(() => {
+    return sessions?.find((s: PbChatSessions) => s._id === activeSessionId || s.id === activeSessionId);
+  }, [sessions, activeSessionId]);
+
+  const isBranch = activeSession?.sessionType === 'branch';
+  const isArchived = activeSession?.archived === true;
+  const isTrunk = activeSession?.isTrunk === true || activeSession?.sessionType === 'trunk';
+
+  const queryArgs = useMemo(() => {
+    if (!activeSessionId) return "skip" as const;
+    const s = sessions?.find(x => x._id === activeSessionId || x.id === activeSessionId);
+    if (s?.parentSession && s?.branchedFromTimestamp) {
+      return {
+        sessionId: activeSessionId,
+        parentSessionId: s.parentSession,
+        branchedFromTimestamp: s.branchedFromTimestamp,
+      };
+    }
+    return { sessionId: activeSessionId };
+  }, [activeSessionId, sessions]);
+
   const messagesPaginated = usePbPaginatedQuery(
     usePbMessagesPaginated,
-    activeSessionId ? { sessionId: activeSessionId } : "skip",
+    queryArgs,
     { initialNumItems: 50 },
   );
 
@@ -613,6 +648,48 @@ function ActiveChat({
       sessionId: msg.sessionId || msg.session,
     }));
   }, [messagesPaginated.results, messagesPaginated.status, activeSessionId]);
+
+  const handleBranchInit = useCallback((messageId: string, timestamp: number) => {
+    setBranchingMessage({ id: messageId, timestamp });
+  }, []);
+
+  const handleBranchConfirm = useCallback(async (title: string) => {
+    if (!branchingMessage || !activeWorkspaceId || !activeSessionId) return;
+    try {
+      const newSessionId = await createSession({
+        workspaceId: activeWorkspaceId,
+        title,
+        sessionType: "branch",
+        parentSession: activeSessionId,
+        branchedFromMessage: branchingMessage.id,
+        branchedFromTimestamp: branchingMessage.timestamp,
+      });
+      setActiveSessionIdAction(newSessionId);
+    } catch (err) {
+      console.error("Failed to create topic branch:", err);
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBranchingMessage(null);
+    }
+  }, [branchingMessage, activeWorkspaceId, activeSessionId, createSession, setActiveSessionIdAction]);
+
+  const handleMerge = useCallback(async () => {
+    if (!activeSessionId) return;
+    setIsMerging(true);
+    try {
+      await mergeSession({ sessionId: activeSessionId });
+      if (activeSession?.parentSession) {
+        setActiveSessionIdAction(activeSession.parentSession);
+      } else {
+        setActiveSessionIdAction(null);
+      }
+    } catch (err) {
+      console.error("Failed to merge topic branch:", err);
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsMerging(false);
+    }
+  }, [activeSessionId, activeSession, mergeSession, setActiveSessionIdAction]);
 
   const loadOlderMessages = useCallback(() => {
     if (messagesPaginated.status === "CanLoadMore") {
@@ -1068,6 +1145,10 @@ function ActiveChat({
         onSignOut={signOut}
         onShowHistory={() => setShowHistoryAction(true)}
         onShowTasks={onShowTasksAction}
+        isBranch={isBranch}
+        isArchived={isArchived}
+        onMerge={handleMerge}
+        isMerging={isMerging}
       />
 
       <MessageStream
@@ -1083,6 +1164,8 @@ function ActiveChat({
         canLoadOlder={messagesPaginated.status === "CanLoadMore"}
         isLoadingOlder={false}
         provider={provider}
+        isTrunk={isTrunk}
+        onBranch={handleBranchInit}
       >
         {pendingApprovals.length > 0 && (
           <div className="space-y-2 px-4">
@@ -1108,6 +1191,13 @@ function ActiveChat({
         setActiveScope={setActiveScopeAction}
         onSend={handleSend}
         onChatInputResize={onChatInputResizeAction}
+      />
+
+      <BranchSessionModal
+        isOpen={!!branchingMessage}
+        onConfirm={handleBranchConfirm}
+        onCancel={() => setBranchingMessage(null)}
+        isLargeViewport={isLargeViewport}
       />
     </>
   );

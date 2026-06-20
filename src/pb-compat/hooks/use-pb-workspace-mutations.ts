@@ -45,6 +45,7 @@ export function usePbWorkspaceUpdate() {
       color?: string;
       defaultAgentPersonaId?: string | null;
       archived?: boolean;
+      activeBranchLimit?: number;
     },
     { success: boolean }
   >(defineAction("updateWorkspace"));
@@ -56,6 +57,7 @@ export function usePbWorkspaceUpdate() {
     color?: string;
     defaultAgentPersonaId?: string | null;
     archived?: boolean;
+    activeBranchLimit?: number;
   }) => {
     if (!user) throw new Error("Unauthorized");
     await runUpdate(args);

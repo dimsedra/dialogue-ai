@@ -207,9 +207,19 @@ interface MessageBubbleProps {
   agentName?: string;
   isStreaming?: boolean;
   provider?: string;
+  isTrunk?: boolean;
+  onBranch?: (messageId: string, timestamp: number) => void;
 }
 
-export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeViewport, agentName, isStreaming = false, provider }: MessageBubbleProps) {
+export const MessageBubble = React.memo(function MessageBubble({
+  msg,
+  isLargeViewport,
+  agentName,
+  isStreaming = false,
+  provider,
+  isTrunk,
+  onBranch,
+}: MessageBubbleProps) {
   const smoothedText = useSmoothText(msg.text, isStreaming);
   const timeFormat = useTimeFormat();
 
@@ -253,7 +263,7 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      className="flex flex-col py-6 lg:py-8 border-b border-[#2a2723]/15 last:border-b-0 w-full min-w-0"
+      className="flex flex-col py-6 lg:py-8 border-b border-[#2a2723]/15 last:border-b-0 w-full min-w-0 group/bubble"
     >
       <div className={`flex flex-col space-y-3 w-fit max-w-[85%] ${
         msg.author === "User" ? "ml-auto" : "mr-auto"
@@ -278,6 +288,15 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
         <span className="text-[9px] text-[#a8a29e]/40 font-bold tracking-widest uppercase">
           {formatTime(msg.timestamp, timeFormat)}
         </span>
+        {isTrunk && onBranch && (
+          <button
+            onClick={() => onBranch(msg._id, msg.timestamp)}
+            className="opacity-0 group-hover/bubble:opacity-100 p-1 rounded hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all ml-1 shrink-0"
+            title="Branch from this message"
+          >
+            <Layers className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Message Content Area */}
@@ -519,6 +538,8 @@ export const MessageBubble = React.memo(function MessageBubble({ msg, isLargeVie
     prev.isLargeViewport === next.isLargeViewport &&
     prev.agentName === next.agentName &&
     prev.isStreaming === next.isStreaming &&
-    (prev.msg.toolCalls?.length ?? 0) === (next.msg.toolCalls?.length ?? 0)
+    (prev.msg.toolCalls?.length ?? 0) === (next.msg.toolCalls?.length ?? 0) &&
+    prev.isTrunk === next.isTrunk &&
+    prev.onBranch === next.onBranch
   );
 });

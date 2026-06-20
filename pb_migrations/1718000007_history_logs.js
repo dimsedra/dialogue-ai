@@ -4,12 +4,12 @@ migrate(
     const tasks = app.findCollectionByNameOrId("tasks");
     const events = app.findCollectionByNameOrId("events");
 
-    tasks.fields.add(new JsonField({
+    tasks.fields.add(new JSONField({
       name: "history_logs",
       required: false
     }));
 
-    events.fields.add(new JsonField({
+    events.fields.add(new JSONField({
       name: "history_logs",
       required: false
     }));

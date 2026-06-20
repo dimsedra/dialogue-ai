@@ -41,6 +41,8 @@ interface MessageStreamProps {
   isLoadingOlder?: boolean;
   provider?: string;
   children?: React.ReactNode;
+  isTrunk?: boolean;
+  onBranch?: (messageId: string, timestamp: number) => void;
 }
 
 export const MessageStream = React.memo(function MessageStream({
@@ -57,6 +59,8 @@ export const MessageStream = React.memo(function MessageStream({
   isLoadingOlder,
   provider,
   children,
+  isTrunk,
+  onBranch,
 }: MessageStreamProps) {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const mainScrollRef = useRef<HTMLElement>(null);
@@ -327,6 +331,8 @@ export const MessageStream = React.memo(function MessageStream({
                       agentName={agentName}
                       isStreaming={isTyping && index === messages.length - 1 && msg.author === "AI"}
                       provider={provider}
+                      isTrunk={isTrunk}
+                      onBranch={onBranch}
                     />
                   ))}
 

@@ -69,6 +69,7 @@ export async function createDialogueAgent(
   workspace?: Workspace,
   folioName?: string | null,
   folioRootPath?: string | null,
+  isBranch?: boolean,
 ) {
   const personaName = 'Dialogue';
   const personaPrompt = 'You build relationships through concrete behaviors, not prescribed tones.';
@@ -347,6 +348,14 @@ You have access to the user's local ${folioDisplay}:
 - \`searchFolioContent\`: Search text in files
 
 All paths are relative to your active workspace base path. Do NOT output raw file content paths in responses unless requested.`;
+  }
+
+  if (isBranch) {
+    instructions += `\n\n## Focus Lock Mode (Topic Branch)
+You are currently executing within a specialized topic branch. 
+CRITICAL RULES:
+1. Stay strictly focused on the current topic or task. Do NOT suggest new unrelated tasks, ask general daily briefing questions, do habit check-ins, or prompt for morning greetings.
+2. Focus entirely on resolving the user's immediate request/discussion for this branch.`;
   }
 
   const allTools = {

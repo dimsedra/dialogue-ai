@@ -31,7 +31,7 @@ export const addTaskTool = createTool({
     const user = pb.authStore.record?.id;
     if (!user) throw new Error("Unauthorized");
     
-    const { folioRootPath, basePath } = getFolioContext();
+    const { folioRootPath, basePath, activeSessionId } = getFolioContext();
 
     // Generate a new stable 15-character alphanumeric ID
     const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -54,6 +54,15 @@ export const addTaskTool = createTool({
       createdAt: new Date().toISOString(),
       completedAt: null,
     };
+
+    if (activeSessionId) {
+      try {
+        const session = await pb.collection("chat_sessions").getOne(activeSessionId);
+        if (session && session.sessionType === 'branch') {
+          metadata.origin_branch = activeSessionId;
+        }
+      } catch {}
+    }
 
     const notes = input.notes || '';
     const fileContent = serializeMarkdownFile(metadata, notes);

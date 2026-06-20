@@ -14,6 +14,7 @@ interface UpdateWorkspaceArgs {
   context?: string;
   agentName?: string;
   archived?: boolean;
+  activeBranchLimit?: number;
 }
 
 export const updateWorkspace: PbActionHandler<
@@ -66,6 +67,7 @@ export const updateWorkspace: PbActionHandler<
       agentName: record.agentName || "",
       createdAt: record.createdAt,
       archived: record.archived || false,
+      activeBranchLimit: record.activeBranchLimit ?? 3,
     };
   }
 
@@ -76,6 +78,7 @@ export const updateWorkspace: PbActionHandler<
   if (args.context !== undefined) metadata.context = args.context;
   if (args.agentName !== undefined) metadata.agentName = args.agentName;
   if (args.archived !== undefined) metadata.archived = args.archived;
+  if (args.activeBranchLimit !== undefined) metadata.activeBranchLimit = args.activeBranchLimit;
 
   const serialized = serializeWorkspaceYaml(metadata);
 

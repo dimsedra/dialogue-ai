@@ -54,7 +54,7 @@ export const addEventTool = createTool({
     const user = pb.authStore.record?.id;
     if (!user) throw new Error("Unauthorized");
 
-    const { folioRootPath, basePath: contextBasePath } = getFolioContext();
+    const { folioRootPath, basePath: contextBasePath, activeSessionId } = getFolioContext();
 
     // 1. Resolve workspace basePath
     const activeWorkspace = input.workspaceId || "";
@@ -95,7 +95,7 @@ export const addEventTool = createTool({
     const filename = `${slug}-${eventId}.md`;
     const filePath = join(eventsDir, filename);
 
-    const metadata = {
+    const metadata: Record<string, any> = {
       id: eventId,
       title: input.title,
       description: input.description || "",
@@ -110,6 +110,15 @@ export const addEventTool = createTool({
       reminderOffset: input.reminderOffset !== undefined ? input.reminderOffset : null,
       createdAt: new Date().toISOString(),
     };
+
+    if (activeSessionId) {
+      try {
+        const session = await pb.collection("chat_sessions").getOne(activeSessionId);
+        if (session && session.sessionType === 'branch') {
+          metadata.origin_branch = activeSessionId;
+        }
+      } catch {}
+    }
 
     const serialized = serializeMarkdownFile(metadata, input.notes || "");
     writeFileSync(filePath, serialized, "utf8");

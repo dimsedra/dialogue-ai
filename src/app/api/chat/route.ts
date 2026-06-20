@@ -257,6 +257,19 @@ export async function POST(req: Request) {
       }
     }
 
+    // Resolve session branching state
+    let isBranch = false;
+    if (isPb && pbClient && sessionId) {
+      try {
+        const sessionRecord = await pbClient.collection('chat_sessions').getOne(sessionId);
+        if (sessionRecord && sessionRecord.sessionType === 'branch') {
+          isBranch = true;
+        }
+      } catch (err) {
+        console.warn(`[Chat API] Could not fetch session record for ${sessionId} to determine branch state:`, err);
+      }
+    }
+
     // Create a dynamic agent configured with the user's provider settings, profile, and persona
     const dynamicAgent = await createDialogueAgent(
       provider, 
@@ -274,6 +287,7 @@ export async function POST(req: Request) {
       userWorkspace,
       folioName,
       folioRootPath,
+      isBranch,
     );
     
     // File-based LibSQL ensures approval snapshots survive across HTTP requests
@@ -310,7 +324,7 @@ export async function POST(req: Request) {
 
     // Run agent execution within the PB authenticated context
     const executeStream = async () => {
-      return folioRequestContext.run({ folioRootPath, activeWorkspace, basePath }, () => {
+      return folioRequestContext.run({ folioRootPath, activeWorkspace, basePath, activeSessionId: sessionId || undefined }, () => {
         return handleChatStream({
           mastra: tempMastra,
           agentId: 'dialogueAgent',
