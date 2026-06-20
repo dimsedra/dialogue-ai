@@ -30,8 +30,6 @@ export function buildSessionsListFilter(
       const escapedWs = wsId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       filter += ` && workspace = "${escapedWs}"`;
     }
-  } else if (!args?.allWorkspaces) {
-    filter += ` && (workspace = null || workspace = "")`;
   }
   return filter;
 }

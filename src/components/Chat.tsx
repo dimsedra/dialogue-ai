@@ -247,16 +247,17 @@ export function Chat({
     title: string;
   } | null>(null);
 
+  const [showDashboard, setShowDashboard] = useState(true);
+
   useEffect(() => {
-    if (
-      activeWorkspaceId &&
-      sessions &&
-      sessions.length > 0 &&
-      !activeSessionId
-    ) {
-      setActiveSessionIdAction(sessions[0]._id);
+    if (!showDashboard && activeWorkspaceId && sessions) {
+      if (sessions.length > 0 && !activeSessionId) {
+        setActiveSessionIdAction(sessions[0]._id);
+      } else if (sessions.length === 0) {
+        void handleNewChat(activeWorkspaceId);
+      }
     }
-  }, [sessions, activeSessionId, setActiveSessionIdAction, activeWorkspaceId]);
+  }, [sessions, activeSessionId, setActiveSessionIdAction, activeWorkspaceId, showDashboard]);
 
   // ---- Sync handler (used by both the sidebar button and TaskPanel) ----
   const handleSync = async () => {
@@ -268,7 +269,7 @@ export function Chat({
     const syncText = "Sync my workspace.";
     const id = await createSession({
       title: `Sync - ${new Date().toLocaleDateString()}`,
-      workspaceId: activeWorkspaceId,
+      workspaceId: activeWorkspaceId as string,
     });
     
     pendingInitialMessageRef.current = { sessionId: id, text: syncText };
@@ -324,7 +325,11 @@ export function Chat({
     workspaceOverride?: string | null,
     initialMessage?: string,
   ) => {
-    const wsId = workspaceOverride === null ? undefined : workspaceOverride || activeWorkspaceId;
+    const wsId = (workspaceOverride && workspaceOverride !== null) ? workspaceOverride : activeWorkspaceId;
+    if (!wsId) {
+      console.error("[Chat] Cannot create new session: no active workspace");
+      return;
+    }
     const title = initialMessage
       ? initialMessage.length > 30
         ? initialMessage.substring(0, 30) + "..."
@@ -335,7 +340,7 @@ export function Chat({
       title,
       workspaceId: wsId,
     });
-    if (wsId !== activeWorkspaceId && wsId) {
+    if (wsId !== activeWorkspaceId) {
       setActiveWorkspaceIdAction(wsId);
     }
 
@@ -344,6 +349,7 @@ export function Chat({
     }
 
     setActiveSessionIdAction(id);
+    setShowDashboard(false);
     if (!isLargeViewport) {
       setShowHistoryAction(false);
     }
@@ -359,6 +365,7 @@ export function Chat({
         setActiveWorkspaceIdAction(session.workspace);
       }
       setActiveSessionIdAction(id);
+      setShowDashboard(false);
       if (!isLargeViewport) {
         setShowHistoryAction(false);
       }
@@ -373,6 +380,21 @@ export function Chat({
     ],
   );
 
+  const handleSelectWorkspace = useCallback((id: string | undefined) => {
+    setActiveWorkspaceIdAction(id);
+    setShowDashboard(false);
+  }, [setActiveWorkspaceIdAction]);
+
+  const handleShowDashboard = useCallback(() => {
+    setShowDashboard(true);
+    setActiveSessionIdAction(null as any);
+  }, [setActiveSessionIdAction]);
+
+  const handleSelectSession = useCallback((id: string) => {
+    setActiveSessionIdAction(id);
+    setShowDashboard(false);
+  }, [setActiveSessionIdAction]);
+
   return (
     <div className="flex-1 flex overflow-hidden h-full relative">
       {/* Workspace Rail (The Focus) - Hidden on Mobile */}
@@ -380,9 +402,11 @@ export function Chat({
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         showHistory={showHistory}
-        onSelectWorkspace={(id) => setActiveWorkspaceIdAction(id)}
+        onSelectWorkspace={handleSelectWorkspace}
         onOpenCreateModal={() => setIsCreatingWorkspace(true)}
         onShowHistory={() => setShowHistoryAction(true)}
+        showDashboard={showDashboard}
+        onShowDashboard={handleShowDashboard}
       />
 
       {/* Sessions Sidebar */}
@@ -394,15 +418,18 @@ export function Chat({
         activeWorkspaceId={activeWorkspaceId}
         showHistory={showHistory}
         isLargeViewport={isLargeViewport}
-        onSelectSession={(id) => setActiveSessionIdAction(id)}
-        onSelectWorkspaceSession={(wsId, sessionId) =>
-          setActiveWorkspaceIdAction(wsId, sessionId)
-        }
+        onSelectSession={handleSelectSession}
+        onSelectWorkspaceSession={(wsId, sessionId) => {
+          setActiveWorkspaceIdAction(wsId, sessionId);
+          setShowDashboard(false);
+        }}
         onNewChat={handleNewChat}
         onDeleteChat={handleDeleteChat}
-        onSelectWorkspace={(id) => setActiveWorkspaceIdAction(id)}
+        onSelectWorkspace={handleSelectWorkspace}
         onOpenCreateWorkspace={() => setIsCreatingWorkspace(true)}
         onCloseHistory={() => setShowHistoryAction(false)}
+        showDashboard={showDashboard}
+        onShowDashboard={handleShowDashboard}
       />
 
       {/* Main Content Area */}
@@ -410,7 +437,7 @@ export function Chat({
         layout={isLoaded ? "x" : false}
         className="flex-1 flex flex-col h-full min-w-0 relative bg-[#0f0e0c] overflow-hidden"
       >
-        {!activeWorkspaceId && !activeSessionId ? (
+        {showDashboard && !activeSessionId ? (
           <Dashboard
             workspaces={workspaces}
             sessions={allSessions}

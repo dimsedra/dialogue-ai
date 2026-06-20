@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SignInForm } from "@/components/auth/SignInForm";
 import { Scope } from "@/components/chat/types";
 import { usePushSync } from "@/hooks/usePushSync";
-import { useAuth } from "@/pb-compat/auth";
+import { useAuth, usePbWorkspacesList } from "@/pb-compat";
 
 export default function Home() {
   usePushSync();
@@ -18,6 +18,22 @@ export default function Home() {
     string | undefined
   >(undefined);
   const [activeScope, setActiveScope] = useState<Scope | null>(null);
+
+  const pbAuth = useAuth();
+  const workspaces = usePbWorkspacesList();
+
+  useEffect(() => {
+    if (workspaces && workspaces.length > 0 && activeWorkspaceId === undefined) {
+      const personal = workspaces.find(
+        (w) => w.name.toLowerCase() === "personal"
+      );
+      if (personal) {
+        setActiveWorkspaceId(personal.id);
+      } else {
+        setActiveWorkspaceId(workspaces[0].id);
+      }
+    }
+  }, [workspaces, activeWorkspaceId]);
 
   // Clear session when workspace changes
   const handleWorkspaceChange = useCallback(
@@ -168,8 +184,6 @@ export default function Home() {
     }
   }, [isLargeViewport, handleSetShowTasks]);
 
-  const pbAuth = useAuth();
-  
   if (pbAuth.isLoading) {
     return <div className="min-h-screen bg-[#0f0e0c] flex items-center justify-center">Loading...</div>;
   }

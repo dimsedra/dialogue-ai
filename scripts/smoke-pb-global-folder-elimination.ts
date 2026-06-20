@@ -1,6 +1,6 @@
 (process.env as any).NODE_ENV = "test";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync, mkdirSync, copyFileSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync, copyFileSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,7 +55,7 @@ if (!existsSync(PB_BIN)) {
 }
 
 // Setup temp dirs
-const tempDir = mkdtempSync(join(tmpdir(), "pb-ws-init-smoke-"));
+const tempDir = mkdtempSync(join(tmpdir(), "pb-global-folder-elim-"));
 const dataDir = join(tempDir, "pb_data");
 mkdirSync(dataDir, { recursive: true });
 
@@ -82,7 +82,7 @@ async function main() {
   const url = `http://127.0.0.1:${port}`;
   process.env.NEXT_PUBLIC_PB_URL = url;
 
-  console.log("=== End-to-End Workspace Auto-creation Smoke Test ===");
+  console.log("=== End-to-End Global Folder Elimination & Orphan Migration Smoke Test ===");
   console.log(`  tempDir:    ${tempDir}`);
   console.log(`  tempFolio:  ${tempFolio}`);
   console.log(`  port:       ${port}`);
@@ -146,7 +146,7 @@ async function main() {
       password: userPassword,
       passwordConfirm: userPassword,
       verified: true,
-      name: "Dialogue Explorer",
+      name: "Dialogue User",
     });
     const userId = userRecord.id;
     console.log(`  Created user: ${userEmail} (ID: ${userId})`);
@@ -155,40 +155,95 @@ async function main() {
     userPb.autoCancellation(false);
     await userPb.collection("users").authWithPassword(userEmail, userPassword);
 
-    console.log("\n--- Scenario: Running reconcileFolio on empty directory ---");
-    // Trigger reconciliation
+    // Pass 1: Run reconcileFolio once to create default Personal workspace
+    console.log("\nRunning first-pass reconcileFolio to initialize workspaces...");
     await reconcileFolio(tempFolio, userPb);
 
-    // 1. Verify disk workspace structure
-    const workspacesDir = join(tempFolio, "workspaces");
-    assert(existsSync(workspacesDir), "workspaces directory was created on disk");
-
-    const folders = readdirSync(workspacesDir);
-    assert(folders.length === 1, `Exactly one workspace folder was created: ${folders[0]}`);
-
-    const personalFolder = join(workspacesDir, folders[0]);
-    assert(folders[0].startsWith("personal-"), "Default workspace folder name starts with 'personal-'");
-
-    const yamlPath = join(personalFolder, ".workspace.yaml");
-    assert(existsSync(yamlPath), ".workspace.yaml config file was created");
-    const yamlContent = readFileSync(yamlPath, "utf8");
-    assert(yamlContent.includes("name: Personal"), ".workspace.yaml contains 'name: Personal'");
-
-    const contextPath = join(personalFolder, "CONTEXT.md");
-    assert(existsSync(contextPath), "CONTEXT.md context file was created");
-    const contextContent = readFileSync(contextPath, "utf8");
-    assert(contextContent.includes("# Personal"), "CONTEXT.md header is '# Personal'");
-    assert(contextContent.includes("- User prefers Indonesian mixed with English"), "CONTEXT.md contains preferred language user notes");
-
-    // 2. Verify PocketBase DB workspace cache record
     const workspacesInDb = await adminPb.collection("workspaces").getFullList({
       filter: `user = "${userId}"`,
     });
-    assert(workspacesInDb.length === 1, `Exactly one workspace record exists in PocketBase: ${workspacesInDb[0].name}`);
-    const record = workspacesInDb[0];
-    assert(record.name === "Personal", "DB workspace record name is 'Personal'");
-    assert(record.icon === "Briefcase", "DB workspace record icon is 'Briefcase'");
-    assert(record.color === "#d4a373", "DB workspace record color is '#d4a373'");
+    assert(workspacesInDb.length === 1, "Personal workspace was auto-created");
+    const personalWsId = workspacesInDb[0].id;
+    console.log(`  Personal Workspace ID: ${personalWsId}`);
+
+    const personalWsFolder = `personal-${personalWsId}`;
+    const personalWsPath = join(tempFolio, "workspaces", personalWsFolder);
+
+    // 2. Pre-create orphan records in PocketBase (without workspace)
+    console.log("\nCreating orphan records in DB...");
+    const orphanTask = await adminPb.collection("tasks").create({
+      user: userId,
+      text: "Orphan Task Text",
+      createdAt: Date.now(),
+      completed: false,
+      workspace: "", // no workspace
+    });
+    const orphanEvent = await adminPb.collection("events").create({
+      user: userId,
+      title: "Orphan Event",
+      startTime: Date.now(),
+      createdAt: Date.now(),
+      eventType: "point",
+      workspace: "", // no workspace
+    });
+    const orphanSession = await adminPb.collection("chat_sessions").create({
+      user: userId,
+      title: "Orphan Session",
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+      workspace: "", // no workspace
+    });
+
+    // 3. Write task/event files inside the Personal workspace so they don't get pruned
+    console.log("Writing corresponding files to Personal workspace on disk...");
+    const wsTasksDir = join(personalWsPath, "tasks");
+    const wsEventsDir = join(personalWsPath, "events");
+    mkdirSync(wsTasksDir, { recursive: true });
+    mkdirSync(wsEventsDir, { recursive: true });
+
+    writeFileSync(join(wsTasksDir, `task-${orphanTask.id}.md`), `---\nid: ${orphanTask.id}\ntext: Orphan Task Text\ncompleted: false\n---\n# Orphan Task`, "utf8");
+    writeFileSync(join(wsEventsDir, `event-${orphanEvent.id}.md`), `---\nid: ${orphanEvent.id}\ntitle: Orphan Event\nstartTime: ${new Date(orphanEvent.startTime).toISOString()}\neventType: point\n---\n# Orphan Event`, "utf8");
+
+    // 4. Pre-create legacy global folders and files on disk (which should be ignored)
+    console.log("Creating legacy global folders and files on disk...");
+    const globalTasksDir = join(tempFolio, "tasks");
+    const globalEventsDir = join(tempFolio, "events");
+    mkdirSync(globalTasksDir, { recursive: true });
+    mkdirSync(globalEventsDir, { recursive: true });
+
+    writeFileSync(join(globalTasksDir, "task-legacy1.md"), "---\nid: legacy1\ntext: Legacy Task\n---\n# Legacy Task", "utf8");
+    writeFileSync(join(globalEventsDir, "event-legacy2.md"), "---\nid: legacy2\ntitle: Legacy Event\n---\n# Legacy Event", "utf8");
+
+    // 5. Trigger second reconciliation to run the migration logic
+    console.log("\nTriggering second reconcileFolio for migration verification...");
+    await reconcileFolio(tempFolio, userPb);
+
+    // 6. Verify orphan records are migrated
+    console.log("\nVerifying DB orphan migrations...");
+    const updatedTask = await adminPb.collection("tasks").getOne(orphanTask.id);
+    assert(updatedTask.workspace === personalWsId, "Orphan task was migrated to Personal workspace");
+
+    const updatedEvent = await adminPb.collection("events").getOne(orphanEvent.id);
+    assert(updatedEvent.workspace === personalWsId, "Orphan event was migrated to Personal workspace");
+
+    const updatedSession = await adminPb.collection("chat_sessions").getOne(orphanSession.id);
+    assert(updatedSession.workspace === personalWsId, "Orphan session was migrated to Personal workspace");
+
+    // 7. Verify legacy global files were NOT synced
+    console.log("\nVerifying legacy global folder files were ignored...");
+    try {
+      await adminPb.collection("tasks").getOne("legacy1");
+      assert(false, "Legacy global task should NOT exist in DB");
+    } catch (err: any) {
+      assert(err?.status === 404, "Legacy global task was correctly ignored (not found in DB)");
+    }
+
+    try {
+      await adminPb.collection("events").getOne("legacy2");
+      assert(false, "Legacy global event should NOT exist in DB");
+    } catch (err: any) {
+      assert(err?.status === 404, "Legacy global event was correctly ignored (not found in DB)");
+    }
 
   } catch (err: any) {
     console.error("smoke: test failed with error:", err);

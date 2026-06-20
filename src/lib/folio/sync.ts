@@ -87,10 +87,7 @@ export function resolveEntityFromPath(filePath: string, folioRootPath: string): 
   let filename = '';
   
   if (parts.length === 2) {
-    if (parts[0] === 'tasks' || parts[0] === 'events') {
-      collectionName = parts[0] as 'tasks' | 'events';
-      filename = parts[1];
-    } else if (parts[0] === 'daily-logs' && parts[1].endsWith('.md')) {
+    if (parts[0] === 'daily-logs' && parts[1].endsWith('.md')) {
       const id = parts[1].slice(0, -3); // remove .md
       return { id, collectionName: 'daily_logs', workspaceId: null };
     } else if (parts[0] === 'system' && (parts[1] === 'memories.md' || parts[1] === 'MEMORIES.md')) {
@@ -629,14 +626,6 @@ export function findEntityFileOnDisk(id: string, collectionName: string, folioRo
     return null;
   }
 
-  // Check global tasks/events directories
-  const globalDir = join(folioRootPath, collectionName);
-  if (existsSync(globalDir)) {
-    const files = readdirSync(globalDir);
-    const matched = files.find((f) => extractIdFromFilename(f) === id && f.endsWith('.md'));
-    if (matched) return join(globalDir, matched);
-  }
-
   // Check new style workspaces folder
   const workspacesParent = join(folioRootPath, 'workspaces');
   if (existsSync(workspacesParent)) {
@@ -913,6 +902,54 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
     }
   }
 
+  // Migrate existing orphan records (tasks, events, chat sessions with no workspace) to the user's Personal workspace
+  if (activeUserIdForWs) {
+    try {
+      const personalWsList = await pb.collection('workspaces').getFullList({
+        filter: `user = "${activeUserIdForWs.replace(/"/g, '\\"')}" && name = "Personal"`,
+      });
+      let personalWorkspaceId: string | null = null;
+      if (personalWsList.length > 0) {
+        personalWorkspaceId = personalWsList[0].id;
+      } else {
+        const allWs = await pb.collection('workspaces').getFullList({
+          filter: `user = "${activeUserIdForWs.replace(/"/g, '\\"')}"`,
+        });
+        if (allWs.length > 0) {
+          personalWorkspaceId = allWs[0].id;
+        }
+      }
+
+      if (personalWorkspaceId) {
+        const orphanTasks = await pb.collection('tasks').getFullList({
+          filter: 'workspace = null || workspace = ""',
+        });
+        for (const task of orphanTasks) {
+          console.log(`[Sync Engine] Migrating orphan task ${task.id} to workspace ${personalWorkspaceId}`);
+          await pb.collection('tasks').update(task.id, { workspace: personalWorkspaceId });
+        }
+
+        const orphanEvents = await pb.collection('events').getFullList({
+          filter: 'workspace = null || workspace = ""',
+        });
+        for (const event of orphanEvents) {
+          console.log(`[Sync Engine] Migrating orphan event ${event.id} to workspace ${personalWorkspaceId}`);
+          await pb.collection('events').update(event.id, { workspace: personalWorkspaceId });
+        }
+
+        const orphanSessions = await pb.collection('chat_sessions').getFullList({
+          filter: 'workspace = null || workspace = ""',
+        });
+        for (const sess of orphanSessions) {
+          console.log(`[Sync Engine] Migrating orphan chat session ${sess.id} to workspace ${personalWorkspaceId}`);
+          await pb.collection('chat_sessions').update(sess.id, { workspace: personalWorkspaceId });
+        }
+      }
+    } catch (err) {
+      console.error('[Sync Engine] Failed to migrate orphan records to Personal workspace:', err);
+    }
+  }
+
   // Migrate existing memories' source_id if their workspace folder is now in workspaces/
   const wsParentPath = join(folioRootPath, 'workspaces');
   if (existsSync(wsParentPath)) {
@@ -973,8 +1010,6 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   };
 
   // Global folders
-  scanFolder(join(folioRootPath, 'tasks'));
-  scanFolder(join(folioRootPath, 'events'));
   scanFolder(join(folioRootPath, 'daily-logs'));
   
   // Global memories file

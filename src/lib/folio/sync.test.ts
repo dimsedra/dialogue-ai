@@ -332,11 +332,7 @@ describe('Path to Entity Resolver', () => {
       'C:/Users/user/Dialogue Folio/tasks/task-lh7p5oqw2n8xxyz.md',
       folioRoot
     );
-    expect(resolved).toEqual({
-      id: 'lh7p5oqw2n8xxyz',
-      collectionName: 'tasks',
-      workspaceId: null,
-    });
+    expect(resolved).toBeNull();
   });
 
   test('resolves workspace events', () => {

@@ -137,8 +137,10 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
     if (fs.existsSync(folioRootPath)) {
       fs.rmSync(folioRootPath, { recursive: true, force: true });
     }
-    fs.mkdirSync(join(folioRootPath, "events"), { recursive: true });
+    fs.mkdirSync(join(folioRootPath, "workspaces", "workspace-ws123", "events"), { recursive: true });
   });
+
+  const getEventsDir = () => join(folioRootPath, "workspaces", "workspace-ws123", "events");
 
   afterEach(() => {
     process.env.DEV_LOCAL_PATH = originalEnv;
@@ -156,6 +158,7 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
         eventType: "point",
         reminderOffset: 15,
         notes: "Remember agenda",
+        workspaceId: "ws123",
       },
       ctx
     );
@@ -163,8 +166,7 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
     expect(res.id).toBeDefined();
 
     // Check file on disk
-    const eventsDir = join(folioRootPath, "events");
-    const files = fs.readdirSync(eventsDir);
+    const files = fs.readdirSync(getEventsDir());
     expect(files).toHaveLength(1);
     expect(files[0]).toBe(`team-meeting-${res.id}.md`);
 
@@ -185,12 +187,13 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
         title: "Old Title",
         startTime: new Date("2026-06-20T10:00:00Z").getTime(),
         eventType: "point",
+        workspaceId: "ws123",
       },
       ctx
     );
 
     const oldFilename = `old-title-${res.id}.md`;
-    expect(fs.existsSync(join(folioRootPath, "events", oldFilename))).toBe(true);
+    expect(fs.existsSync(join(getEventsDir(), oldFilename))).toBe(true);
 
     // Perform title update
     await updateEvent(
@@ -202,8 +205,8 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
     );
 
     const newFilename = `new-title-${res.id}.md`;
-    expect(fs.existsSync(join(folioRootPath, "events", newFilename))).toBe(true);
-    expect(fs.existsSync(join(folioRootPath, "events", oldFilename))).toBe(false);
+    expect(fs.existsSync(join(getEventsDir(), newFilename))).toBe(true);
+    expect(fs.existsSync(join(getEventsDir(), oldFilename))).toBe(false);
 
     // Verify DB cache updated
     const record = mockItems.find((i) => i.id === res.id);
@@ -218,6 +221,7 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
         startTime: new Date("2026-06-20T10:00:00Z").getTime(),
         eventType: "point",
         reminderOffset: 10,
+        workspaceId: "ws123",
       },
       ctx
     );
@@ -229,7 +233,7 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
     await deleteEvent({ eventId: res.id }, ctx);
 
     // Verify file deleted
-    const files = fs.readdirSync(join(folioRootPath, "events"));
+    const files = fs.readdirSync(getEventsDir());
     expect(files).toHaveLength(0);
 
     // Verify DB pruned
@@ -249,6 +253,7 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
           frequency: "weekly",
           interval: 1,
         },
+        workspaceId: "ws123",
       },
       ctx
     );
@@ -273,12 +278,12 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
     expect(detachedId).not.toBe(parentId);
 
     // Verify parent file has exceptions added
-    const parentFileContent = fs.readFileSync(join(folioRootPath, "events", `weekly-workout-${parentId}.md`), "utf8");
+    const parentFileContent = fs.readFileSync(join(getEventsDir(), `weekly-workout-${parentId}.md`), "utf8");
     expect(parentFileContent).toContain("exceptions");
     expect(parentFileContent).toContain(String(originalTime));
 
     // Verify detached occurrence file created with series link
-    const detachedFileContent = fs.readFileSync(join(folioRootPath, "events", `special-gym-day-${detachedId}.md`), "utf8");
+    const detachedFileContent = fs.readFileSync(join(getEventsDir(), `special-gym-day-${detachedId}.md`), "utf8");
     expect(detachedFileContent).toContain(`series: ${parentId}`);
 
     // Verify DB cache has both events
@@ -286,6 +291,7 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
     expect(parentRecord).toBeDefined();
     expect(parentRecord.recurrence.exceptions).toContain(originalTime);
 
+    // Verify detached record
     const detachedRecord = mockItems.find((i) => i.id === detachedId);
     expect(detachedRecord).toBeDefined();
     expect(detachedRecord.title).toBe("Special Gym Day");
@@ -303,6 +309,7 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
           frequency: "weekly",
           interval: 1,
         },
+        workspaceId: "ws123",
       },
       ctx
     );
@@ -320,11 +327,11 @@ describe("PocketBase Actions: Events & JIT Detachment", () => {
     );
 
     // Verify parent file has exception added
-    const parentFileContent = fs.readFileSync(join(folioRootPath, "events", `weekly-class-${parentId}.md`), "utf8");
+    const parentFileContent = fs.readFileSync(join(getEventsDir(), `weekly-class-${parentId}.md`), "utf8");
     expect(parentFileContent).toContain(String(originalTime));
 
     // Verify no new files created (only parent remains)
-    const files = fs.readdirSync(join(folioRootPath, "events"));
+    const files = fs.readdirSync(getEventsDir());
     expect(files).toHaveLength(1);
 
     // Verify DB updated

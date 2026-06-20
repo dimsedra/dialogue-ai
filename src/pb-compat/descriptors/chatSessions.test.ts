@@ -7,8 +7,8 @@ import {
 } from "./chatSessions";
 
 describe("chatSessions: buildSessionsListFilter", () => {
-  it("filters by user and workspace_agnostic when no workspace is specified", () => {
-    expect(buildSessionsListFilter({ userId: "user123" })).toBe('user = "user123" && (workspace = null || workspace = "")');
+  it("filters by user only when no workspace is specified", () => {
+    expect(buildSessionsListFilter({ userId: "user123" })).toBe('user = "user123"');
   });
 
   it("filters by user and workspace when workspaceId is specified", () => {

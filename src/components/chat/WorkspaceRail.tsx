@@ -10,6 +10,8 @@ interface WorkspaceRailProps {
   onSelectWorkspace: (id: string | undefined) => void;
   onOpenCreateModal: () => void;
   onShowHistory: () => void;
+  showDashboard?: boolean;
+  onShowDashboard?: () => void;
 }
 
 export function WorkspaceRail({ 
@@ -18,7 +20,9 @@ export function WorkspaceRail({
   showHistory, 
   onSelectWorkspace, 
   onOpenCreateModal,
-  onShowHistory
+  onShowHistory,
+  showDashboard = false,
+  onShowDashboard
 }: WorkspaceRailProps) {
   return (
     <nav className="hidden lg:flex w-21 h-full shrink-0 border-r border-[#2a2723] bg-linear-to-b from-[#141210] to-[#0f0e0c] flex-col items-center pb-8 z-50 relative">
@@ -45,15 +49,15 @@ export function WorkspaceRail({
       {/* Dashboard - replaces the old Dialogue branding icon */}
       <div className="w-full h-24 flex items-center justify-center shrink-0">
         <button
-          onClick={() => onSelectWorkspace(undefined)}
+          onClick={onShowDashboard}
           className={`w-12 h-12 rounded-[20px] flex items-center justify-center transition-all duration-300 border shrink-0 group relative ${
-            !activeWorkspaceId 
+            showDashboard 
               ? "bg-[#d4a373] border-[#d4a373] shadow-[0_0_20px_rgba(212,163,115,0.3)] scale-110" 
               : "bg-[#1a1814] border-[#2a2723] text-[#a8a29e] hover:border-[#d4a373]/30 hover:text-[#f2efeb] hover:scale-110 active:scale-95"
           }`}
         >
-          <LayoutDashboard className={`w-6 h-6 transition-transform duration-300 ${!activeWorkspaceId ? "text-[#0f0e0c] scale-110" : "group-hover:rotate-12"}`} />
-          {!activeWorkspaceId && (
+          <LayoutDashboard className={`w-6 h-6 transition-transform duration-300 ${showDashboard ? "text-[#0f0e0c] scale-110" : "group-hover:rotate-12"}`} />
+          {showDashboard && (
             <motion.div 
               layoutId="active-ws"
               className="absolute -left-3 w-1.5 h-8 bg-[#d4a373] rounded-r-full shadow-[2px_0_10px_rgba(212,163,115,0.5)] z-20"
@@ -73,22 +77,22 @@ export function WorkspaceRail({
             <button
               onClick={() => onSelectWorkspace(ws._id)}
               className={`w-12 h-12 rounded-[20px] flex items-center justify-center transition-all duration-300 border text-xs font-bold uppercase relative group/btn ${
-                activeWorkspaceId === ws._id 
+                activeWorkspaceId === ws._id && !showDashboard
                   ? "bg-[#d4a373]/10 border-[#d4a373] text-[#d4a373] shadow-[0_0_15px_rgba(212,163,115,0.15)] scale-110" 
                   : "bg-[#1a1814] border-[#2a2723] text-[#a8a29e] hover:border-[#d4a373]/30 hover:text-[#f2efeb] hover:scale-105"
               }`}
             >
               <div className="flex flex-col items-center gap-1">
-                <span className={`transition-all duration-300 ${activeWorkspaceId === ws._id ? "text-[#f2efeb] scale-110" : "text-[#a8a29e]"}`}>
+                <span className={`transition-all duration-300 ${activeWorkspaceId === ws._id && !showDashboard ? "text-[#f2efeb] scale-110" : "text-[#a8a29e]"}`}>
                   {ws.name.substring(0, 2)}
                 </span>
                 <div 
-                  className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${activeWorkspaceId === ws._id ? "scale-125 shadow-[0_0_8px_rgba(0,0,0,0.5)]" : "opacity-40"}`} 
+                  className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${activeWorkspaceId === ws._id && !showDashboard ? "scale-125 shadow-[0_0_8px_rgba(0,0,0,0.5)]" : "opacity-40"}`} 
                   style={{ backgroundColor: ws.color }} 
                 />
               </div>
             </button>
-            {activeWorkspaceId === ws._id && (
+            {activeWorkspaceId === ws._id && !showDashboard && (
               <motion.div 
                 layoutId="active-ws"
                 className="absolute left-0 w-1.5 h-8 bg-[#d4a373] rounded-r-full shadow-[2px_0_10px_rgba(212,163,115,0.4)] z-20"

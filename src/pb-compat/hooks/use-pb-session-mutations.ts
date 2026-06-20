@@ -6,11 +6,12 @@ import type { PbChatSessions } from "../_generated/dataModel";
 export function usePbSessionCreate() {
   const { user } = useAuth();
   const mutate = useMutation<PbChatSessions>({ collection: "chat_sessions", kind: "create" });
-  return async (args: { workspaceId?: string; title?: string }) => {
+  return async (args: { workspaceId: string; title?: string }) => {
     if (!user) throw new Error("Unauthorized");
+    if (!args.workspaceId) throw new Error("workspaceId is required");
     const record = await mutate({
       user: user.id as any,
-      workspace: (args.workspaceId || undefined) as any,
+      workspace: args.workspaceId as any,
       title: args.title || "New Session",
       pinned: false,
       lastActivity: Date.now(),

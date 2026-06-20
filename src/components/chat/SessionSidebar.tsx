@@ -20,6 +20,8 @@ interface SessionSidebarProps {
   onSelectWorkspace: (id: string | undefined) => void;
   onOpenCreateWorkspace: () => void;
   onCloseHistory: () => void;
+  showDashboard?: boolean;
+  onShowDashboard?: () => void;
 }
 
 export function SessionSidebar({
@@ -37,6 +39,8 @@ export function SessionSidebar({
   onSelectWorkspace,
   onOpenCreateWorkspace,
   onCloseHistory,
+  showDashboard = false,
+  onShowDashboard,
 }: SessionSidebarProps) {
   // Own state — isolated from Chat.tsx to prevent cross-component re-renders
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -107,11 +111,7 @@ export function SessionSidebar({
     <div
       key={session._id}
       onClick={() => {
-        if (!activeWorkspaceId && session.workspace) {
-          onSelectWorkspaceSession(session.workspace, session._id);
-        } else {
-          onSelectSession(session._id);
-        }
+        onSelectSession(session._id);
         if (!isLargeViewport) {
           onCloseHistory();
         }
@@ -144,18 +144,6 @@ export function SessionSidebar({
               <div className="flex items-center gap-1">
                 <span className="text-sm font-medium truncate">{session.title}</span>
               </div>
-
-              {!activeWorkspaceId && session.workspace && (
-                <div className="flex items-center gap-1.5">
-                  <div 
-                    className="w-1 h-1 rounded-full" 
-                    style={{ backgroundColor: workspaces?.find(w => w._id === session.workspace)?.color }} 
-                  />
-                  <span className="text-[8px] font-bold uppercase tracking-wider text-[#a8a29e]/50 truncate">
-                    {workspaces?.find(w => w._id === session.workspace)?.name}
-                  </span>
-                </div>
-              )}
             </div>
         )}
       </div>
@@ -217,10 +205,10 @@ export function SessionSidebar({
           {/* Mobile Workspace Rail (Inside the Drawer) */}
           <div className="lg:hidden w-18 h-full bg-[#141210] border-r border-[#2a2723] flex flex-col items-center pt-10 pb-6 gap-6 shrink-0">
             <button 
-              onClick={() => onSelectWorkspace(undefined)}
-              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${!activeWorkspaceId ? 'bg-[#d4a373] shadow-lg shadow-[#d4a373]/20' : 'bg-[#0f0e0c] border border-[#2a2723] text-[#a8a29e]'}`}
+              onClick={onShowDashboard}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${showDashboard ? 'bg-[#d4a373] shadow-lg shadow-[#d4a373]/20' : 'bg-[#0f0e0c] border border-[#2a2723] text-[#a8a29e]'}`}
             >
-              <LayoutDashboard className={`w-5 h-5 ${!activeWorkspaceId ? 'text-[#0f0e0c]' : ''}`} />
+              <LayoutDashboard className={`w-5 h-5 ${showDashboard ? 'text-[#0f0e0c]' : ''}`} />
             </button>
             
             <div className="w-8 h-px bg-[#2a2723]" />
@@ -235,7 +223,7 @@ export function SessionSidebar({
                 <button
                   key={ws._id}
                   onClick={() => onSelectWorkspace(ws._id)}
-                  className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center transition-all ${activeWorkspaceId === ws._id ? 'ring-2 ring-[#d4a373] ring-offset-2 ring-offset-[#141210]' : 'bg-[#0f0e0c] border border-[#2a2723]'}`}
+                  className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center transition-all ${activeWorkspaceId === ws._id && !showDashboard ? 'ring-2 ring-[#d4a373] ring-offset-2 ring-offset-[#141210]' : 'bg-[#0f0e0c] border border-[#2a2723]'}`}
                 >
                   <span className="text-lg">{ws.icon && ws.icon.length < 3 ? ws.icon : ws.name[0]}</span>
                 </button>
@@ -274,15 +262,15 @@ export function SessionSidebar({
                   <div
                     className="w-2 h-2 rounded-full"
                     style={{
-                      backgroundColor: activeWorkspaceId
-                        ? (workspaces?.find(w => w._id === activeWorkspaceId)?.color || "#d4a373")
-                        : "#d4a373"
+                      backgroundColor: showDashboard
+                        ? "#d4a373"
+                        : (workspaces?.find(w => w._id === activeWorkspaceId)?.color || "#d4a373")
                     }}
                   />
                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#f2efeb] flex items-center gap-1.5">
-                    {activeWorkspaceId 
-                      ? workspaces?.find(w => w._id === activeWorkspaceId)?.name 
-                      : "Dashboard"}
+                    {showDashboard 
+                      ? "Dashboard" 
+                      : (workspaces?.find(w => w._id === activeWorkspaceId)?.name || "")}
                   </span>
                 </div>
                 <button
@@ -296,41 +284,27 @@ export function SessionSidebar({
             </header>
 
             <div className="px-4 pb-4 pt-1 shrink-0 bg-transparent">
-              {!activeWorkspaceId ? (
-                <div className="flex flex-col gap-2 w-full">
-                  <button 
-                    onClick={() => onNewChat(null)}
-                    className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    New Session
-                  </button>
-                </div>
-              ) : (
-                (() => {
+              <div className="flex flex-col gap-2 w-full">
+                <button 
+                  onClick={() => onNewChat()}
+                  className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Session
+                </button>
+                {!showDashboard && (() => {
                   const ws = workspaces?.find(w => w._id === activeWorkspaceId);
-                  return (
-                    <div className="flex flex-col gap-2 w-full">
-                      <button 
-                        onClick={() => onNewChat()}
-                        className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        New Session
-                      </button>
-                      {ws && (
-                        <Link
-                          href={`/workspace/${ws._id}`}
-                          className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
-                        >
-                          <Settings className="w-3.5 h-3.5" />
-                          Settings
-                        </Link>
-                      )}
-                    </div>
-                  );
-                })()
-              )}
+                  return ws ? (
+                    <Link
+                      href={`/workspace/${ws._id}`}
+                      className="w-full flex items-center justify-start gap-2.5 py-2 px-4 rounded-xl bg-[#2a2723] hover:bg-[#3a3733] text-[#a8a29e] hover:text-[#f2efeb] text-[11px] font-bold transition-all duration-300"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      Settings
+                    </Link>
+                  ) : null;
+                })()}
+              </div>
             </div>
 
           
