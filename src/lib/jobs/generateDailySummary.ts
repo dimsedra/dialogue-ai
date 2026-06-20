@@ -204,7 +204,14 @@ export async function generateDailySummary(
         .map((m) => `${m.author === "user" ? "User" : "Companion"}: ${m.text}`)
         .join("\n");
 
-    const prompt = `You are a helpful AI productivity assistant. Read the following chat transcript from today for a single conversation session. Write a brief, high-density summary (1-2 sentences) of what was discussed, accomplished, or decided in this thread today. Do not include past context, meta-commentary, or introductory phrases. Be direct.
+    const prompt = `You are the journaling engine of Dialogue. Read the following chat transcript from today for a single conversation session.
+Write a brief, high-density summary (1-2 sentences) of what the user discussed, accomplished, decided, or felt in this thread today.
+
+CRITICAL RULES:
+1. Focus 100% on the user (their thoughts, actions, mood, and decisions).
+2. NEVER mention the assistant, companion, or what the assistant did/said (e.g. do NOT write "the assistant acknowledged", "the companion invited").
+3. Write from a direct, user-focused third-person perspective (e.g., "User shared a positive, productive mood and discussed casual updates").
+4. Do not include meta-commentary or introductory phrases. Be direct.
 
 Chat Transcript:
 ${transcript}`;

@@ -12,6 +12,7 @@ const mockGenerateDailySummary = vi.fn();
 const mockGetLocalEmbedding = vi.fn();
 const mockWireMentionsEdges = vi.fn();
 const mockSyncFolioFileToDb = vi.fn();
+const mockGetFolioContext = vi.fn();
 
 vi.mock("../ai-providers", () => ({
   runSimpleTask: mockRunSimpleTask,
@@ -34,8 +35,17 @@ vi.mock("../graph/edges", () => ({
   wireMentionsEdges: mockWireMentionsEdges,
 }));
 
+const mockFolioRequestContext = {
+  run: vi.fn().mockImplementation(async (store: any, fn: any) => {
+    return await fn();
+  }),
+  getStore: vi.fn().mockReturnValue({ activeWorkspace: "" }),
+};
+
 vi.mock("../folio/sync", () => ({
   syncFolioFileToDb: mockSyncFolioFileToDb,
+  folioRequestContext: mockFolioRequestContext,
+  getFolioContext: mockGetFolioContext,
 }));
 
 // Mock filesystem
@@ -109,7 +119,7 @@ function mockCollection(items: any[] = []) {
 function mockPb(collections: Record<string, any>) {
   const pb = { authStore: { save: vi.fn(), token: "mock-token", record: { id: "user-1", collectionName: "users" } } } as any;
   pb.collection = vi.fn((name: string) => {
-    return collections[name];
+    return collections[name] || mockCollection([]);
   });
   return pb;
 }
@@ -121,6 +131,20 @@ describe("runObserver", () => {
     mockDecrypt.mockImplementation((s: string) => Promise.resolve(s));
     mockGenerateDailySummary.mockResolvedValue({ status: "created" });
     mockGetLocalEmbedding.mockResolvedValue(new Array(384).fill(0.1));
+    mockGetFolioContext.mockReturnValue({ folioRootPath: join(process.cwd(), "dialogue-folio") });
+    mockRunSimpleTask.mockImplementation(async ({ prompt }: { prompt: string }) => {
+      if (prompt.includes("weekly digest")) {
+        return JSON.stringify({
+          updatedBio: "Alice has been writing code and exploring Rust.",
+          weeklyDigest: "Explored Rust and established project setup."
+        });
+      }
+      if (prompt.includes("CONTEXT.md")) {
+        return "# Workspace Context\n\n## Goals\n- Build high performance Rust code.\n\n## Milestones\n- Completed writing Vitest tests.";
+      }
+      // Fallback for memory extraction
+      return JSON.stringify(["User prefers TypeScript over Python."]);
+    });
     // Clear virtual files
     for (const key of Object.keys(mockFiles)) {
       delete mockFiles[key];
@@ -254,5 +278,165 @@ describe("runObserver", () => {
     // It should update duplicate memory inline, which results in 1 memory extracted (written/updated)
     expect(result.memoriesExtracted).toBe(1);
     expect(mockFiles[systemMemPath]).toContain("User loves pizza.");
+  });
+
+  it("should trigger weekly USER.md profiling when 7 days have passed and save biography", async () => {
+    const userProfiles = [
+      {
+        id: "prof-1",
+        user: "user-1",
+        name: "Alice",
+        weeklyNotesSummaries: ["Old digest"],
+        preferences: {
+          lastUserMdSynthesis: Date.now() - 8 * 24 * 60 * 60 * 1000
+        }
+      }
+    ];
+
+    const sessionSummaries = [
+      { id: "sum-1", user: "user-1", date: "2026-06-19", summary: "Finished project setup." },
+      { id: "sum-2", user: "user-1", date: "2026-06-20", summary: "Learned some Rust." }
+    ];
+
+    const pb = mockPb({
+      user_profile: mockCollection(userProfiles),
+      session_summaries: mockCollection(sessionSummaries),
+    });
+
+    mockRunSimpleTask.mockResolvedValue(JSON.stringify({
+      updatedBio: "Alice has been writing code and exploring Rust.",
+      weeklyDigest: "Explored Rust and established project setup."
+    }));
+
+    const result = await runObserver(pb, {
+      userId: "user-1",
+      timezone: "Asia/Jakarta",
+    });
+
+    expect(result.cognitiveInertia?.userMdUpdated).toBe(true);
+    expect(mockRunSimpleTask).toHaveBeenCalled();
+
+    const expectedPath = join(process.cwd(), "dialogue-folio", "system", "USER.md").replace(/\\/g, "/");
+    expect(mockFiles[expectedPath]).toContain("Alice has been writing code and exploring Rust.");
+
+    expect(userProfiles[0].weeklyNotesSummaries).toContain("Explored Rust and established project setup.");
+    expect(userProfiles[0].preferences.lastUserMdSynthesis).toBeGreaterThan(Date.now() - 1000);
+  });
+
+  it("should skip weekly USER.md profiling when less than 7 days have passed", async () => {
+    const userProfiles = [
+      {
+        id: "prof-1",
+        user: "user-1",
+        name: "Alice",
+        weeklyNotesSummaries: ["Old digest"],
+        preferences: {
+          lastUserMdSynthesis: Date.now() - 2 * 24 * 60 * 60 * 1000
+        }
+      }
+    ];
+
+    const pb = mockPb({
+      user_profile: mockCollection(userProfiles),
+    });
+
+    const result = await runObserver(pb, {
+      userId: "user-1",
+      timezone: "Asia/Jakarta",
+    });
+
+    expect(result.cognitiveInertia?.userMdUpdated).toBe(false);
+  });
+
+  it("should trigger CONTEXT.md synthesis when workspace has activity today", async () => {
+    const sessions = [
+      { id: "sess-789", workspace: "ws-789" },
+    ];
+    const workspaces = [
+      { id: "ws-789", name: "Rust Workspace" },
+    ];
+    const userProfiles = [
+      { id: "prof-1", user: "user-1", preferences: {} },
+    ];
+    const tasks = [
+      { id: "tsk-1", user: "user-1", workspace: "ws-789", text: "Write tests", completed: true, completedAt: Date.now() }
+    ];
+    const messages = [
+      { id: "msg-1", session: "sess-789", author: "user", text: "Starting workspace work now.", timestamp: Date.now() }
+    ];
+
+    const pb = mockPb({
+      chat_sessions: mockCollection(sessions),
+      workspaces: mockCollection(workspaces),
+      user_profile: mockCollection(userProfiles),
+      tasks: mockCollection(tasks),
+      messages: mockCollection(messages),
+    });
+    const contextMdPath = join(process.cwd(), "dialogue-folio", "workspaces", "rust-workspace-ws-789", "CONTEXT.md").replace(/\\/g, "/");
+    mockFiles[contextMdPath] = "# Workspace Context\n\n## Goals\n- Build high performance Rust code.\n\n## Milestones\n- Write unit tests.\n";
+
+    const result = await runObserver(pb, {
+      userId: "user-1",
+      timezone: "Asia/Jakarta",
+      sessionId: "sess-789",
+    });
+
+    expect(result.cognitiveInertia?.contextMdUpdated).toBe(true);
+    expect(mockFiles[contextMdPath]).toContain("Completed writing Vitest tests.");
+    expect(mockSyncFolioFileToDb).toHaveBeenCalledWith(expect.stringContaining("CONTEXT.md"), pb, expect.any(String));
+  });
+
+  it("should trigger CONTEXT.md refinement loop when generated content exceeds 3000 characters", async () => {
+    const sessions = [
+      { id: "sess-999", workspace: "ws-999" },
+    ];
+    const workspaces = [
+      { id: "ws-999", name: "Heavy Workspace" },
+    ];
+    const userProfiles = [
+      { id: "prof-1", user: "user-1", preferences: {} },
+    ];
+    const tasks = [
+      { id: "tsk-2", user: "user-1", workspace: "ws-999", text: "Write docs", completed: true, completedAt: Date.now() }
+    ];
+    const messages = [
+      { id: "msg-2", session: "sess-999", author: "user", text: "Working hard today.", timestamp: Date.now() }
+    ];
+
+    const pb = mockPb({
+      chat_sessions: mockCollection(sessions),
+      workspaces: mockCollection(workspaces),
+      user_profile: mockCollection(userProfiles),
+      tasks: mockCollection(tasks),
+      messages: mockCollection(messages),
+    });
+
+    const contextMdPath = join(process.cwd(), "dialogue-folio", "workspaces", "heavy-workspace-ws-999", "CONTEXT.md").replace(/\\/g, "/");
+    mockFiles[contextMdPath] = "# Initial Context\n";
+
+    mockRunSimpleTask.mockImplementation(async ({ prompt }: { prompt: string }) => {
+      if (prompt.includes("weekly digest")) {
+        return JSON.stringify({ updatedBio: "Bio", weeklyDigest: "Digest" });
+      }
+      if (prompt.includes("exceeds our strict budget of 3000 characters")) {
+        return "# Condensed Context\n\n- Brief rule.";
+      }
+      if (prompt.includes("CONTEXT.md")) {
+        return "# Extremely Long Context\n" + "A".repeat(3100);
+      }
+      return JSON.stringify([]);
+    });
+
+    const result = await runObserver(pb, {
+      userId: "user-1",
+      timezone: "Asia/Jakarta",
+      sessionId: "sess-999",
+    });
+
+    expect(result.cognitiveInertia?.contextMdUpdated).toBe(true);
+    expect(mockFiles[contextMdPath]).toBe("# Condensed Context\n\n- Brief rule.");
+    expect(mockRunSimpleTask).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("exceeds our strict budget of 3000 characters")
+    }));
   });
 });

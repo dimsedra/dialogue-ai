@@ -56,6 +56,7 @@ export async function POST(req: Request) {
     let userPreferences = null;
     let monthlyDigest = null;
     let latestWeeklyDigest = null;
+    let todaySummary = null;
     let timeFormat: "auto" | "12h" | "24h" = "auto";
     let folioName: string | null = null;
     
@@ -92,6 +93,20 @@ export async function POST(req: Request) {
               }
               if (Array.isArray(profile.monthlyNotesSummaries) && profile.monthlyNotesSummaries.length > 0) {
                 monthlyDigest = profile.monthlyNotesSummaries[profile.monthlyNotesSummaries.length - 1];
+              }
+
+              try {
+                const { getLocalDateString } = await import('@/lib/jobs/dateUtils');
+                const dateString = getLocalDateString(timezone);
+                const summaryRecord = await pbClient
+                  .collection('session_summaries')
+                  .getFirstListItem(`user = "${userId.replace(/"/g, '\\"')}" && date = "${dateString}"`);
+                if (summaryRecord && summaryRecord.summary) {
+                  todaySummary = summaryRecord.summary;
+                }
+              } catch (e) {
+                // Expected if no sessions have run or compiled yet today
+                console.log(`[Chat API] Checked today's summary, none found yet.`);
               }
             }
           } catch (e) {
@@ -289,6 +304,7 @@ export async function POST(req: Request) {
       folioName,
       folioRootPath,
       isBranch,
+      todaySummary,
     );
     
     // File-based LibSQL ensures approval snapshots survive across HTTP requests

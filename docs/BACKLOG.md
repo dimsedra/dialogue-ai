@@ -36,7 +36,7 @@
 | 2.7 | `system/CORE.md` (immutable identity) | ✅ | — |
 | 2.8 | Create CONTEXT.md per workspace + sync to/from disk | ✅ | Medium |
 | 2.9 | `notes/` subfolder per workspace (manual, no CRUD UI yet) | ❌ | Small |
-| 2.10 | `system/habits.md` global habit registry | ❌ | Medium |
+| 2.10 | `system/habits.md` global habit registry | ✅ (ELIMINATED) | — |
 | 2.11 | Eliminate global `tasks/` and `events/` root folders, and workspace-scoped `tasks/`, `events/`, and `activity/` folders | ✅ | Small |
 
 ---
@@ -107,8 +107,8 @@
 | 7.3 | Level 3A: Daily Logs | ✅ | — |
 | 7.4 | Level 3B: Workspace-scoped tasks/events | ✅ | — |
 | 7.5 | Level 4: Semantic memories with embeddings | ✅ | — |
-| 7.6 | Cognitive inertia — automated USER.md synthesis cadence (weekly/N-log) | ❌ | Large |
-| 7.7 | Cognitive inertia — automated CONTEXT.md synthesis on milestone | ❌ | Large |
+| 7.6 | Cognitive inertia — automated USER.md synthesis cadence (weekly/N-log) | See §10.3 | Large |
+| 7.7 | Cognitive inertia — automated CONTEXT.md synthesis on milestone | See §10.4 | Large |
 
 ---
 
@@ -120,8 +120,8 @@
 | 8.2 | Trigger Observer on conversation idle / session end | ✅ | Large |
 | 8.3 | Observer: daily log generation from conversation transcript | ✅ | Large |
 | 8.4 | Observer: memory extraction → PocketBase + MEMORIES.md | ✅ | Large |
-| 8.5 | Observer: CONTEXT.md synthesis on milestone | ❌ | Large |
-| 8.6 | Observer: USER.md synthesis on weekly/N-log cadence | ❌ | Large |
+| 8.5 | Observer: CONTEXT.md synthesis on milestone | See §10.4 | Large |
+| 8.6 | Observer: USER.md synthesis on weekly/N-log cadence | See §10.3 | Large |
 | 8.7 | Remove write tools from Chat Agent (post-Observer) | ⚠️ | Large |
 
 ---
@@ -139,12 +139,32 @@
 
 ---
 
+## 🔵 §10 — Cognitive Inertia & Personalization Engine
+
+| # | Item | Status | Complexity |
+|---|------|--------|------------|
+| 10.1 | Enhance CORE.md system prompt with explicit "Person-Responding" instructions | ✅ | Small |
+| 10.2 | Inject today's daily log summary into agent prompt as Layer 3 emotional attunement | ✅ | Medium |
+| 10.3 | Observer: Automated weekly USER.md profiling & behavioral pattern synthesis | ✅ | Large |
+| 10.4 | Observer: Milestone-based CONTEXT.md updates from workspace activity | ✅ | Large |
+
+---
+
+## 🔴 §11 — Performance Optimization (Non-blocking UI & Worker Threads)
+
+| # | Item | Status | Complexity |
+|---|------|--------|------------|
+| 11.1 | Migrate synchronous file system calls (*Sync) in background jobs to asynchronous fs.promises | ❌ | Medium |
+| 11.2 | Offload heavy CPU-bound Observer tasks (embeddings/synthesis) to Node.js Worker Threads | ❌ | Large |
+
+---
+
 ## Priority Order (Recommended)
 
 | Priority | Item(s) | Why |
 |----------|---------|-----|
-| 🥇 **Next** | **§8 + 7.6/7.7** — Observer Agent & Cognitive Inertia | Building the Observer skeleton first allows synthesis pipelines (USER.md / CONTEXT.md) to be implemented natively inside it without throwaway work. |
-| 🥈 | **9.2, 9.3, 9.6** — Proactive Behaviors & Intrusion Protection | Builds directly on the new branching session architecture to block/delay intrusion alerts and suggest branches. |
-| 🥉 | **1.4 + 2.9** — Onboarding wizard & Workspace `notes/` CRUD UI | UI refinements to complete the workspace-first flow. |
-| 4 | **3.6 + 8.7** — Eliminate Chat Agent Write Tools | Enforces 100% separation of concerns: Chat Agent becomes purely conversational, Observer handles all mutations. |
+| 🥇 **Next** | **9.2, 9.3, 9.6** — Proactive Behaviors & Intrusion Protection | Builds directly on the new branching session architecture to block/delay intrusion alerts and suggest branches. |
+| 🥈 | **1.4 + 2.9** — Onboarding wizard & Workspace `notes/` CRUD UI | UI refinements to complete the workspace-first flow. |
+| 🥉 | **3.6 + 8.7** — Eliminate Chat Agent Write Tools | Enforces 100% separation of concerns: Chat Agent becomes purely conversational, Observer handles all mutations. |
+| 4 | **§11** — Performance Optimization & Non-blocking Threading | Offloads disk I/O and heavy CPU-bound tasks (local embeddings) to async promises and Worker Threads, ensuring 60fps responsiveness. |
 

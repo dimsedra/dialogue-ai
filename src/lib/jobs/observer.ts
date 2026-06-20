@@ -9,7 +9,7 @@ import { DEFAULT_FOLIO_DIR } from "../folio/constants";
 import { generateDailySummary } from "./generateDailySummary";
 import { getLocalEmbedding } from "../graph/embedding";
 import { wireMentionsEdges } from "../graph/edges";
-import { syncFolioFileToDb } from "../folio/sync";
+import { syncFolioFileToDb, folioRequestContext } from "../folio/sync";
 import { parseMarkdownFile, serializeMarkdownFile } from "../folio/parser";
 
 export interface RunObserverArgs {
@@ -21,6 +21,10 @@ export interface RunObserverArgs {
 export interface RunObserverResult {
   dailySummaryStatus: string;
   memoriesExtracted: number;
+  cognitiveInertia?: {
+    userMdUpdated: boolean;
+    contextMdUpdated: boolean;
+  };
 }
 
 function dotProduct(a: number[], b: number[]): number {
@@ -70,9 +74,25 @@ export async function runObserver(
     }
   }
 
+  // Stage 3: Cognitive Inertia & Personalization Synthesis
+  let userMdUpdated = false;
+  let contextMdUpdated = false;
+  try {
+    const synthesisResult = await runCognitiveInertiaSynthesis(pb, userId, timezone, sessionId);
+    userMdUpdated = synthesisResult.userMdUpdated;
+    contextMdUpdated = synthesisResult.contextMdUpdated;
+    console.log(`[Observer] Cognitive Inertia Synthesis completed: USER.md updated: ${userMdUpdated}, CONTEXT.md updated: ${contextMdUpdated}`);
+  } catch (err) {
+    console.error("[Observer] Cognitive Inertia Synthesis Stage failed:", err);
+  }
+
   return {
     dailySummaryStatus,
     memoriesExtracted: memoriesExtractedCount,
+    cognitiveInertia: {
+      userMdUpdated,
+      contextMdUpdated,
+    },
   };
 }
 
@@ -335,4 +355,274 @@ ${transcript}`;
   }
 
   return memoriesExtractedCount;
+}
+
+async function runCognitiveInertiaSynthesis(
+  pb: PocketBase,
+  userId: string,
+  timezone: string,
+  sessionId?: string,
+): Promise<{ userMdUpdated: boolean; contextMdUpdated: boolean }> {
+  let userMdUpdated = false;
+  let contextMdUpdated = false;
+
+  const escapedUser = userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const folioRootPath = getFolioRootPath();
+  const nowMs = Date.now();
+
+  // --- Part 1: Weekly USER.md Synthesis ---
+  try {
+    const profileDoc = await pb
+      .collection("user_profile")
+      .getFirstListItem(`user = "${escapedUser}"`);
+
+    const prefs = (profileDoc.preferences as Record<string, unknown>) || {};
+    const lastSynthesis = Number(prefs.lastUserMdSynthesis || 0);
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+    // Trigger weekly synthesis if never run before, if 7 days elapsed, or if digests list is empty
+    const shouldRunWeekly = !lastSynthesis || (nowMs - lastSynthesis >= SEVEN_DAYS_MS) || !profileDoc.weeklyNotesSummaries || profileDoc.weeklyNotesSummaries.length === 0;
+
+    if (shouldRunWeekly) {
+      console.log(`[Observer] Triggering weekly USER.md profiling/synthesis for user ${userId}...`);
+
+      const dateSevenDaysAgo = getLocalDateString(timezone, new Date(nowMs - SEVEN_DAYS_MS));
+      const dailySummaries = await pb.collection("session_summaries").getFullList({
+        filter: `user = "${escapedUser}" && date >= "${dateSevenDaysAgo}"`,
+        sort: "date",
+      });
+
+      if (dailySummaries.length > 0) {
+        const summariesText = dailySummaries.map((s) => `[${s.date}] ${s.summary}`).join("\n");
+
+        let provider = (prefs.provider as string) || "gemini";
+        let taskModels = prefs.taskModels as Record<string, string> | undefined;
+        let customConfigs: Record<string, { apiKey?: string; baseUrl?: string }> = {};
+
+        if (prefs.customConfigs && typeof prefs.customConfigs === "object") {
+          const raw = prefs.customConfigs as Record<string, { apiKey?: string; baseUrl?: string }>;
+          for (const p of Object.keys(raw)) {
+            const cfg = { ...raw[p] };
+            if (cfg.apiKey && cfg.apiKey.includes(":")) {
+              try {
+                cfg.apiKey = await decrypt(cfg.apiKey);
+              } catch (err) {
+                console.error(`[Observer Weekly USER] decrypt failed for "${p}":`, err);
+              }
+            }
+            customConfigs[p] = cfg;
+          }
+        }
+
+        const { runSimpleTask, getTaskProviderAndModel } = await import("../ai-providers");
+        const resolved = getTaskProviderAndModel({ preferences: { provider, taskModels } }, "reflection");
+
+        const userMdPath = join(folioRootPath, "system", "USER.md");
+        let currentBio = "";
+        let userNameVal = profileDoc.name || "User";
+        if (existsSync(userMdPath)) {
+          const userMdContent = readFileSync(userMdPath, "utf8");
+          const match = userMdContent.match(/[-*]\s*Bio\/Facts:\s*([\s\S]*?)(?:##|$)/i);
+          if (match && match[1]) {
+            currentBio = match[1].trim();
+          }
+        }
+
+        const systemInstruction = "You are the personality profiling engine of Dialogue. Your job is to analyze daily summaries to extract the user's focus themes, recurring behavioral patterns, energy levels, and preferred work or casual styles. Output a updated personality biography.";
+        
+        const prompt = `Below are the daily summaries of the user's activities and thoughts for the past week:
+${summariesText}
+
+Current User Biography:
+"${currentBio || "None yet."}"
+
+Tasks:
+1. Revise the User Biography to reflect newly observed patterns, focus themes, or preferences, while retaining important historical details. Keep the length under 1500 characters.
+2. Summarize the past week's trajectory in a single brief, high-density 2-line sentence (this will be stored as the weekly digest).
+
+Return your output EXACTLY as a JSON object with two fields: "updatedBio" (string) and "weeklyDigest" (string). Output ONLY raw JSON. No markdown wrapper, backticks, or explanation.`;
+
+        const rawResult = await runSimpleTask({
+          provider: resolved.provider,
+          customConfigs,
+          prompt,
+          systemInstruction,
+          modelId: resolved.modelId,
+        });
+
+        const cleanedResult = rawResult.trim().replace(/^```json/, "").replace(/```$/, "").trim();
+        const parsed = JSON.parse(cleanedResult);
+
+        if (parsed && typeof parsed.updatedBio === "string" && typeof parsed.weeklyDigest === "string") {
+          const updatedBio = parsed.updatedBio.trim();
+          const weeklyDigest = parsed.weeklyDigest.trim();
+
+          // Wrap in pbRequestContext and folioRequestContext so it gets PocketBase and path context
+          const { pbRequestContext } = await import("../pb-server");
+          await pbRequestContext.run(pb, async () => {
+            await folioRequestContext.run({ folioRootPath, activeWorkspace: "", basePath: folioRootPath }, async () => {
+              const { updateUserBioTool } = await import("../../mastra/tools/updateUserBio");
+              await updateUserBioTool.execute({ bio: updatedBio });
+            });
+          });
+
+          const currentWeeklySummaries = Array.isArray(profileDoc.weeklyNotesSummaries) ? profileDoc.weeklyNotesSummaries : [];
+          const updatedWeeklySummaries = [...currentWeeklySummaries, weeklyDigest];
+
+          const updatedPrefs = {
+            ...prefs,
+            lastUserMdSynthesis: nowMs,
+          };
+
+          await pb.collection("user_profile").update(profileDoc.id, {
+            weeklyNotesSummaries: updatedWeeklySummaries,
+            preferences: updatedPrefs,
+          });
+
+          userMdUpdated = true;
+          console.log("[Observer] Weekly USER.md profiling successfully completed.");
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Observer] Weekly USER.md profiling/synthesis stage failed:", err);
+  }
+
+  // --- Part 2: Milestone CONTEXT.md Synthesis ---
+  try {
+    if (sessionId) {
+      const session = await pb.collection("chat_sessions").getOne(sessionId);
+      const workspaceId = session.workspace || "";
+
+      if (workspaceId) {
+        const workspace = await pb.collection("workspaces").getOne(workspaceId);
+        const wsSlug = workspace.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "workspace";
+        const wsFolder = `${wsSlug}-${workspaceId}`;
+        const contextMdPath = join(folioRootPath, "workspaces", wsFolder, "CONTEXT.md");
+
+        if (existsSync(contextMdPath)) {
+          const todayBounds = getTodayBounds(timezone);
+          const completedTasks = await pb.collection("tasks").getFullList({
+            filter: `user = "${escapedUser}" && workspace = "${workspaceId}" && completed = true && completedAt >= ${todayBounds.start} && completedAt <= ${todayBounds.end}`,
+          });
+          const wsMessages = await pb.collection("messages").getFullList({
+            filter: `session = "${sessionId}" && timestamp >= ${todayBounds.start} && timestamp <= ${todayBounds.end}`,
+          });
+
+          if (completedTasks.length > 0 || wsMessages.length > 0) {
+            console.log(`[Observer] Triggering CONTEXT.md milestone review for workspace ${workspace.name}...`);
+
+            const currentContext = readFileSync(contextMdPath, "utf8");
+            const completedText = completedTasks.map((t) => `- ${t.text}`).join("\n");
+            const transcript = wsMessages.map((m) => `${m.author === "user" ? "User" : "Companion"}: ${m.text}`).join("\n");
+
+            const profileDoc = await pb
+              .collection("user_profile")
+              .getFirstListItem(`user = "${escapedUser}"`);
+            const prefs = (profileDoc.preferences as Record<string, unknown>) || {};
+            let provider = (prefs.provider as string) || "gemini";
+            let taskModels = prefs.taskModels as Record<string, string> | undefined;
+            let customConfigs: Record<string, { apiKey?: string; baseUrl?: string }> = {};
+
+            if (prefs.customConfigs && typeof prefs.customConfigs === "object") {
+              const raw = prefs.customConfigs as Record<string, { apiKey?: string; baseUrl?: string }>;
+              for (const p of Object.keys(raw)) {
+                const cfg = { ...raw[p] };
+                if (cfg.apiKey && cfg.apiKey.includes(":")) {
+                  try {
+                    cfg.apiKey = await decrypt(cfg.apiKey);
+                  } catch (err) {
+                    console.error(`[Observer Milestone] decrypt failed for "${p}":`, err);
+                  }
+                }
+                customConfigs[p] = cfg;
+              }
+            }
+
+            const { runSimpleTask, getTaskProviderAndModel } = await import("../ai-providers");
+            const resolved = getTaskProviderAndModel({ preferences: { provider, taskModels } }, "reflection");
+
+            const systemInstruction = "You are the workspace context architect of Dialogue. Your job is to maintain the CONTEXT.md file for a workspace, ensuring it acts as a macro-level focus guide, NOT a daily diary.";
+
+            const prompt = `Current CONTEXT.md Content:
+\`\`\`markdown
+${currentContext}
+\`\`\`
+
+Today's Completed Tasks in this Workspace:
+${completedText || "None"}
+
+Today's Workspace Conversations:
+${transcript || "None"}
+
+Task:
+Review and potentially update the CONTEXT.md file. 
+
+CRITICAL RULES FOR CONTEXT.MD:
+1. CONTEXT.md is for MACRO-level project focus, active objectives, rules, and major milestones.
+2. It is NOT a daily diary or log. Never add transient updates, transient user moods, or specific conversation details.
+3. Do NOT create or maintain a "Recent Activity" diary block. Daily chitchat and reflections belong in the daily log, not here.
+4. Only update the "Milestones / Current Focus" section if a major structural goal or milestone has actually been achieved or changed (e.g. "Completed Database setup").
+5. For workspaces without a formal objective (e.g., casual workspaces or "chill zones"):
+   - CONTEXT.md should focus on:
+     - **Behavioral Tuning** (how the AI companion should adapt its tone, style, and responses specifically for this workspace, e.g., friendly, humorous, concise, relaxed, etc.).
+     - **Vibe** (the overall atmosphere and emotional energy of the workspace, e.g., low-pressure, supportive, brain-dump, encouraging, etc.).
+     - **Topic Affinities** (the core subjects, essence, and topics that the user frequently discusses or prefers to discuss here, e.g., sharing project updates, venting, talking about music, coding, etc.).
+   - Update these sections when new persistent patterns in the user's topics of interest, conversational vibe, or requested AI behavior emerge from the conversations.
+   - Keep it at a macro-level description of behavioral and topic preferences; do not list chronological session summaries or specific conversations.
+6. Never add global user personality traits, general user biography details, or specific user preferences/facts to CONTEXT.md. These must reside in USER.md (global profile) or MEMORIES.md (semantic memories) to avoid redundancy and prompt collisions.
+7. Enforce a strict budget of 3000 characters. Prioritize high-impact behavioral guidelines, core vibe rules, and active goals. Condense or merge overlapping sections.
+8. If no structural changes or behavioral/vibe tuning updates are warranted, return the EXACT original CONTEXT.md content.
+
+Return the final updated CONTEXT.md file content. Do NOT include markdown blocks, backticks, or introduction outside the file content. Return ONLY the markdown file.`;
+
+            const rawResult = await runSimpleTask({
+              provider: resolved.provider,
+              customConfigs,
+              prompt,
+              systemInstruction,
+              modelId: resolved.modelId,
+            });
+
+            let finalResult = rawResult.trim();
+
+            if (finalResult && finalResult !== currentContext.trim() && finalResult.length > 3000) {
+              console.log(`[Observer] CONTEXT.md generated length (${finalResult.length}) exceeds 3000 characters. Running refinement loop...`);
+              const compressPrompt = `The following markdown content for a workspace CONTEXT.md exceeds our strict budget of 3000 characters (it is currently ${finalResult.length} characters).
+Please condense, simplify, and merge sections to bring it under 3000 characters, while retaining the core behavioral tuning guidelines, workspace vibe, active objectives, and major milestones. 
+
+CRITICAL RULES:
+- Do NOT omit critical rules, active objectives, or core vibe descriptions, but express them with extreme brevity.
+- Never add global user personality traits, general user biography details, or specific user preferences/facts (keep those in USER.md/MEMORIES.md).
+- Return ONLY the final condensed markdown file content. Do NOT include markdown blocks, backticks, or introduction outside the file content.
+
+Content to compress:
+${finalResult}`;
+
+              const compressedResult = await runSimpleTask({
+                provider: resolved.provider,
+                customConfigs,
+                prompt: compressPrompt,
+                systemInstruction,
+                modelId: resolved.modelId,
+              });
+              finalResult = compressedResult.trim();
+              console.log(`[Observer] Refinement completed. New length: ${finalResult.length}`);
+            }
+
+            if (finalResult && finalResult !== currentContext.trim()) {
+              writeFileSync(contextMdPath, finalResult, "utf8");
+              await syncFolioFileToDb(contextMdPath, pb, folioRootPath);
+              contextMdUpdated = true;
+              console.log("[Observer] CONTEXT.md workspace milestone synthesis successfully completed.");
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Observer] Workspace CONTEXT.md milestone synthesis stage failed:", err);
+  }
+
+  return { userMdUpdated, contextMdUpdated };
 }

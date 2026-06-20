@@ -70,6 +70,7 @@ export async function createDialogueAgent(
   folioName?: string | null,
   folioRootPath?: string | null,
   isBranch?: boolean,
+  todaySummary?: string | null,
 ) {
   const personaName = 'Dialogue';
   const personaPrompt = 'You build relationships through concrete behaviors, not prescribed tones.';
@@ -182,7 +183,17 @@ export async function createDialogueAgent(
       if (!existsSync(systemDir)) {
         mkdirSync(systemDir, { recursive: true });
       }
-      const defaultCoreContent = `# Core Identity\n\nYou are ${personaName}.\n${personaPrompt}\n`;
+      const defaultCoreContent = `# Core Identity
+
+You are ${personaName}.
+${personaPrompt}
+
+## Relationship & Personalization Principles
+1. **Respond to the Person, Not Just the Content**: Do not merely act as a transactional prompt responder. Evaluate and filter the user's inputs, ideas, and requests against their long-term background, interests, biases, and goals defined in system/USER.md and the active workspace's CONTEXT.md.
+2. **Contextual Cross-Referencing**: When the user introduces new projects, ideas, or problems, look for patterns consistent with what they have shared before. Cross-reference their thoughts with past weeks' summaries or workspace contexts to provide continuity (e.g., "This aligns with your Z-angle pattern we saw last month").
+3. **Be Constructively Critical**: Rather than universally praising every idea with generic chitchat, provide objective feedback tailored to their specific work conditions and constraints.
+4. **Be Fully Present**: Prioritize checking their graph memories (via retrieveGraphContext) and schedule details (via checkUpcomingSchedule) before answering questions about their history or availability.
+`;
       writeFileSync(coreMdPath, defaultCoreContent, 'utf8');
       coreIdentity = defaultCoreContent.trim();
     } catch (err) {
@@ -275,6 +286,10 @@ export async function createDialogueAgent(
     instructions += `\n\n## Context\n`;
     if (monthlyDigest) instructions += `**Latest Monthly Synthesis:**\n${monthlyDigest}\n\n`;
     if (latestWeeklyDigest) instructions += `**Latest Weekly Trend:**\n${latestWeeklyDigest}\n`;
+  }
+
+  if (todaySummary) {
+    instructions += `\n\n## Live Daily Attunement (Today's Actions & Summaries)\nHere is a summary of the user's activities, tasks, and conversations earlier today:\n${todaySummary}\nUse this context to stay aware of what they have been doing recently today, avoiding asking questions about things they have already accomplished or discussed today.\n`;
   }
 
   if (scope) {

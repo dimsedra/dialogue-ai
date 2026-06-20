@@ -30,7 +30,7 @@ const MOCK_FACTS = JSON.stringify([
 vi.mock("../src/lib/ai-providers", () => ({
   getTaskProviderAndModel: () => ({ provider: "mock", modelId: "mock-model" }),
   runSimpleTask: async (options: any) => {
-    if (options.prompt.includes("discussed, accomplished, or decided in this thread") || options.prompt.includes("daily chat reflections")) {
+    if (options.prompt.includes("discussed, accomplished, or decided") || options.prompt.includes("journaling engine") || options.prompt.includes("daily chat reflections")) {
       return MOCK_SUMMARY;
     }
     return MOCK_FACTS;
@@ -80,7 +80,7 @@ const mockEvents = [
     id: "evt-rust-88",
     user: "user-1",
     title: "Neovim config tuning",
-    startTime: Date.now() - 3600000,
+    startTime: Date.now() - 5000,
     endTime: Date.now(),
     workspace: "ws-coding-1",
     cancelled: false,
