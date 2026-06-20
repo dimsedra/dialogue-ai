@@ -207,9 +207,11 @@ describe("generateDailySummary Synthesis Engine", () => {
 
     const globalContent = mockFiles[globalLogPath];
     expect(globalContent).toContain("type: daily-log");
+    expect(globalContent).toContain("## Journal & Raw Notes");
     expect(globalContent).toContain("- [x] Drink Water");
     expect(globalContent).toContain("- [ ] Workout");
     expect(globalContent).toContain("- **General Discussion**: Reflected chat session thoughts summary.");
+    expect(globalContent).not.toContain("Chat Activity & Reflected Thoughts");
     expect(globalContent).toContain(`- [x] task-task-1: Release app`);
     expect(globalContent).toContain(`- [x] event-event-1: Global Sync`);
 
@@ -220,7 +222,9 @@ describe("generateDailySummary Synthesis Engine", () => {
     const wsContent = mockFiles[wsLogPath];
     expect(wsContent).toContain("type: workspace-activity");
     expect(wsContent).toContain("workspace: ws-1");
+    expect(wsContent).toContain("## Journal & Raw Notes");
     expect(wsContent).toContain("- **Coding Tasks**: Reflected chat session thoughts summary.");
+    expect(wsContent).not.toContain("Chat Activity & Reflected Thoughts");
     expect(wsContent).toContain(`- [x] task-task-2: Run test suite`);
     expect(wsContent).toContain(`- [x] event-event-2: Sprint Backlog`);
 
@@ -284,5 +288,75 @@ type: daily-log
     // habit-2 must remain checked, and habit-1 remains unchecked
     expect(updatedContent).toContain("- [ ] Drink Water");
     expect(updatedContent).toContain("- [x] Workout");
+  });
+
+  it("should respect habit recurrence custom schedule and preserve existing", async () => {
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "UTC" });
+    const [y, m, d] = todayStr.split("-").map(Number);
+    const todayObj = new Date(Date.UTC(y, m - 1, d));
+    const dayOfWeek = todayObj.getUTCDay();
+    const notToday = (dayOfWeek + 1) % 7;
+
+    const globalLogPath = `${process.cwd().replace(/\\/g, "/")}/dialogue-folio/daily-logs/${todayStr}.md`;
+
+    // Seed file with Habit 4 (not scheduled but already present) completed
+    mockFiles[globalLogPath] = `---
+date: ${todayStr}
+type: daily-log
+---
+
+# Daily Log - ${todayStr}
+
+## Today's Habits
+- [x] Habit 4 (Preserved)
+`;
+
+    const userProfileCollection = mockCollection({
+      items: [{ id: "prof-1", preferences: { provider: "gemini" } }],
+    });
+    const workspacesCollection = mockCollection({ items: [] });
+    const chatSessionsCollection = mockCollection({ items: [] });
+    const messagesCollection = mockCollection({ items: [] });
+    const tasksCollection = mockCollection({ items: [] });
+    const eventsCollection = mockCollection({ items: [] });
+    const sessionSummariesCollection = mockCollection({ items: [] });
+
+    const habitsCollection = mockCollection({
+      items: [
+        { id: "habit-1", name: "Habit 1 (Daily)", frequency: "daily", frequencyConfig: {}, archived: false },
+        { id: "habit-2", name: "Habit 2 (Today)", frequency: "custom", frequencyConfig: { daysOfWeek: [dayOfWeek] }, archived: false },
+        { id: "habit-3", name: "Habit 3 (Future)", frequency: "custom", frequencyConfig: { daysOfWeek: [notToday] }, archived: false },
+        { id: "habit-4", name: "Habit 4 (Preserved)", frequency: "custom", frequencyConfig: { daysOfWeek: [notToday] }, archived: false },
+      ],
+    });
+    const habitLogsCollection = mockCollection({ items: [] });
+
+    const pb = mockPb({
+      user_profile: userProfileCollection,
+      workspaces: workspacesCollection,
+      chat_sessions: chatSessionsCollection,
+      messages: messagesCollection,
+      tasks: tasksCollection,
+      events: eventsCollection,
+      habits: habitsCollection,
+      habit_logs: habitLogsCollection,
+      session_summaries: sessionSummariesCollection,
+    });
+
+    await generateDailySummary(pb, {
+      userId: "user-1",
+      timezone: "UTC",
+    });
+
+    const updatedContent = mockFiles[globalLogPath];
+    
+    // Habit 1 (Daily) should appear (pending/unchecked since no logs exist)
+    expect(updatedContent).toContain("- [ ] Habit 1 (Daily)");
+    // Habit 2 (Today) should appear
+    expect(updatedContent).toContain("- [ ] Habit 2 (Today)");
+    // Habit 3 (Future) should NOT appear
+    expect(updatedContent).not.toContain("Habit 3 (Future)");
+    // Habit 4 (Preserved) should appear and remain checked [x]
+    expect(updatedContent).toContain("- [x] Habit 4 (Preserved)");
   });
 });

@@ -21,7 +21,7 @@ type: daily-log
 - [ ] Habit Name 1
 - [x] Habit Name 2
 
-## Chat Activity & Reflected Thoughts
+## Journal & Raw Notes
 - **[Global Chat Session Name]**: LLM-generated reflection of the thread's discussion today.
 
 ## Tasks Completed Today
@@ -47,7 +47,7 @@ workspace: workspaceId
 
 # Workspace Activity - YYYY-MM-DD
 
-## Chat Activity & Reflected Thoughts
+## Journal & Raw Notes
 - **[Workspace Session Name]**: LLM-generated reflection of the thread's discussion today.
 
 ## Tasks Completed Today

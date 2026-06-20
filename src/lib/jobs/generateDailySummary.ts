@@ -332,8 +332,21 @@ ${transcript}`;
   }
 
   // Construct Habits Checklist section
+  const [y, m, d] = dateString.split("-").map(Number);
+  const dateObj = new Date(Date.UTC(y, m - 1, d));
+  const dayOfWeek = dateObj.getUTCDay();
+
   const habitsLines: string[] = [];
   for (const habit of activeHabits) {
+    const isScheduledToday =
+      habit.frequency !== "custom" ||
+      !!habit.frequencyConfig?.daysOfWeek?.includes(dayOfWeek);
+
+    // Keep it if it is scheduled today, OR if the file already contains it (to avoid deleting user edits)
+    if (!isScheduledToday && !existingHabitChecks.has(habit.name)) {
+      continue;
+    }
+
     let checked = false;
     if (existingHabitChecks.has(habit.name)) {
       checked = existingHabitChecks.get(habit.name)!;
@@ -354,7 +367,7 @@ type: daily-log
 ## Today's Habits
 ${habitsLines.length > 0 ? habitsLines.join("\n") : "No active habits."}
 
-## Chat Activity & Reflected Thoughts
+## Journal & Raw Notes
 ${globalReflections.length > 0 ? globalReflections.join("\n") : "No global chat activity today."}
 
 ## Tasks Completed Today
@@ -396,7 +409,7 @@ workspace: ${ws.id}
 
 # Workspace Activity - ${dateString}
 
-## Chat Activity & Reflected Thoughts
+## Journal & Raw Notes
 ${wsReflections.length > 0 ? wsReflections.join("\n") : "No chat activity today."}
 
 ## Tasks Completed Today
