@@ -47,6 +47,7 @@ import { SessionSidebar } from "./chat/SessionSidebar";
 import { ChatHeader } from "./chat/ChatHeader";
 import { MessageStream } from "./chat/MessageStream";
 import { BranchSessionModal } from "./chat/BranchSessionModal";
+import { WarningModal } from "./chat/WarningModal";
 import { ChatInput } from "./chat/ChatInput";
 import { ToolApprovalCard } from "./chat/ToolApprovalCard";
 import { motion } from "framer-motion";
@@ -250,6 +251,7 @@ export function Chat({
   } | null>(null);
 
   const [showDashboard, setShowDashboard] = useState(true);
+  const [warningModal, setWarningModal] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!showDashboard && activeWorkspaceId && sessions) {
@@ -269,13 +271,21 @@ export function Chat({
     }
 
     const syncText = "Sync my workspace.";
-    const id = await createSession({
-      title: `Sync - ${new Date().toLocaleDateString()}`,
-      workspaceId: activeWorkspaceId as string,
-    });
-    
-    pendingInitialMessageRef.current = { sessionId: id, text: syncText };
-    setActiveSessionIdAction(id);
+    try {
+      const id = await createSession({
+        title: `Sync - ${new Date().toLocaleDateString()}`,
+        workspaceId: activeWorkspaceId as string,
+      });
+      
+      pendingInitialMessageRef.current = { sessionId: id, text: syncText };
+      setActiveSessionIdAction(id);
+    } catch (err: any) {
+      console.error("Failed to create sync session:", err);
+      setWarningModal({
+        title: "Workspace Error",
+        message: err.message || "Failed to start sync. Please try again.",
+      });
+    }
   };
 
   // Expose handleSync to parent via ref (placed after declaration)
@@ -338,22 +348,30 @@ export function Chat({
         : initialMessage
       : `Chat ${new Date().toLocaleTimeString()}`;
 
-    const id = await createSession({
-      title,
-      workspaceId: wsId,
-    });
-    if (wsId !== activeWorkspaceId) {
-      setActiveWorkspaceIdAction(wsId);
-    }
+    try {
+      const id = await createSession({
+        title,
+        workspaceId: wsId,
+      });
+      if (wsId !== activeWorkspaceId) {
+        setActiveWorkspaceIdAction(wsId);
+      }
 
-    if (initialMessage) {
-      pendingInitialMessageRef.current = { sessionId: id, text: initialMessage };
-    }
+      if (initialMessage) {
+        pendingInitialMessageRef.current = { sessionId: id, text: initialMessage };
+      }
 
-    setActiveSessionIdAction(id);
-    setShowDashboard(false);
-    if (!isLargeViewport) {
-      setShowHistoryAction(false);
+      setActiveSessionIdAction(id);
+      setShowDashboard(false);
+      if (!isLargeViewport) {
+        setShowHistoryAction(false);
+      }
+    } catch (err: any) {
+      console.error("Failed to create new chat session:", err);
+      setWarningModal({
+        title: "Limit Reached",
+        message: err.message || "Failed to create a new session.",
+      });
     }
   };
 
@@ -489,6 +507,7 @@ export function Chat({
             activeSyncRef={activeSyncRef}
             setActiveSessionIdAction={setActiveSessionIdAction}
             setActiveWorkspaceIdAction={setActiveWorkspaceIdAction}
+            onShowWarning={(title, message) => setWarningModal({ title, message })}
           />
         )}
       </motion.div>
@@ -505,6 +524,14 @@ export function Chat({
         session={confirmDeleteSession}
         onConfirm={(id) => executeDeleteChat(id)}
         onCancel={() => setConfirmDeleteSession(null)}
+        isLargeViewport={isLargeViewport}
+      />
+      {/* Warning Modal for Errors/Limits */}
+      <WarningModal
+        isOpen={!!warningModal}
+        title={warningModal?.title || ""}
+        message={warningModal?.message || ""}
+        onClose={() => setWarningModal(null)}
         isLargeViewport={isLargeViewport}
       />
     </div>
@@ -549,6 +576,7 @@ interface ActiveChatProps {
   activeSyncRef: React.MutableRefObject<(() => void) | null>;
   setActiveSessionIdAction: (id: string | null) => void;
   setActiveWorkspaceIdAction: (id: string | undefined, sessionId?: string | null) => void;
+  onShowWarning: (title: string, message: string) => void;
 }
 
 function ActiveChat({
@@ -589,6 +617,7 @@ function ActiveChat({
   activeSyncRef,
   setActiveSessionIdAction,
   setActiveWorkspaceIdAction,
+  onShowWarning,
 }: ActiveChatProps) {
 
   const idMapRef = useRef<Map<string, string>>(new Map());
@@ -667,7 +696,7 @@ function ActiveChat({
       setActiveSessionIdAction(newSessionId);
     } catch (err) {
       console.error("Failed to create topic branch:", err);
-      alert(err instanceof Error ? err.message : String(err));
+      onShowWarning("Failed to Create Branch", err instanceof Error ? err.message : String(err));
     } finally {
       setBranchingMessage(null);
     }
@@ -685,7 +714,7 @@ function ActiveChat({
       }
     } catch (err) {
       console.error("Failed to merge topic branch:", err);
-      alert(err instanceof Error ? err.message : String(err));
+      onShowWarning("Failed to Merge Branch", err instanceof Error ? err.message : String(err));
     } finally {
       setIsMerging(false);
     }

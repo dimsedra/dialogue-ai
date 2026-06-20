@@ -12,6 +12,7 @@ export interface FolioContext {
   folioRootPath: string;
   activeWorkspace: string;
   basePath: string;
+  activeSessionId?: string;
 }
 
 const globalAny = global as any;
