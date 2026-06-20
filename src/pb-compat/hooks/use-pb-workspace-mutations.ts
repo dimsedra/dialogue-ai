@@ -43,7 +43,6 @@ export function usePbWorkspaceUpdate() {
       context?: string;
       agentName?: string;
       color?: string;
-      defaultAgentPersonaId?: string | null;
       archived?: boolean;
       activeBranchLimit?: number;
     },
@@ -55,7 +54,6 @@ export function usePbWorkspaceUpdate() {
     context?: string;
     agentName?: string;
     color?: string;
-    defaultAgentPersonaId?: string | null;
     archived?: boolean;
     activeBranchLimit?: number;
   }) => {

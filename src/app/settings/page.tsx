@@ -548,7 +548,7 @@ export default function SettingsPage() {
                           Biography & Learned Facts
                         </label>
                         <textarea
-                          name="settings-persona-bio"
+                          name="settings-user-bio"
                           autoComplete="off"
                           autoCorrect="off"
                           autoCapitalize="off"

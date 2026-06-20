@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Fetch user profile and persona from the active backend
+    // Fetch user profile from the active backend
     let userName = null;
     let userBio = null;
     let userPreferences = null;
@@ -270,7 +270,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Create a dynamic agent configured with the user's provider settings, profile, and persona
+    // Create a dynamic agent configured with the user's provider settings and profile
     const dynamicAgent = await createDialogueAgent(
       provider, 
       modelId, 

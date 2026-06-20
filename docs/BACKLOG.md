@@ -45,9 +45,9 @@
 
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
-| 3.1 | Remove `agent_personas` collection + CRUD UI (`src/app/agent/page.tsx`, `src/pb-compat/descriptors/personas.ts`, `src/pb-compat/hooks/use-pb-persona-mutations.ts`) | ⚠️ | Large |
-| 3.2 | Remove per-session persona binding (`agentPersona` on `chat_sessions`, `src/app/api/chat/route.ts:111-118`) | ⚠️ | Medium |
-| 3.3 | Remove per-workspace persona binding (`defaultAgentPersona`, workspace settings UI, `sync.ts:442,463,890`) | ⚠️ | Medium |
+| 3.1 | Remove `agent_personas` collection + CRUD UI (`src/app/agent/page.tsx`, `src/pb-compat/descriptors/personas.ts`, `src/pb-compat/hooks/use-pb-persona-mutations.ts`) | ✅ | Large |
+| 3.2 | Remove per-session persona binding (`agentPersona` on `chat_sessions`, `src/app/api/chat/route.ts:111-118`) | ✅ | Medium |
+| 3.3 | Remove per-workspace persona binding (`defaultAgentPersona`, workspace settings UI, `sync.ts:442,463,890`) | ✅ | Medium |
 | 3.4 | Load CONTEXT.md into agent prompt assembly as Layer 2 (`src/mastra/agents/dialogueAgent.ts`) | ✅ | Small |
 | 3.5 | Inject today's daily log summary as Layer 3 emotional attunement | ❌ | Medium |
 | 3.6 | Remove chat agent write tools (post-Observer — see §8) | ⚠️ | Large |

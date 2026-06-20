@@ -1,7 +1,7 @@
 // Folio display & directory constants.
 //
 // The "Folio" is the user's personal data directory — the filesystem layer
-// that holds tasks, events, notes, memories, personas, and playbooks as
+// that holds tasks, events, notes, memories, and playbooks as
 // plain Markdown files with YAML frontmatter.
 //
 // The *directory name* is a system constant (too dangerous to let users
