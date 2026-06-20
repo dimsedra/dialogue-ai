@@ -459,6 +459,7 @@ export function Chat({
       >
         {showDashboard && !activeSessionId ? (
           <Dashboard
+            activeWorkspaceId={activeWorkspaceId}
             workspaces={workspaces}
             sessions={allSessions}
             profile={profile}
@@ -622,6 +623,7 @@ function ActiveChat({
 
   const idMapRef = useRef<Map<string, string>>(new Map());
   const sdkToDbIdRef = useRef<Map<string, string>>(new Map());
+  const pendingUserDbIdsRef = useRef<string[]>([]);
   const [localScopes, setLocalScopes] = useState<Record<string, Scope>>({});
   const [isTyping, setIsTyping] = useState(false);
 
@@ -635,6 +637,7 @@ function ActiveChat({
   useEffect(() => {
     setLocalScopes({});
     sdkToDbIdRef.current.clear();
+    pendingUserDbIdsRef.current = [];
   }, [activeSessionId]);
 
   const activeSession = useMemo(() => {
@@ -685,12 +688,18 @@ function ActiveChat({
   const handleBranchConfirm = useCallback(async (title: string) => {
     if (!branchingMessage || !activeWorkspaceId || !activeSessionId) return;
     try {
+      let realMessageId = sdkToDbIdRef.current.get(branchingMessage.id) || branchingMessage.id;
+      if (realMessageId.includes("-dup-")) {
+        realMessageId = realMessageId.split("-dup-")[0];
+      }
+      const isValidPbId = /^[a-zA-Z0-9]{15}$/.test(realMessageId);
+
       const newSessionId = await createSession({
         workspaceId: activeWorkspaceId,
         title,
         sessionType: "branch",
         parentSession: activeSessionId,
-        branchedFromMessage: branchingMessage.id,
+        branchedFromMessage: isValidPbId ? realMessageId : undefined,
         branchedFromTimestamp: branchingMessage.timestamp,
       });
       setActiveSessionIdAction(newSessionId);
@@ -846,6 +855,28 @@ function ActiveChat({
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
+
+  // Match newly created user messages from Vercel AI SDK with their database IDs
+  useEffect(() => {
+    if (pendingUserDbIdsRef.current.length === 0) return;
+
+    // Find user messages in aiMessages that do not have a mapping in sdkToDbIdRef
+    const unmappedUserMessages = aiMessages.filter(
+      (m) => m.role === 'user' && !sdkToDbIdRef.current.has(m.id)
+    );
+
+    // Map them in order of occurrence
+    const countToMap = Math.min(unmappedUserMessages.length, pendingUserDbIdsRef.current.length);
+    for (let i = 0; i < countToMap; i++) {
+      const msg = unmappedUserMessages[i];
+      const dbId = pendingUserDbIdsRef.current[i];
+      sdkToDbIdRef.current.set(msg.id, dbId);
+      idMapRef.current.set(dbId, msg.id);
+    }
+
+    // Remove mapped IDs from the pending list
+    pendingUserDbIdsRef.current = pendingUserDbIdsRef.current.slice(countToMap);
+  }, [aiMessages]);
  
   // Extract pending tool approval requests from AI messages
   const pendingApprovals = useMemo(() => {
@@ -978,7 +1009,7 @@ function ActiveChat({
         setIsTyping(true);
         try {
           const aiPromise = sendVercelMessage({ text: syncText });
-          await Promise.all([
+          const [dbId] = await Promise.all([
             sendMessage({
               sessionId: activeSessionId,
               text: syncText,
@@ -990,6 +1021,9 @@ function ActiveChat({
             }),
             aiPromise
           ]);
+          if (dbId) {
+            pendingUserDbIdsRef.current.push(dbId);
+          }
         } catch (err) {
           console.error("Failed to sync workspace:", err);
         } finally {
@@ -1012,7 +1046,7 @@ function ActiveChat({
       setIsTyping(true);
       try {
         const aiPromise = sendVercelMessage({ text: pending.text });
-        await Promise.all([
+        const [dbId] = await Promise.all([
           sendMessage({
             sessionId: activeSessionId,
             text: pending.text,
@@ -1023,6 +1057,9 @@ function ActiveChat({
           }),
           aiPromise
         ]);
+        if (dbId) {
+          pendingUserDbIdsRef.current.push(dbId);
+        }
       } catch (err) {
         console.error("Failed to trigger AI for initial message:", err);
       } finally {
@@ -1115,7 +1152,7 @@ function ActiveChat({
         }
 
         try {
-          await Promise.all([
+          const [dbId] = await Promise.all([
             sendMessage({
               sessionId: activeSessionId,
               text: textMessageContent,
@@ -1128,6 +1165,9 @@ function ActiveChat({
             }),
             aiPromise
           ]);
+          if (dbId) {
+            pendingUserDbIdsRef.current.push(dbId);
+          }
         } finally {
           pendingScopeRef.current = undefined;
           setIsTyping(false);

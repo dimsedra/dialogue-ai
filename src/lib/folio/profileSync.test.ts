@@ -324,4 +324,34 @@ describe('Folio Profile & Core Identity Sync Test', () => {
     expect(insts).toContain('Workspace Context');
     expect(insts).toContain('This workspace is for writing tests.');
   });
+
+  test('createDialogueAgent appends overdueTriagePrompt to instructions', async () => {
+    mockFiles['C:/Users/user/test-folio-profile/system/CORE.md'] = '# My Core Identity\n\nYou are a helpful assistant.';
+    mockFiles['C:/Users/user/test-folio-profile/system/USER.md'] = '# My Profile\n\n## Profile\n- Name: Alice\n- Bio/Facts: She likes hiking.';
+
+    const agent = await createDialogueAgent(
+      'gemini',
+      'gemini-flash',
+      'mock-api-key',
+      null,
+      null,
+      null,
+      null,
+      null,
+      'UTC',
+      null,
+      null,
+      'auto',
+      undefined,
+      null,
+      folioRoot,
+      false, // isBranch
+      null,  // todaySummary
+      '## Overdue Task Alert\n- Task 1 is overdue. Suggest branching to triage.' // overdueTriagePrompt
+    );
+
+    const insts = await agent.getInstructions();
+    expect(insts).toContain('You are a helpful assistant.');
+    expect(insts).toContain('Task 1 is overdue. Suggest branching to triage.');
+  });
 });

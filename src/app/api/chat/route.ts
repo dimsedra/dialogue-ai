@@ -275,11 +275,39 @@ export async function POST(req: Request) {
 
     // Resolve session branching state
     let isBranch = false;
+    let overdueTriagePrompt = '';
     if (isPb && pbClient && sessionId) {
       try {
         const sessionRecord = await pbClient.collection('chat_sessions').getOne(sessionId);
-        if (sessionRecord && sessionRecord.sessionType === 'branch') {
-          isBranch = true;
+        if (sessionRecord) {
+          if (sessionRecord.sessionType === 'branch') {
+            isBranch = true;
+          } else {
+            // Trunk session. Fetch overdue tasks in this session's workspace.
+            const wsId = sessionRecord.workspace;
+            if (wsId) {
+              const nowMs = Date.now();
+              const userId = pbClient.authStore.record?.id;
+              if (userId) {
+                const tasksList = await pbClient.collection('tasks').getList(1, 100, {
+                  filter: `user = "${userId.replace(/"/g, '\\"')}" && workspace = "${wsId.replace(/"/g, '\\"')}" && completed = false && dueDate > 0 && dueDate < ${nowMs}`,
+                  sort: '+dueDate',
+                });
+                const overdueTasks = tasksList.items;
+                if (overdueTasks.length > 0) {
+                  overdueTriagePrompt = `\n\n## Overdue Task Alert\nThere are currently ${overdueTasks.length} overdue task(s) in this workspace:\n`;
+                  overdueTasks.slice(0, 5).forEach((t: any) => {
+                    const days = Math.max(1, Math.floor((nowMs - t.dueDate) / (24 * 60 * 60 * 1000)));
+                    overdueTriagePrompt += `- "${t.text}" (due ${new Date(t.dueDate).toLocaleDateString()}, ${days} day(s) overdue)\n`;
+                  });
+                  if (overdueTasks.length > 5) {
+                    overdueTriagePrompt += `- ... and ${overdueTasks.length - 5} more.\n`;
+                  }
+                  overdueTriagePrompt += `\nINSTRUCTION: Direct the user to address these overdue tasks. Suggest creating a specialized topic branch to triage them. Mention that they can click the branch icon on your response to start a branch for this.`;
+                }
+              }
+            }
+          }
         }
       } catch (err) {
         console.warn(`[Chat API] Could not fetch session record for ${sessionId} to determine branch state:`, err);
@@ -305,6 +333,7 @@ export async function POST(req: Request) {
       folioRootPath,
       isBranch,
       todaySummary,
+      overdueTriagePrompt,
     );
     
     // File-based LibSQL ensures approval snapshots survive across HTTP requests

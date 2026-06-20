@@ -149,6 +149,7 @@ function EventPrepCard({
 }
 
 interface DashboardProps {
+  activeWorkspaceId?: string | undefined;
   workspaces: PbWorkspaces[] | undefined;
   sessions: PbChatSessions[] | undefined;
   profile: { name?: string; bio?: string } | null | undefined;
@@ -163,6 +164,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({
+  activeWorkspaceId,
   workspaces,
   sessions,
   profile,
@@ -194,8 +196,8 @@ export function Dashboard({
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const timezoneOffset = new Date().getTimezoneOffset();
   const timeArgs = useMemo(
-    () => ({ timezone, timezoneOffset }),
-    [timezone, timezoneOffset],
+    () => ({ timezone, timezoneOffset, workspaceId: activeWorkspaceId }),
+    [timezone, timezoneOffset, activeWorkspaceId],
   );
 
   const legacyProactiveState = usePbQuery(

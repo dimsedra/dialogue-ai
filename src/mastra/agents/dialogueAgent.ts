@@ -71,6 +71,7 @@ export async function createDialogueAgent(
   folioRootPath?: string | null,
   isBranch?: boolean,
   todaySummary?: string | null,
+  overdueTriagePrompt?: string | null,
 ) {
   const personaName = 'Dialogue';
   const personaPrompt = 'You build relationships through concrete behaviors, not prescribed tones.';
@@ -371,6 +372,10 @@ You are currently executing within a specialized topic branch.
 CRITICAL RULES:
 1. Stay strictly focused on the current topic or task. Do NOT suggest new unrelated tasks, ask general daily briefing questions, do habit check-ins, or prompt for morning greetings.
 2. Focus entirely on resolving the user's immediate request/discussion for this branch.`;
+  }
+
+  if (overdueTriagePrompt) {
+    instructions += overdueTriagePrompt;
   }
 
   const allTools = {

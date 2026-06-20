@@ -1035,6 +1035,8 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
 
   // 1. Gather all files in the folio under tasks/ and events/ directories
   const filesToSync: string[] = [];
+  const workspacesWithTasksDir = new Set<string>();
+  const workspacesWithEventsDir = new Set<string>();
 
   const scanFolder = (folderPath: string) => {
     if (!existsSync(folderPath)) return;
@@ -1068,16 +1070,26 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
     for (const folder of wsFolders) {
       const fullPath = join(workspacesParentPath, folder);
       if (statSync(fullPath).isDirectory()) {
-        scanFolder(join(fullPath, 'tasks'));
-        scanFolder(join(fullPath, 'events'));
+        const dashIndex = folder.lastIndexOf('-');
+        const workspaceId = dashIndex !== -1 ? folder.slice(dashIndex + 1) : folder;
+
+        const tasksPath = join(fullPath, 'tasks');
+        if (existsSync(tasksPath) && statSync(tasksPath).isDirectory()) {
+          workspacesWithTasksDir.add(workspaceId);
+          scanFolder(tasksPath);
+        }
+        
+        const eventsPath = join(fullPath, 'events');
+        if (existsSync(eventsPath) && statSync(eventsPath).isDirectory()) {
+          workspacesWithEventsDir.add(workspaceId);
+          scanFolder(eventsPath);
+        }
         
         const wsMemoriesPath = join(fullPath, 'MEMORIES.md');
         if (existsSync(wsMemoriesPath)) {
           filesToSync.push(wsMemoriesPath);
         }
 
-        const dashIndex = folder.lastIndexOf('-');
-        const workspaceId = dashIndex !== -1 ? folder.slice(dashIndex + 1) : folder;
         const wsConfigPath = join(fullPath, '.workspace.yaml');
         if (existsSync(wsConfigPath)) {
           filesToSync.push(wsConfigPath);
@@ -1169,8 +1181,17 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
     if (item === 'tasks' || item === 'events' || item === 'system' || item === 'workspaces') continue;
     const fullPath = join(folioRootPath, item);
     if (statSync(fullPath).isDirectory()) {
-      scanFolder(join(fullPath, 'tasks'));
-      scanFolder(join(fullPath, 'events'));
+      const workspaceId = item;
+      const tasksPath = join(fullPath, 'tasks');
+      if (existsSync(tasksPath) && statSync(tasksPath).isDirectory()) {
+        workspacesWithTasksDir.add(workspaceId);
+        scanFolder(tasksPath);
+      }
+      const eventsPath = join(fullPath, 'events');
+      if (existsSync(eventsPath) && statSync(eventsPath).isDirectory()) {
+        workspacesWithEventsDir.add(workspaceId);
+        scanFolder(eventsPath);
+      }
       
       const oldRootWsMemories = join(fullPath, 'workspace_memories.md');
       const newRootWsMemories = join(fullPath, 'MEMORIES.md');
@@ -1260,6 +1281,17 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
       const records = await pb.collection(collectionName).getFullList();
       for (const rec of records) {
         if (!existingIds.has(rec.id)) {
+          if (rec.workspace) {
+            const hasDir = sourceType === 'Task'
+              ? workspacesWithTasksDir.has(rec.workspace)
+              : workspacesWithEventsDir.has(rec.workspace);
+            
+            if (!hasDir) {
+              console.log(`[Sync Engine] Skipping prune of ${sourceType} ${rec.id} because workspace ${rec.workspace} ${sourceType.toLowerCase()}s directory is not present on disk.`);
+              continue;
+            }
+          }
+
           console.log(`[Sync Engine] Pruning deleted ${sourceType} from DB:`, rec.id);
           // Delete memories
           await deleteSourceMemories(pb, rec.id, sourceType);

@@ -6,6 +6,7 @@ export type DashboardTimeArgs = {
   timezone?: string;
   timezoneOffset?: number;
   userId?: string;
+  workspaceId?: string;
 } | undefined;
 
 export type ProactiveState =
@@ -370,6 +371,25 @@ export function buildDashboardFilter(
   return `user = "${userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
+export function buildWorkspaceDashboardFilter(
+  args: Record<string, unknown> | undefined,
+): string {
+  const pb = getPbClient();
+  const userId = args?.userId ?? pb.authStore.record?.id;
+  if (typeof userId !== "string" || userId.length === 0) {
+    return "1 = 2";
+  }
+  let filter = `user = "${userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  if (args?.workspaceId) {
+    const wsId = args.workspaceId;
+    if (typeof wsId === "string" && wsId.length > 0) {
+      const escapedWs = wsId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      filter += ` && workspace = "${escapedWs}"`;
+    }
+  }
+  return filter;
+}
+
 // =============================================================================
 // Implementation Functions
 // =============================================================================
@@ -386,9 +406,18 @@ async function getAttentionNeededImpl(
     args?.timezoneOffset,
   );
 
+  const escapedUser = userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  let taskFilter = `user = "${escapedUser}"`;
+  let habitFilter = `user = "${escapedUser}"`;
+  if (args?.workspaceId) {
+    const escapedWs = args.workspaceId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    taskFilter += ` && workspace = "${escapedWs}"`;
+    habitFilter += ` && workspace = "${escapedWs}"`;
+  }
+
   const [tasksList, habitsList] = await Promise.all([
-    pb.collection("tasks").getList(1, 200, { filter: `user = "${userId}"` }),
-    pb.collection("habits").getList(1, 200, { filter: `user = "${userId}"` }),
+    pb.collection("tasks").getList(1, 200, { filter: taskFilter }),
+    pb.collection("habits").getList(1, 200, { filter: habitFilter }),
   ]);
 
   const activeHabits = (habitsList.items as unknown as PbHabits[]).filter((h) => !h.archived);
@@ -411,8 +440,15 @@ async function getTaskTriageImpl(
   const userId = args?.userId ?? pb.authStore.record?.id;
   if (!userId) return null;
 
+  const escapedUser = userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  let filter = `user = "${escapedUser}"`;
+  if (args?.workspaceId) {
+    const escapedWs = args.workspaceId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    filter += ` && workspace = "${escapedWs}"`;
+  }
+
   const tasksList = await pb.collection("tasks").getList(1, 200, {
-    filter: `user = "${userId}"`,
+    filter,
   });
 
   const now = Date.now();
@@ -442,9 +478,18 @@ async function getMorningBriefImpl(
   );
   if (hour < 6 || hour >= 12) return null;
 
+  const escapedUser = userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  let taskFilter = `user = "${escapedUser}"`;
+  let eventFilter = `user = "${escapedUser}"`;
+  if (args?.workspaceId) {
+    const escapedWs = args.workspaceId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    taskFilter += ` && workspace = "${escapedWs}"`;
+    eventFilter += ` && workspace = "${escapedWs}"`;
+  }
+
   const [tasksList, eventsList] = await Promise.all([
-    pb.collection("tasks").getList(1, 200, { filter: `user = "${userId}"` }),
-    pb.collection("events").getList(1, 200, { filter: `user = "${userId}"` }),
+    pb.collection("tasks").getList(1, 200, { filter: taskFilter }),
+    pb.collection("events").getList(1, 200, { filter: eventFilter }),
   ]);
 
   const todayTasks = (tasksList.items as unknown as PbTasks[]).filter(
@@ -487,8 +532,15 @@ async function getEventPrepImpl(
   );
   if (hour < 12 || hour >= 17) return null;
 
+  const escapedUser = userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  let filter = `user = "${escapedUser}"`;
+  if (args?.workspaceId) {
+    const escapedWs = args.workspaceId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    filter += ` && workspace = "${escapedWs}"`;
+  }
+
   const eventsList = await pb.collection("events").getList(1, 200, {
-    filter: `user = "${userId}"`,
+    filter,
   });
 
   const todayEvents = (eventsList.items as unknown as PbEvents[]).filter((e) =>
@@ -525,8 +577,15 @@ async function getHabitCheckImpl(
   );
   if (hour < 18 || hour > 22) return null;
 
+  const escapedUser = userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  let habitFilter = `user = "${escapedUser}"`;
+  if (args?.workspaceId) {
+    const escapedWs = args.workspaceId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    habitFilter += ` && workspace = "${escapedWs}"`;
+  }
+
   const [habitsList, logsList] = await Promise.all([
-    pb.collection("habits").getList(1, 200, { filter: `user = "${userId}"` }),
+    pb.collection("habits").getList(1, 200, { filter: habitFilter }),
     pb.collection("habit_logs").getList(1, 200, {
       filter: `user = "${userId}" && dateString = "${todayDateString}"`,
     }),
@@ -570,8 +629,15 @@ async function getEveningLogImpl(
   );
   if (hour < 20 || hour > 22) return null;
 
+  const escapedUser = userId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  let habitFilter = `user = "${escapedUser}"`;
+  if (args?.workspaceId) {
+    const escapedWs = args.workspaceId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    habitFilter += ` && workspace = "${escapedWs}"`;
+  }
+
   const [habitsList, logsList] = await Promise.all([
-    pb.collection("habits").getList(1, 200, { filter: `user = "${userId}"` }),
+    pb.collection("habits").getList(1, 200, { filter: habitFilter }),
     pb.collection("habit_logs").getList(1, 200, {
       filter: `user = "${userId}" && dateString = "${todayDateString}"`,
     }),
@@ -624,7 +690,7 @@ export const getAttentionNeededQuery = defineQuery<
   {
     collection: "tasks", // Invalidation on tasks / habits
     kind: "first",
-    buildFilter: buildDashboardFilter,
+    buildFilter: buildWorkspaceDashboardFilter,
   },
   getAttentionNeededImpl,
 );
@@ -637,7 +703,7 @@ export const getTaskTriageQuery = defineQuery<
   {
     collection: "tasks",
     kind: "first",
-    buildFilter: buildDashboardFilter,
+    buildFilter: buildWorkspaceDashboardFilter,
   },
   getTaskTriageImpl,
 );
@@ -649,7 +715,7 @@ export const getMorningBriefQuery = defineQuery<
   {
     collection: "tasks",
     kind: "first",
-    buildFilter: buildDashboardFilter,
+    buildFilter: buildWorkspaceDashboardFilter,
   },
   getMorningBriefImpl,
 );
@@ -661,7 +727,7 @@ export const getEventPrepQuery = defineQuery<
   {
     collection: "events",
     kind: "first",
-    buildFilter: buildDashboardFilter,
+    buildFilter: buildWorkspaceDashboardFilter,
   },
   getEventPrepImpl,
 );
@@ -673,7 +739,7 @@ export const getHabitCheckQuery = defineQuery<
   {
     collection: "habits",
     kind: "first",
-    buildFilter: buildDashboardFilter,
+    buildFilter: buildWorkspaceDashboardFilter,
   },
   getHabitCheckImpl,
 );
@@ -685,7 +751,7 @@ export const getEveningLogQuery = defineQuery<
   {
     collection: "habits",
     kind: "first",
-    buildFilter: buildDashboardFilter,
+    buildFilter: buildWorkspaceDashboardFilter,
   },
   getEveningLogImpl,
 );
