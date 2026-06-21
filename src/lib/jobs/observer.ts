@@ -597,12 +597,13 @@ CRITICAL RULES FOR CONTEXT.MD:
 6. Never add global user personality traits, general user biography details, or specific user preferences/facts to CONTEXT.md. These must reside in USER.md (global profile) or MEMORIES.md (semantic memories) to avoid redundancy and prompt collisions.
 7. Enforce a strict budget of 3000 characters. Prioritize high-impact behavioral guidelines, core vibe rules, and active goals. Condense or merge overlapping sections.
 8. If no structural changes or behavioral/vibe tuning updates are warranted, return the EXACT original CONTEXT.md content.
-9. **PROJECT DOCUMENTATION HANDLING**: If the user shares project documentation (README, specs, architecture docs, etc.) in the conversation, extract the macro-level project overview and integrate it into CONTEXT.md's "Purpose" section. Focus on:
-   - What the project IS (core concept, problem it solves)
-   - Key technical decisions and architecture choices
-   - Current development phase and major milestones
-   - Do NOT copy the entire documentation — distill it into a concise overview (2-4 sentences max).
-   - If CONTEXT.md already has a Purpose section, update it only if the new documentation significantly changes or expands the project scope.
+9. **SUBSTANTIAL CONTENT HANDLING**: If the user shares substantial text content in the conversation (project docs, learning notes, research findings, architecture decisions, etc.), extract the macro-level information relevant to this workspace's purpose and integrate it into the Purpose section. Rules:
+   - PRESERVE all existing sections (Behavioral Tuning, Vibe, Milestones, Topic Affinities, etc.) — never remove them.
+   - Only ADD/UPDATE the Purpose section with distilled overview.
+   - If Purpose section doesn't exist, create it at the top.
+   - Extract what matters: core concept, key decisions, current phase.
+   - Do NOT copy full text verbatim — let the 3000 char limit naturally compress.
+   - If Purpose section already covers the content, no update needed.
 
 Return the final updated CONTEXT.md file content. Do NOT include markdown blocks, backticks, or introduction outside the file content. Return ONLY the markdown file.`;
 
