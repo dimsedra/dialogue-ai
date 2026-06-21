@@ -134,13 +134,32 @@ export async function createDialogueAgent(
     case 'opencode':
       model = opencode(modelId || 'anthropic/claude-3-5-sonnet-20241022');
       break;
-    case 'lmstudio':
+    case 'lmstudio': {
+      let lmModelId = modelId || 'local-model';
+      if (lmModelId === 'local-model') {
+        // Resolve to the actual loaded model in LM Studio
+        try {
+          const res = await fetch("http://127.0.0.1:1234/api/v1/models", {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            signal: AbortSignal.timeout(3000),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const models = data?.data || [];
+            const loaded = models.find((m: any) => m.loaded_instances && m.loaded_instances.length > 0);
+            if (loaded?.key) lmModelId = loaded.key;
+          }
+        } catch {}
+      }
       model = createOpenAICompatible({
         name: 'lmstudio',
         baseURL: baseUrl || 'http://localhost:1234/v1',
         apiKey: apiKey || 'lm-studio',
-      })(modelId || 'local-model');
+      })(lmModelId);
       break;
+    }
     case 'local-gguf':
       model = createOpenAICompatible({
         name: 'local-gguf',
@@ -421,6 +440,7 @@ CRITICAL RULES:
     ],
     hooks: {
       beforeToolCall: ({ toolName, input }: { toolName: string; input: Record<string, unknown> }) => {
+        console.log(`[ToolCall] BEFORE ${toolName} - input keys: ${Object.keys(input).join(', ')}`);
         const sanitized = { ...input };
         for (const [key, val] of Object.entries(sanitized)) {
           if (typeof val === 'string' && val.length > 100) {
@@ -435,6 +455,8 @@ CRITICAL RULES:
       afterToolCall: ({ toolName, output, error }: { toolName: string; output: unknown; error?: Error }) => {
         if (error) {
           console.error(`[ToolCall] ${toolName} FAILED:`, error.message);
+        } else {
+          console.log(`[ToolCall] AFTER ${toolName} - success`);
         }
       },
     },

@@ -218,16 +218,19 @@ export async function runChatEngine(options: ChatEngineOptions): Promise<ChatEng
     };
   }
 
-  const result = await generateText({
-    model,
-    system: systemInstruction,
-    messages: [
-      { role: "user", content: contentArray }
-    ],
-    tools: vercelTools,
-  });
+  const useSemaphore = provider === "lmstudio";
+  if (useSemaphore) await lmStudioSemaphore.acquire();
+  try {
+    const result = await generateText({
+      model,
+      system: systemInstruction,
+      messages: [
+        { role: "user", content: contentArray }
+      ],
+      tools: vercelTools,
+    });
 
-  const text = result.text;
+    const text = result.text;
   const calls = result.toolCalls ? result.toolCalls.map((tc: any) => ({
     name: tc.toolName,
     args: tc.args
@@ -256,6 +259,9 @@ export async function runChatEngine(options: ChatEngineOptions): Promise<ChatEng
     calls,
     reasoningContent
   };
+  } finally {
+    if (useSemaphore) lmStudioSemaphore.release();
+  }
 }
 
 function cleanFollowUpText(text: string): string {
@@ -342,13 +348,19 @@ export async function executeChatFollowUp(options: FollowUpOptions): Promise<str
     messages.push({ role: "user", content: promptInstruction });
   }
 
-  const result = await generateText({
-    model,
-    system: cleanSystemInstruction,
-    messages,
-  });
+  const useSemaphore = provider === "lmstudio";
+  if (useSemaphore) await lmStudioSemaphore.acquire();
+  try {
+    const result = await generateText({
+      model,
+      system: cleanSystemInstruction,
+      messages,
+    });
 
-  return cleanFollowUpText(result.text);
+    return cleanFollowUpText(result.text);
+  } finally {
+    if (useSemaphore) lmStudioSemaphore.release();
+  }
 }
 
 export interface TaskOptions {
@@ -408,9 +420,71 @@ export function getTaskProviderAndModel(profile: any, task: string): { provider:
   return { provider: mainProvider, modelId: fallbackModel };
 }
 
+async function resolveLmStudioModel(): Promise<string | null> {
+  try {
+    const res = await fetch("http://127.0.0.1:1234/api/v1/models", {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const models = data?.data || [];
+    const loaded = models.find((m: any) => m.loaded_instances && m.loaded_instances.length > 0);
+    return loaded?.key || null;
+  } catch {
+    return null;
+  }
+}
+
+// LM Studio concurrency limiter — lightweight models can't handle parallel requests
+export const lmStudioSemaphore = {
+  queue: [] as (() => void)[],
+  running: 0,
+  max: 1,
+  async acquire() {
+    if (this.running < this.max) {
+      this.running++;
+      return;
+    }
+    await new Promise<void>((resolve) => this.queue.push(resolve));
+    this.running++;
+  },
+  release() {
+    this.running--;
+    if (this.queue.length > 0) {
+      this.queue.shift()!();
+    }
+  },
+};
+
 export async function runSimpleTask(options: TaskOptions): Promise<string> {
   const { provider, customConfigs, prompt, systemInstruction, modelId } = options;
-  const model = getVercelModel(provider, customConfigs, modelId) as any;
+
+  let resolvedModelId = modelId;
+  if (provider === "lmstudio" && (!resolvedModelId || resolvedModelId === "local-model")) {
+    const loadedModel = await resolveLmStudioModel();
+    if (loadedModel) {
+      resolvedModelId = loadedModel;
+    }
+  }
+
+  const model = getVercelModel(provider, customConfigs, resolvedModelId) as any;
+  if (provider === "lmstudio") {
+    await lmStudioSemaphore.acquire();
+    try {
+      const result = await generateText({
+        model,
+        prompt,
+        system: systemInstruction,
+        temperature: 0.1,
+      });
+      return result.text;
+    } finally {
+      lmStudioSemaphore.release();
+    }
+  }
   const result = await generateText({
     model,
     prompt,

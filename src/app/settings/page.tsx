@@ -111,6 +111,13 @@ export default function SettingsPage() {
   });
   const [isCopied, setIsCopied] = useState(false);
   const [isLoadingEngine, setIsLoadingEngine] = useState(false);
+
+  // LM Studio states
+  const [lmStudioConnected, setLmStudioConnected] = useState<boolean | null>(null);
+  const [lmStudioModels, setLmStudioModels] = useState<any[]>([]);
+  const [lmStudioLoading, setLmStudioLoading] = useState(false);
+  const [lmStudioLoadProgress, setLmStudioLoadProgress] = useState<string>("");
+  const [lmStudioContextLength, setLmStudioContextLength] = useState<number | string>(16384);
   const [customConfigs, setCustomConfigs] = useState<
     Record<string, { apiKey?: string; baseUrl?: string; modelId?: string }>
   >({});
@@ -151,6 +158,11 @@ export default function SettingsPage() {
     }
     if (prefs?.customConfigs) {
       setCustomConfigs(prefs.customConfigs as Record<string, { apiKey?: string; baseUrl?: string }>);
+      // Initialize LM Studio context length from saved config
+      const lmCfg = (prefs.customConfigs as any)?.lmstudio;
+      if (lmCfg?.contextLength) {
+        setLmStudioContextLength(lmCfg.contextLength);
+      }
     }
     if (prefs?.taskModels) {
       setTaskModels(prefs.taskModels as Record<string, string>);
@@ -206,6 +218,113 @@ export default function SettingsPage() {
     const interval = setInterval(fetchStatus, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  // Poll LM Studio connection status
+  const fetchLmStudioModels = async () => {
+    try {
+      const res = await fetch("/api/lm-studio?action=models");
+      if (res.ok) {
+        const data = await res.json();
+        setLmStudioConnected(true);
+        setLmStudioModels(data.models || []);
+
+        // Sync context length from loaded LM Studio instance
+        for (const m of data.models || []) {
+          if (m.loaded && m.loaded_instances?.length > 0) {
+            const ctxLen = m.loaded_instances[0].context_length;
+            if (ctxLen && ctxLen !== lmStudioContextLength) {
+              setLmStudioContextLength(ctxLen);
+            }
+            break;
+          }
+        }
+      } else {
+        setLmStudioConnected(false);
+        setLmStudioModels([]);
+      }
+    } catch {
+      setLmStudioConnected(false);
+      setLmStudioModels([]);
+    }
+  };
+
+  useEffect(() => {
+    if (provider === "lmstudio") {
+      fetchLmStudioModels();
+      const interval = setInterval(fetchLmStudioModels, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [provider]);
+
+  const handleLmStudioLoad = async (modelKey: string) => {
+    setLmStudioLoading(true);
+    setLmStudioLoadProgress("Sending load request...");
+    try {
+      const res = await fetch("/api/lm-studio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "load",
+          model: modelKey,
+          context_length: Number(lmStudioContextLength) || 16384,
+        }),
+      });
+      if (!res.ok) {
+        setLmStudioLoadProgress("Load failed.");
+        setLmStudioLoading(false);
+        return;
+      }
+
+      // Poll until model appears in loaded_instances
+      setLmStudioLoadProgress("Loading model into VRAM...");
+      let attempts = 0;
+      const maxAttempts = 60; // 60 * 1s = 60s max
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const modelsRes = await fetch("/api/lm-studio?action=models");
+          if (modelsRes.ok) {
+            const data = await modelsRes.json();
+            const model = (data.models || []).find((m: any) => m.key === modelKey);
+            if (model?.loaded && model.loaded_instances?.length > 0) {
+              setLmStudioLoadProgress("Model ready!");
+              clearInterval(poll);
+              setTimeout(() => setLmStudioLoadProgress(""), 2000);
+              setLmStudioLoading(false);
+              await fetchLmStudioModels();
+              return;
+            }
+          }
+        } catch {
+          // keep polling
+        }
+        if (attempts >= maxAttempts) {
+          setLmStudioLoadProgress("Load timed out.");
+          clearInterval(poll);
+          setLmStudioLoading(false);
+        }
+      }, 1000);
+    } catch {
+      setLmStudioLoadProgress("Load failed.");
+      setLmStudioLoading(false);
+    }
+  };
+
+  const handleLmStudioUnload = async (instanceId: string) => {
+    setLmStudioLoading(true);
+    try {
+      const res = await fetch("/api/lm-studio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unload", instance_id: instanceId }),
+      });
+      if (res.ok) {
+        await fetchLmStudioModels();
+      }
+    } finally {
+      setLmStudioLoading(false);
+    }
+  };
 
   const handleCopyPath = () => {
     if (!localGgufModelPath) return;
@@ -272,10 +391,20 @@ export default function SettingsPage() {
     const startTime = Date.now();
     try {
       await updateProfile({ name, bio, preferences: { pushEnabled } });
+
+      // Persist LM Studio context length into customConfigs.lmstudio
+      const finalCustomConfigs = {
+        ...customConfigs,
+        lmstudio: {
+          ...(customConfigs.lmstudio || {}),
+          contextLength: Number(lmStudioContextLength) || 16384,
+        },
+      };
+
       await updatePreferences({
         provider,
         searchProvider,
-        customConfigs,
+        customConfigs: finalCustomConfigs,
         taskModels,
         mcpServers,
         timeFormat,
@@ -961,6 +1090,161 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       </div>
+                    ) : provider === "lmstudio" ? (
+                      <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-4">
+                        <div>
+                          <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-1">
+                            LM Studio Engine
+                          </h3>
+                          <p className="text-[10px] text-[#a8a29e] leading-normal mb-3">
+                            Manage models directly from Dialogue via LM Studio API. Start LM Studio with the server enabled.
+                          </p>
+                        </div>
+
+                        {/* Connection Status */}
+                        <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
+                          lmStudioConnected === true
+                            ? 'bg-green-500/5 border-green-500/20'
+                            : lmStudioConnected === false
+                            ? 'bg-red-500/5 border-red-500/20'
+                            : 'bg-[#12110e] border-[#2a2723]'
+                        }`}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-bold text-[#a8a29e] tracking-wider">Status:</span>
+                            <span className={`text-[11px] font-bold ${
+                              lmStudioConnected === true
+                                ? 'text-green-400'
+                                : lmStudioConnected === false
+                                ? 'text-red-400'
+                                : 'text-neutral-400'
+                            }`}>
+                              {lmStudioConnected === true && '🟢 Connected (port 1234)'}
+                              {lmStudioConnected === false && '🔴 Not running — start LM Studio'}
+                              {lmStudioConnected === null && '⚪ Checking...'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={fetchLmStudioModels}
+                            className="px-3 py-1.5 rounded-lg border border-[#2a2723] hover:border-[#d4a373]/50 text-xs font-semibold text-[#f2efeb] bg-[#1a1814] hover:bg-[#201d19] transition-all focus:outline-none"
+                          >
+                            Refresh
+                          </button>
+                        </div>
+
+                        {/* Context Length */}
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
+                            Context Length
+                          </label>
+                          <input
+                            type="number"
+                            min="512"
+                            max="131072"
+                            step="512"
+                            value={lmStudioContextLength}
+                            onChange={(e) => setLmStudioContextLength(e.target.value === "" ? "" : parseInt(e.target.value) || 0)}
+                            onBlur={() => setLmStudioContextLength((prev) => Math.max(512, Math.min(131072, typeof prev === "number" ? prev : parseInt(prev) || 16384)))}
+                            className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs text-[#f2efeb] focus:outline-none focus:border-[#d4a373]/40 transition-all"
+                          />
+                          <p className="text-[8px] text-[#a8a29e]/50">Applied when loading a model</p>
+                        </div>
+
+                        {/* Model List */}
+                        {lmStudioConnected === true && (
+                          <div className="space-y-2">
+                            <h4 className="text-[10px] font-bold text-[#a8a29e] uppercase tracking-wider">
+                              Available Models ({lmStudioModels.length})
+                            </h4>
+                            <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
+                              {lmStudioModels.map((m: any) => {
+                                const isLoaded = m.loaded_instances && m.loaded_instances.length > 0;
+                                const sizeGB = m.size_bytes ? (m.size_bytes / (1024 ** 3)).toFixed(1) : null;
+                                return (
+                                  <div key={m.key} className={`p-3 rounded-lg border transition-all ${
+                                    isLoaded
+                                      ? 'bg-green-500/5 border-green-500/20'
+                                      : 'bg-[#12110e] border-[#2a2723] hover:border-[#d4a373]/30'
+                                  }`}>
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[11px] font-bold text-[#f2efeb] truncate">
+                                            {m.display_name || m.key}
+                                          </span>
+                                          {isLoaded && (
+                                            <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 font-bold uppercase">
+                                              Loaded
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <span className="text-[9px] text-[#a8a29e]">
+                                            {m.params_string || "—"}
+                                          </span>
+                                          {m.quantization && (
+                                            <span className="text-[9px] text-[#a8a29e]">
+                                              {m.quantization.name}
+                                            </span>
+                                          )}
+                                          {sizeGB && (
+                                            <span className="text-[9px] text-[#a8a29e]">
+                                              {sizeGB}GB
+                                            </span>
+                                          )}
+                                          {m.architecture && (
+                                            <span className="text-[9px] text-[#a8a29e]/60">
+                                              {m.architecture}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        {isLoaded ? (
+                                          <button
+                                            type="button"
+                                            disabled={lmStudioLoading}
+                                            onClick={() => handleLmStudioUnload(m.loaded_instances[0].id)}
+                                            className="px-2.5 py-1 rounded-lg border border-red-500/30 hover:border-red-500/60 text-red-400 bg-red-500/5 hover:bg-red-500/10 text-[10px] font-bold transition-all disabled:opacity-50 focus:outline-none"
+                                          >
+                                            Unload
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            disabled={lmStudioLoading}
+                                            onClick={() => handleLmStudioLoad(m.key)}
+                                            className="px-2.5 py-1 rounded-lg border border-green-500/30 hover:border-green-500/60 text-green-400 bg-green-500/5 hover:bg-green-500/10 text-[10px] font-bold transition-all disabled:opacity-50 focus:outline-none"
+                                          >
+                                            {lmStudioLoading ? 'Loading...' : 'Load'}
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {lmStudioModels.length === 0 && (
+                                <p className="text-[10px] text-[#a8a29e]/60 py-2">
+                                  No models loaded. Load a model in LM Studio.
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Load Progress Indicator */}
+                            {lmStudioLoadProgress && (
+                              <div className="mt-2 px-3 py-2 rounded-lg bg-[#1a1814] border border-[#2a2723]">
+                                <div className="flex items-center gap-2">
+                                  {lmStudioLoading && (
+                                    <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                  )}
+                                  <span className="text-[10px] text-[#a8a29e]">{lmStudioLoadProgress}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <div className="mt-4 p-4 rounded-xl bg-[#0f0e0c] border border-[#2a2723] space-y-3">
                         <h3 className="text-[11px] font-bold text-[#d4a373] uppercase tracking-wider mb-2">
@@ -968,9 +1252,7 @@ export default function SettingsPage() {
                         </h3>
                         <div className="space-y-1.5">
                           <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
-                            {provider === "lmstudio"
-                              ? "API Key (Ignored for local LLM)"
-                              : "API Key (Overrides Env Var)"}
+                            API Key (Overrides Env Var)
                           </label>
                           <div className="relative flex items-center">
                             <input
@@ -988,13 +1270,9 @@ export default function SettingsPage() {
                               onCopy={(e) => !showApiKey && e.preventDefault()}
                               onCut={(e) => !showApiKey && e.preventDefault()}
                               placeholder={
-                                provider === "lmstudio"
-                                  ? showApiKey
-                                    ? "lm-studio"
-                                    : "••••••••••••"
-                                  : showApiKey
-                                    ? "sk-..."
-                                    : "••••••••••••"
+                                showApiKey
+                                  ? "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                  : "••••••••••••"
                               }
                               className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg pl-3 pr-9 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                             />
@@ -1014,9 +1292,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-[9px] text-[#a8a29e] uppercase tracking-wider">
-                            {provider === "lmstudio"
-                              ? "Base URL (Defaults to http://localhost:1234/v1)"
-                              : "Base URL (Optional)"}
+                            Base URL (Optional)
                           </label>
                           <input
                             type="text"
@@ -1033,9 +1309,7 @@ export default function SettingsPage() {
                             placeholder={
                               provider === "openai"
                                 ? "https://api.openai.com/v1"
-                                : provider === "lmstudio"
-                                  ? "http://localhost:1234/v1"
-                                  : ""
+                                : ""
                             }
                             className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                           />
@@ -1061,9 +1335,7 @@ export default function SettingsPage() {
                                 ? "gpt-4o"
                                 : provider === "anthropic"
                                   ? "claude-3-5-sonnet-latest"
-                                  : provider === "lmstudio"
-                                    ? "e.g. llama-3.2-3b-instruct"
-                                    : "gemini-1.5-pro"
+                                  : "gemini-1.5-pro"
                             }
                             className="w-full bg-[#1a1814] border border-[#2a2723] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-[#d4a373]/40 transition-all text-[#f2efeb]"
                           />

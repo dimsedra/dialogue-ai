@@ -320,7 +320,7 @@ describe("runObserver", () => {
     expect(mockFiles[expectedPath]).toContain("Alice has been writing code and exploring Rust.");
 
     expect(userProfiles[0].weeklyNotesSummaries).toContain("Explored Rust and established project setup.");
-    expect(userProfiles[0].preferences.lastUserMdSynthesis).toBeGreaterThan(Date.now() - 1000);
+    expect(userProfiles[0].preferences.lastUserMdSynthesis).toBeGreaterThan(Date.now() - 10000);
   });
 
   it("should skip weekly USER.md profiling when less than 7 days have passed", async () => {

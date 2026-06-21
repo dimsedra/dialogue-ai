@@ -106,14 +106,26 @@ async function runMemoryExtraction(
   const { start: startOfDay } = getTodayBounds(timezone);
   let memoriesExtractedCount = 0;
 
-  // 1. Fetch today's messages in this session
+  let lastProcessedTimestamp = startOfDay;
+  const checkpointKey = `observer_checkpoint_${sessionId}`;
+  try {
+    const checkpoint = await pb.collection("system_state").getFirstListItem(`key = "${checkpointKey}"`);
+    if (checkpoint && typeof checkpoint.lastRunAt === "number" && checkpoint.lastRunAt > startOfDay) {
+      lastProcessedTimestamp = checkpoint.lastRunAt;
+      console.log(`[Observer] Using checkpoint timestamp ${lastProcessedTimestamp} for session ${sessionId}`);
+    }
+  } catch (err) {
+    // Checkpoint doesn't exist yet, fallback to startOfDay
+  }
+
+  // 1. Fetch today's messages in this session since the checkpoint
   const messages = await pb.collection("messages").getFullList({
-    filter: `session = "${sessionId}" && timestamp >= ${startOfDay}`,
+    filter: `session = "${sessionId}" && timestamp >= ${startOfDay} && timestamp > ${lastProcessedTimestamp}`,
     sort: "timestamp",
   });
 
   if (messages.length === 0) {
-    console.log(`[Observer] No messages found for session ${sessionId} today, skipping memory extraction.`);
+    console.log(`[Observer] No new messages found for session ${sessionId} since checkpoint ${lastProcessedTimestamp}, skipping memory extraction.`);
     return 0;
   }
 
@@ -354,6 +366,18 @@ ${transcript}`;
     }
   }
 
+  if (messages.length > 0) {
+    const latestMessageTimestamp = messages[messages.length - 1].timestamp;
+    try {
+      const checkpoint = await pb.collection("system_state").getFirstListItem(`key = "${checkpointKey}"`);
+      await pb.collection("system_state").update(checkpoint.id, { lastRunAt: latestMessageTimestamp });
+      console.log(`[Observer] Updated checkpoint to ${latestMessageTimestamp} for session ${sessionId}`);
+    } catch (err) {
+      await pb.collection("system_state").create({ key: checkpointKey, lastRunAt: latestMessageTimestamp });
+      console.log(`[Observer] Created new checkpoint at ${latestMessageTimestamp} for session ${sessionId}`);
+    }
+  }
+
   return memoriesExtractedCount;
 }
 
@@ -573,6 +597,12 @@ CRITICAL RULES FOR CONTEXT.MD:
 6. Never add global user personality traits, general user biography details, or specific user preferences/facts to CONTEXT.md. These must reside in USER.md (global profile) or MEMORIES.md (semantic memories) to avoid redundancy and prompt collisions.
 7. Enforce a strict budget of 3000 characters. Prioritize high-impact behavioral guidelines, core vibe rules, and active goals. Condense or merge overlapping sections.
 8. If no structural changes or behavioral/vibe tuning updates are warranted, return the EXACT original CONTEXT.md content.
+9. **PROJECT DOCUMENTATION HANDLING**: If the user shares project documentation (README, specs, architecture docs, etc.) in the conversation, extract the macro-level project overview and integrate it into CONTEXT.md's "Purpose" section. Focus on:
+   - What the project IS (core concept, problem it solves)
+   - Key technical decisions and architecture choices
+   - Current development phase and major milestones
+   - Do NOT copy the entire documentation — distill it into a concise overview (2-4 sentences max).
+   - If CONTEXT.md already has a Purpose section, update it only if the new documentation significantly changes or expands the project scope.
 
 Return the final updated CONTEXT.md file content. Do NOT include markdown blocks, backticks, or introduction outside the file content. Return ONLY the markdown file.`;
 

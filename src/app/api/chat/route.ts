@@ -13,8 +13,7 @@ import { join } from 'path';
 import { parseMcpServers, createMcpClient, getToolsets } from '@/mastra/mcp/client';
 import { reconcileFolio, folioRequestContext } from '@/lib/folio/sync';
 import { DEFAULT_FOLIO_DIR } from '@/lib/folio/constants';
-import { runObserver } from '@/lib/jobs/observer';
-
+import { scheduleObserverDebounce } from '@/lib/jobs/observer-debounce';
 
 export async function POST(req: Request) {
   try {
@@ -370,6 +369,7 @@ export async function POST(req: Request) {
 
     // Run agent execution within the PB authenticated context
     const executeStream = async () => {
+      console.log(`[Chat API] Starting agent execution for provider=${provider}, modelId=${modelId}`);
       return folioRequestContext.run({ folioRootPath, activeWorkspace, basePath, activeSessionId: sessionId || undefined }, () => {
         return handleChatStream({
           mastra: tempMastra,
@@ -385,12 +385,22 @@ export async function POST(req: Request) {
       });
     };
 
-
     let stream;
-    if (isPb && pbClient) {
-      stream = await pbRequestContext.run(pbClient, executeStream);
+    if (provider === "lmstudio") {
+      const { lmStudioSemaphore } = await import('@/lib/ai-providers');
+      await lmStudioSemaphore.acquire();
+      try {
+        stream = isPb && pbClient
+          ? await pbRequestContext.run(pbClient, executeStream)
+          : await executeStream();
+      } catch (err) {
+        lmStudioSemaphore.release();
+        throw err;
+      }
     } else {
-      stream = await executeStream();
+      stream = isPb && pbClient
+        ? await pbRequestContext.run(pbClient, executeStream)
+        : await executeStream();
     }
     
     // Return the response back in Vercel AI SDK UI streaming format
@@ -399,32 +409,46 @@ export async function POST(req: Request) {
     // Wrap response body to run Observer and disconnect MCPClient after streaming completes
     if (response.body) {
       const reader = response.body.getReader();
+      let chunkCount = 0;
       const wrappedStream = new ReadableStream({
         async pull(controller) {
           try {
             const { done, value } = await reader.read();
             if (done) {
+              console.log(`[Chat API] Stream complete. Total chunks: ${chunkCount}`);
               controller.close();
+
+              if (provider === "lmstudio") {
+                const { lmStudioSemaphore } = await import('@/lib/ai-providers');
+                lmStudioSemaphore.release();
+              }
+
               if (mcpClient) {
                 await mcpClient.disconnect();
               }
 
-              // Trigger Observer asynchronously in the background
+              // Trigger Observer with a 3-minute debounce in the background
               if (isPb && pbClient && pbClient.authStore.record?.id) {
                 const userId = pbClient.authStore.record.id;
-                runObserver(pbClient, {
-                  userId,
-                  timezone,
-                  sessionId: sessionId || undefined,
-                }).catch((err) => {
-                  console.error("[Observer] Background execution failed:", err);
+
+                pbRequestContext.run(pbClient, () => {
+                  scheduleObserverDebounce(pbClient, userId, timezone, sessionId || undefined);
                 });
               }
 
               return;
             }
+            chunkCount++;
+            if (chunkCount <= 5 || chunkCount % 50 === 0) {
+              console.log(`[Chat API] Stream chunk #${chunkCount}, size: ${value.byteLength} bytes`);
+            }
             controller.enqueue(value);
           } catch (e) {
+            console.error(`[Chat API] Stream error at chunk #${chunkCount}:`, e);
+            if (provider === "lmstudio") {
+              const { lmStudioSemaphore } = await import('@/lib/ai-providers');
+              lmStudioSemaphore.release();
+            }
             controller.error(e);
             if (mcpClient) {
               await mcpClient.disconnect();
@@ -432,6 +456,11 @@ export async function POST(req: Request) {
           }
         },
         cancel() {
+          console.log(`[Chat API] Stream cancelled at chunk #${chunkCount}`);
+          if (provider === "lmstudio") {
+            const { lmStudioSemaphore } = require('@/lib/ai-providers');
+            lmStudioSemaphore.release();
+          }
           reader.cancel();
           if (mcpClient) {
             mcpClient.disconnect();

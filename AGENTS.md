@@ -10,7 +10,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Workflow Guidelines
 
-- **Implementation Plan**: For any meaningful changes, always ensure there is an implementation plan.
+- **Implementation Plan**: For any meaningful changes, always ensure there is an implementation plan. Make sure you've mapped out everything you need for the implementation, files to touch, modify, add, delete, or if there's any potential dependencies from another logic/files that may break because of the changes, etc. The plan is your source of truth. So the better it is, the better is for you too at implementing.
 - **Friction Resolution**: If any friction arises that needed a resolution (e.g., due to a mismatch/disconnection between the user's intent and the project's Source of Truth), inform the user and present clear options within a discussion.
 - **Automated Testing**: For any meaningful changes, always ensure there are automated tests verifying the changes before they are considered valid, official, and functional.
 - **Git Operations**: Never commit or push changes without explicit instructions/permission from the user.

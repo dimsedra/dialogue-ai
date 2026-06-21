@@ -17,9 +17,16 @@ export const searchWebTool = createTool({
         try {
           const profile = await pb.collection('users').getOne(userId);
           const prefs = profile.preferences as any;
-          if (prefs?.searchApiKey) {
+          if (prefs?.searchProvider) {
+            searchProvider = prefs.searchProvider;
+          }
+          // Search API key is stored in customConfigs[searchProvider].apiKey
+          const searchConfig = prefs?.customConfigs?.[searchProvider];
+          if (searchConfig?.apiKey) {
+            apiKey = searchConfig.apiKey;
+          } else if (prefs?.searchApiKey) {
+            // Fallback for legacy path
             apiKey = prefs.searchApiKey;
-            searchProvider = (prefs.searchProvider as 'tavily' | 'serper') || 'tavily';
           }
         } catch (e) {
           console.error("Could not fetch search config from PB:", e);
