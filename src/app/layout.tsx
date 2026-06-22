@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono, Geist } from "next/font/google";
 import "./globals.css";
 import { PbAuthProvider } from "@/pb-compat/auth";
+import { DailyLogGuard } from "@/components/DailyLogGuard";
 import { cn } from "@/lib/utils";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
@@ -49,7 +50,10 @@ export default function RootLayout({
       <body
         className={`${plusJakartaSans.variable} ${jetbrainsMono.variable} font-sans antialiased h-full bg-[#0a0a0a] text-zinc-200`}
       >
-        <PbAuthProvider>{children}</PbAuthProvider>
+        <PbAuthProvider>
+          <DailyLogGuard />
+          {children}
+        </PbAuthProvider>
       </body>
     </html>
   );

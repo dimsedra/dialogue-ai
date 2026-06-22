@@ -34,10 +34,19 @@ export function scheduleObserverDebounce(
     observerTimers.delete(timerKey);
     console.log(`[Observer Debounce] Timer fired. Running Observer for key: ${timerKey}`);
 
-    const runFn = runObserverFn || ((() => import("./observer").then((m) => m.runObserver)) as unknown as RunObserverFn);
-    runFn(pb, { userId, timezone, sessionId }).catch((err: unknown) => {
-      console.error("[Observer Debounce] Background execution failed:", err);
-    });
+    if (runObserverFn) {
+      runObserverFn(pb, { userId, timezone, sessionId }).catch((err: unknown) => {
+        console.error("[Observer Debounce] Background execution failed:", err);
+      });
+    } else {
+      import("./observer").then((m) => {
+        m.runObserver(pb, { userId, timezone, sessionId }).catch((err: unknown) => {
+          console.error("[Observer Debounce] Background execution failed:", err);
+        });
+      }).catch((err: unknown) => {
+        console.error("[Observer Debounce] Dynamic import failed:", err);
+      });
+    }
   }, DEBOUNCE_MS);
 
   observerTimers.set(timerKey, timer);

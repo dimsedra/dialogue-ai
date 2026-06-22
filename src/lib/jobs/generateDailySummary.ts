@@ -168,22 +168,6 @@ export async function generateDailySummary(
     console.error("[generateDailySummary] fetch events failed:", err);
   }
 
-  // Check if we have any activity at all
-  if (messages.length === 0 && activeTasks.length === 0 && todayEvents.length === 0) {
-    // Check if there are active habits. If not, skip daily log generation
-    let habitsCount = 0;
-    try {
-      const activeHabits = await pb.collection("habits").getFullList({
-        filter: `user = "${escapedUser}" && archived = false`,
-      });
-      habitsCount = activeHabits.length;
-    } catch {}
-
-    if (habitsCount === 0) {
-      return { status: "skipped_no_activity", summary: "No activity." };
-    }
-  }
-
   // 7. Group messages by session and generate session reflections
   const { runSimpleTask, getTaskProviderAndModel } = await import("../ai-providers");
   const resolved = getTaskProviderAndModel({ preferences: { provider, taskModels } }, "reflection");
