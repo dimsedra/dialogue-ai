@@ -89,7 +89,7 @@ export function usePbSessionMerge() {
     }
 
     const data = await res.json();
-    return data;
+    return data.result;
   };
 }
 

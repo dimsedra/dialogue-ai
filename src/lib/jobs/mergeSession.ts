@@ -12,6 +12,7 @@ export interface MergeSessionResult {
   status: "merged" | "failed";
   summary?: string;
   error?: string;
+  parentSessionId?: string;
 }
 
 export async function mergeSession(
@@ -38,9 +39,21 @@ export async function mergeSession(
       return { status: "failed", error: "Branch is already merged and archived" };
     }
 
-    const parentSessionId = session.parentSession;
+    let parentSessionId = session.parentSession;
     if (!parentSessionId) {
-      return { status: "failed", error: "Parent trunk session not found on branch" };
+      // Fallback: resolve trunk session from the branch's workspace
+      // (parentSession may be null if PB schema doesn't have the field)
+      if (session.workspace) {
+        const trunkSessions = await pb.collection("chat_sessions").getList(1, 1, {
+          filter: `workspace = "${session.workspace.replace(/"/g, '\\"')}" && sessionType = "trunk"`,
+        });
+        if (trunkSessions.items.length > 0) {
+          parentSessionId = trunkSessions.items[0].id;
+        }
+      }
+      if (!parentSessionId) {
+        return { status: "failed", error: "Parent trunk session not found on branch" };
+      }
     }
 
     // 2. Fetch messages in this branch (oldest first)
@@ -175,7 +188,7 @@ Output ONLY the summary itself. Do not include any introductory remarks.`;
       lastActivity: now,
     });
 
-    return { status: "merged", summary };
+    return { status: "merged", summary, parentSessionId };
   } catch (err: any) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[mergeSession] Merge failed:", msg);

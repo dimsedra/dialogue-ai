@@ -715,9 +715,10 @@ function ActiveChat({
     if (!activeSessionId) return;
     setIsMerging(true);
     try {
-      await mergeSession({ sessionId: activeSessionId });
-      if (activeSession?.parentSession) {
-        setActiveSessionIdAction(activeSession.parentSession);
+      const result = await mergeSession({ sessionId: activeSessionId });
+      const parentId = result?.parentSessionId || activeSession?.parentSession;
+      if (parentId) {
+        setActiveSessionIdAction(parentId);
       } else {
         setActiveSessionIdAction(null);
       }

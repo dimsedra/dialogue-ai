@@ -175,7 +175,7 @@ describe("mergeSession job", () => {
       folioRootPath: "C:/Users/user/Dialogue Folio",
     });
 
-    expect(result).toEqual({ status: "merged", summary: "Test Consolidated Summary" });
+    expect(result).toMatchObject({ status: "merged", summary: "Test Consolidated Summary", parentSessionId: "s-trunk" });
 
     // Verify LLM prompt compile and invocation
     expect(mockRunSimpleTask).toHaveBeenCalled();
