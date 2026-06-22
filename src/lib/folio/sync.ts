@@ -158,6 +158,12 @@ export async function syncFolioFileToDb(
     return; // File doesn't exist, let reconciliation handle deletions
   }
 
+  // Route daily_logs immediately — their handler resolves records by user+date, not PB id
+  if (collectionName === 'daily_logs') {
+    await syncDailyLogFileToDb(filePath, pb, id, folioRootPath);
+    return;
+  }
+
   const fileContent = readFileSync(filePath, 'utf8');
   const { metadata, body } = parseMarkdownFile(fileContent);
 
@@ -901,7 +907,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
         });
         writeFileSync(join(personalPath, '.workspace.yaml'), configContent, 'utf8');
         
-        const defaultContext = `# Personal\n\n## Purpose\nCasual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
+        const defaultContext = `# Personal\n\n## Purpose\nCasual daily companion space. Journal, reflections, random thoughts.\n\n## Current State\n[What's happening now — active focus, ongoing themes]\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
         writeFileSync(join(personalPath, 'CONTEXT.md'), defaultContext, 'utf8');
         
         console.log(`[Sync Engine] Successfully auto-created default "Personal" workspace at workspaces/${folderName}`);
@@ -1147,9 +1153,9 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
               
               let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
               if (nameCapitalized.toLowerCase() === 'personal') {
-                defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
+                defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## Current State\n[What's happening now — active focus, ongoing themes]\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
               } else {
-                defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
+                defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## Current State\n[Current state — active objectives, recent progress, immediate next steps]\n\n## User Notes\n`;
               }
               writeFileSync(wsContextPath, defaultContext, 'utf8');
             }
@@ -1161,9 +1167,9 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
             
             let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
             if (nameCapitalized.toLowerCase() === 'personal') {
-              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
+              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## Current State\n[What's happening now — active focus, ongoing themes]\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
             } else {
-              defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
+              defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## Current State\n[Current state — active objectives, recent progress, immediate next steps]\n\n## User Notes\n`;
             }
             writeFileSync(wsContextPath, defaultContext, 'utf8');
           }
@@ -1237,9 +1243,9 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
             const nameCapitalized = name.charAt(0).toUpperCase() + name.slice(1);
             let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
             if (nameCapitalized.toLowerCase() === 'personal') {
-              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
+              defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## Current State\n[What's happening now — active focus, ongoing themes]\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
             } else {
-              defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
+              defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## Current State\n[Current state — active objectives, recent progress, immediate next steps]\n\n## User Notes\n`;
             }
             writeFileSync(oldRootWsContext, defaultContext, 'utf8');
           }
@@ -1249,9 +1255,9 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
           const nameCapitalized = name.charAt(0).toUpperCase() + name.slice(1);
           let defaultContext = `# ${nameCapitalized}\n\n## Purpose\n`;
           if (nameCapitalized.toLowerCase() === 'personal') {
-            defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
+            defaultContext += `Casual daily companion space. Journal, reflections, random thoughts.\n\n## Current State\n[What's happening now — active focus, ongoing themes]\n\n## User Notes\n- User prefers Indonesian mixed with English\n`;
           } else {
-            defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## User Notes\n`;
+            defaultContext += `[Provide the purpose and context of this workspace to guide the AI's behavior.]\n\n## Current State\n[Current state — active objectives, recent progress, immediate next steps]\n\n## User Notes\n`;
           }
           try {
             writeFileSync(oldRootWsContext, defaultContext, 'utf8');
@@ -1328,6 +1334,21 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
     }
   } catch (err) {
     console.error('[Sync Engine] Error pruning deleted memories files:', err);
+  }
+
+  // Prune deleted daily logs
+  try {
+    const dailyLogDir = join(folioRootPath, 'daily-logs');
+    const dbDailyLogs = await pb.collection('daily_logs').getFullList();
+    for (const rec of dbDailyLogs) {
+      const expectedPath = join(dailyLogDir, `${rec.date}.md`);
+      if (!existsSync(expectedPath)) {
+        console.log(`[Sync Engine] Pruning deleted daily_logs from DB:`, rec.id);
+        await pb.collection('daily_logs').delete(rec.id);
+      }
+    }
+  } catch (err) {
+    console.error('[Sync Engine] Error pruning deleted daily_logs:', err);
   }
 
   // Prune deleted workspaces
@@ -1928,6 +1949,33 @@ export async function syncDailyLogFileToDb(
       console.error(`[Sync Engine] Error syncing event ${id} from daily log:`, err);
     }
   }
+
+  // 4. Upsert daily_logs PB record for file-first + DB consistency
+  try {
+    let existingDailyLog: any = null;
+    try {
+      existingDailyLog = await pb
+        .collection('daily_logs')
+        .getFirstListItem(`user = "${userId}" && date = "${dateString}"`);
+    } catch {}
+
+    if (existingDailyLog) {
+      await pb.collection('daily_logs').update(existingDailyLog.id, {
+        content,
+        updatedAt: Date.now(),
+      });
+    } else {
+      await pb.collection('daily_logs').create({
+        user: userId,
+        date: dateString,
+        content,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+  } catch (err) {
+    console.error(`[Sync Engine] Error syncing daily_logs record for ${dateString}:`, err);
+  }
 }
 
 /**
@@ -1993,6 +2041,19 @@ export async function pruneFolioFileFromDb(
       }
     } else {
       await pruneWorkspaceFromDb(pb, id);
+    }
+  } else if (collectionName === 'daily_logs') {
+    try {
+      const userId = await getActiveUserId(pb);
+      if (userId) {
+        const rec = await pb.collection('daily_logs').getFirstListItem(`user = "${userId}" && date = "${id}"`);
+        await pb.collection('daily_logs').delete(rec.id);
+        console.log(`[Sync Engine] Pruned daily_logs record for ${id}`);
+      }
+    } catch (err: any) {
+      if (err?.status !== 404) {
+        console.warn(`[Sync Engine] Failed to prune daily_logs record ${id}:`, err);
+      }
     }
   } else {
     const sourceType = collectionName === 'tasks' ? 'Task' : 'Event';

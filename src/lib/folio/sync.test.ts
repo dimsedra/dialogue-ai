@@ -21,6 +21,7 @@ const mockPb: any = {
       chat_sessions: createMockCollection([]),
       habits: createMockCollection([]),
       reflections: createMockCollection([]),
+      daily_logs: createMockCollection([]),
     };
   },
   collection(name: string) {
@@ -154,6 +155,24 @@ function createMockCollection(initialItems: any[]) {
         filtered = filtered.filter(item => matchFilter(item, options.filter));
       }
       return filtered;
+    },
+    getFirstListItem: async (filter: string) => {
+      let filtered = [...items];
+      const parts = filter.split('&&').map(s => s.trim());
+      for (const part of parts) {
+        const eqMatch = part.match(/^(\w+)\s*=\s*"([^"]*)"$/);
+        if (eqMatch) {
+          const key = eqMatch[1];
+          const val = eqMatch[2];
+          filtered = filtered.filter((item: any) => String(item[key]) === val);
+        }
+      }
+      if (filtered.length === 0) {
+        const err = new Error("404 Not Found") as any;
+        err.status = 404;
+        throw err;
+      }
+      return filtered[0];
     },
     delete: async (id: string) => {
       const idx = items.findIndex(item => item.id === id);
@@ -891,6 +910,51 @@ type: daily-log
     expect(task.history_logs).toHaveLength(2); // One for 2026-06-16, one for 2026-06-17
     expect(task.history_logs[0]).toEqual({ date: '2026-06-16', note: 'Yesterday note' });
     expect(task.history_logs[1]).toEqual({ date: '2026-06-17', note: 'Updated today note' });
+  });
+
+  test('creates daily_logs PB record with content and date on sync', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/daily-logs/2026-06-17.md';
+    mockPb.collections.daily_logs = createMockCollection([]);
+    mockFiles[filePath] = `# Daily Log - 2026-06-17
+
+## Summary
+Worked on the project.
+
+## Tasks
+- [x] Fix bug #tsk-task-1
+`;
+
+    const { syncDailyLogFileToDb } = await import('./sync');
+    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17', folioRoot);
+
+    const logs = mockPb.collection('daily_logs').items;
+    expect(logs).toHaveLength(1);
+    expect(logs[0].date).toBe('2026-06-17');
+    expect(logs[0].content).toContain('Worked on the project');
+    expect(logs[0].user).toBe('test-user-id');
+    expect(logs[0].createdAt).toBeDefined();
+    expect(logs[0].updatedAt).toBeDefined();
+  });
+
+  test('updates existing daily_logs PB record on re-sync', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/daily-logs/2026-06-17.md';
+    mockPb.collections.daily_logs = createMockCollection([
+      { id: 'dl-1', user: 'test-user-id', date: '2026-06-17', content: 'Old content', createdAt: 1000, updatedAt: 1000 }
+    ]);
+    mockFiles[filePath] = `# Daily Log - 2026-06-17
+
+## Summary
+Updated content.
+`;
+
+    const { syncDailyLogFileToDb } = await import('./sync');
+    await syncDailyLogFileToDb(filePath, mockPb, '2026-06-17', folioRoot);
+
+    const logs = mockPb.collection('daily_logs').items;
+    expect(logs).toHaveLength(1);
+    expect(logs[0].content).toContain('Updated content');
+    expect(logs[0].updatedAt).toBeGreaterThan(1000);
+    expect(logs[0].createdAt).toBe(1000); // Preserved from original
   });
 });
 

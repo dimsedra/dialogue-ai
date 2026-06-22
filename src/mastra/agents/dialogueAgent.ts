@@ -348,19 +348,25 @@ Log preparations, outcomes, or context to the event's journal. Event notes auto-
 Always prompt for or deduce daily context to include in notes. Habit log notes auto-index into semantic memory — no separate \`saveSemanticMemory\` call needed.
 
 **4. Workspace context info (project-level details, rules, architecture decisions)** → call \`updateWorkspaceContext\`
-PREFERRED over saveSemanticMemory when information defines what a workspace IS — its purpose, rules, behavioral guidelines, milestones, or architecture. CONTEXT.md is loaded into your prompt in workspace scope — keep it lean and high-signal. Preserve existing sections; only add/update what changed.
+PREFERRED over saveSemanticMemory when information defines what a workspace IS — its purpose, current state, behavioral guidelines, milestones, or architecture. CONTEXT.md is loaded into your prompt in workspace scope — keep it lean and high-signal. Required sections: ## Purpose, ## Current State, ## User Notes. Optional: ## Behavioral Tuning (tone), ## Vibe (atmosphere), ## Milestones (goals). Preserve existing sections; only add/update what changed.
 
-**5. General user facts (NOT related to any task/event/habit/workspace)** → call \`saveSemanticMemory\`
-Only for standalone knowledge: preferences, life context, personal background. Break compound information into multiple separate tool calls (one fact per call). Examples:
-- User says "My dad just got laid off" → call saveSemanticMemory with "User's father was recently laid off from his job after being employed for only half a month, following years of unemployment"
-- User says "I prefer React over Vue" → call saveSemanticMemory with "User prefers React over Vue for frontend development"
+**5. Episodic / "what happened recently" recall** → call \`queryDailyLogs\`
+When the user asks about past activity ("kemarin ngapain?", "what did I do on Monday?", "progress in the last few days"), call \`queryDailyLogs\` with the relevant date range or keyword. DO NOT use \`saveSemanticMemory\` for this — daily logs are the canonical store for chronological activity.
 
-**6. High-level User Profile / Bio updates** → call \`updateUserBio\`
+**6. General user facts — ATOMIC FACTS ONLY** → call \`saveSemanticMemory\`
+Only for single, indivisible facts about the user. Each call must contain EXACTLY ONE atomic unit of information. Do NOT combine multiple facts into one call — make separate calls per fact.
+✅ Atomic (correct):
+- saveSemanticMemory("User prefers React over Vue")
+- saveSemanticMemory("User is 28 years old")
+- saveSemanticMemory("User's father was laid off")
+❌ Compound (WRONG — split into separate calls):
+- saveSemanticMemory("User prefers React over Vue, is 28 years old, and works at Google")
+- saveSemanticMemory("User went to the gym and then ate sushi for dinner")
+
+**7. High-level User Profile / Bio updates** → call \`updateUserBio\`
 ONLY call \`updateUserBio\` when the user explicitly asks to update their overall bio/facts summary, or when you synthesize a significant change to their high-level identity, occupation, or core life theme. Do NOT call this for individual, atomic facts or preferences (which belong to \`saveSemanticMemory\`).
 
-**7. Daily log (day summary, reflections, standups)** → call the daily log append tool when available — for now, use saveSemanticMemory with prefix "[Daily Log]".
-
-**IMPORTANT**: Do NOT call \`saveSemanticMemory\` for information that belongs in a task note, event note, habit log, or workspace context. Those tools auto-generate memories via the ingestion pipeline. Do NOT confuse \`saveSemanticMemory\` (for atomic facts/preferences stored in MEMORIES.md) with \`updateUserBio\` (for high-level personality/biography summaries stored in USER.md) or \`updateWorkspaceContext\` (for project-level context stored in CONTEXT.md). You MUST actually CALL these tools to save information. Do NOT just say "I'll remember this" or "I've noted this" — those are LIES unless you invoke the tool.
+**IMPORTANT**: Do NOT call \`saveSemanticMemory\` for information that belongs in a task note, event note, habit log, or workspace context. Those tools auto-generate memories via the ingestion pipeline. Do NOT confuse \`saveSemanticMemory\` (for atomic facts/preferences stored in MEMORIES.md) with \`updateUserBio\` (for high-level personality/biography summaries stored in USER.md) or \`updateWorkspaceContext\` (for project-level context stored in CONTEXT.md). For "what happened recently" questions, use \`queryDailyLogs\`, NOT \`saveSemanticMemory\`. You MUST actually CALL these tools to save information. Do NOT just say "I'll remember this" or "I've noted this" — those are LIES unless you invoke the tool.
 
 ### retrieveGraphContext — MANDATORY
 Before answering questions about the user's history, preferences, or past conversations, CALL \`retrieveGraphContext\` first to check what you actually know. Do NOT fabricate memories.
@@ -432,6 +438,7 @@ CRITICAL RULES:
     appendTaskNotes: tools.appendTaskNotesTool,
     appendEventNotes: tools.appendEventNotesTool,
     updateWorkspaceContext: tools.updateWorkspaceContextTool,
+    queryDailyLogs: tools.queryDailyLogsTool,
   };
 
   const filteredTools = scope ? filterToolsByScope(allTools, scope) : allTools;

@@ -93,7 +93,6 @@ const EXPECTED_APP_COLLECTIONS = [
   { name: 'reflections', minFields: 14, minIndexes: 2 },
   { name: 'page_settings', minFields: 4, minIndexes: 1 },
   { name: 'session_summaries', minFields: 5, minIndexes: 1 },
-  { name: 'weekly_digests', minFields: 7, minIndexes: 1 },
   { name: 'archived_summaries', minFields: 7, minIndexes: 1 },
   { name: 'notifications', minFields: 8, minIndexes: 2 },
   { name: 'push_subscriptions', minFields: 6, minIndexes: 2 },
@@ -245,7 +244,7 @@ assert(broken === 0, "all " + relCount + " relation field targets exist (broken:
 
 // 8. Cascade delete
 console.log("\n8. Cascade delete (user-owned collections):");
-for (const coll of ['workspaces', 'chat_sessions', 'tasks', 'events', 'memories', 'user_profile', 'user_images', 'habits', 'habit_logs', 'reflections', 'page_settings', 'session_summaries', 'weekly_digests', 'archived_summaries', 'notifications', 'push_subscriptions', 'card_state', 'scheduled_notifications']) {
+for (const coll of ['workspaces', 'chat_sessions', 'tasks', 'events', 'memories', 'user_profile', 'user_images', 'habits', 'habit_logs', 'reflections', 'page_settings', 'session_summaries', 'archived_summaries', 'notifications', 'push_subscriptions', 'card_state', 'scheduled_notifications']) {
   const c = byName[coll];
   if (!c) continue;
   const fields = JSON.parse(c.fields);

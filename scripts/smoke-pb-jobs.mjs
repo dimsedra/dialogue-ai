@@ -284,18 +284,7 @@ const reflectionA = await userA.pb.collection("reflections").create({
 });
 console.log(`Created reflectionA=${reflectionA.id}`);
 
-// 3. weekly_digests
-const weeklyDigestA = await userA.pb.collection("weekly_digests").create({
-  user: userA.id,
-  weekStart: nowMs - 7 * 86400000,
-  weekStartStr: "2026-06-01",
-  weekLabel: "Week of June 1",
-  digest: "Weekly digest content.",
-  createdAt: nowMs,
-});
-console.log(`Created weeklyDigestA=${weeklyDigestA.id}`);
-
-// 4. archived_summaries
+// 3. archived_summaries
 const archivedSummaryA = await userA.pb.collection("archived_summaries").create({
   user: userA.id,
   type: "weekly",
@@ -411,21 +400,7 @@ try {
   check("User B cannot read User A reflection", err.status === 404, `status=${err.status}`);
 }
 
-// 10. weekly_digests tenant isolation
-try {
-  const w = await userA.pb.collection("weekly_digests").getOne(weeklyDigestA.id);
-  check("User A reads own weekly_digest", w.id === weeklyDigestA.id);
-} catch (err) {
-  check("User A reads own weekly_digest", false, err.message);
-}
-try {
-  await userB.pb.collection("weekly_digests").getOne(weeklyDigestA.id);
-  check("User B cannot read User A weekly_digest", false, "should have thrown 404");
-} catch (err) {
-  check("User B cannot read User A weekly_digest", err.status === 404, `status=${err.status}`);
-}
-
-// 11. archived_summaries tenant isolation
+// 10. archived_summaries tenant isolation
 try {
   const a = await userA.pb.collection("archived_summaries").getOne(archivedSummaryA.id);
   check("User A reads own archived_summary", a.originalDateStr === "2026-05-25");

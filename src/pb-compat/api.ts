@@ -104,7 +104,6 @@ export const api = {
   habitLogs: {} as StubNamespace,
   pageSettings: { get: pageSettingsGetQuery },
   sessionSummaries: {} as StubNamespace,
-  weeklyDigests: {} as StubNamespace,
   archivedSummaries: {} as StubNamespace,
   notifications: {} as StubNamespace,
   pushSubscriptions: {} as StubNamespace,
@@ -129,8 +128,6 @@ export const api = {
   aiProviders: {} as StubNamespace,
   ai: {} as StubNamespace,
   backgroundJobs: {} as StubNamespace,
-  weeklyDigestsJobs: {} as StubNamespace,
-
   // Cron / scheduled
   crons: {} as StubNamespace,
 } as const;

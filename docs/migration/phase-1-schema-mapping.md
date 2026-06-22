@@ -44,8 +44,7 @@ To avoid both, every field in `convex/schema.ts` is listed here with its exact P
 | 12 | `habitLogs` | `habit_logs` | FKs to users, habits. Compound index `by_habit_dateString` preserved. |
 | 13 | `pageSettings` | `page_settings` | FK to users. Compound unique key `by_user_page`. |
 | 14 | `sessionSummaries` | `session_summaries` | FK to users. Compound index `by_user_date`. |
-| 15 | `weeklyDigests` | `weekly_digests` | FK to users. Compound index `by_user_week`. |
-| 16 | `archivedSummaries` | `archived_summaries` | FK to users. |
+| 15 | `archivedSummaries` | `archived_summaries` | FK to users. |
 | 17 | `notifications` | `notifications` | FK to users. `type` is a 4-literal union → `select`. |
 | 18 | `pushSubscriptions` | `push_subscriptions` | FK to users. `keys` nested object → `json`. |
 | 19 | `cardState` | `card_state` | FK to users. 3 indexes including a 3-field compound. |

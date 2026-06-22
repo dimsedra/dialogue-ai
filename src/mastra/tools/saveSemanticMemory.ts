@@ -20,7 +20,7 @@ function dotProduct(a: number[], b: number[]): number {
 
 export const saveSemanticMemoryTool = createTool({
   id: 'saveSemanticMemory',
-  description: 'Saves a granular, long-term semantic memory/fact about the user. Use ONLY for general user knowledge (preferences, life context, personal background) that is NOT associated with any existing task, event, or habit. If the information relates to a specific task, event, or habit, use their respective note/log tool instead — those auto-index into semantic memory, making this call redundant.',
+  description: 'Saves an ATOMIC semantic memory fact about the user. Each call = EXACTLY ONE indivisible fact (e.g. "User prefers React over Vue"). Do NOT combine multiple facts. For daily activity / "what happened" info, use queryDailyLogs instead. For task/event/habit info, use their respective tools — those auto-index into memory.',
   inputSchema: z.object({
     text: z.string().describe("The granular fact or preference to remember"),
     taskIds: z.array(z.string()).optional().describe("Optional: Task node IDs this memory mentions. Creates MENTIONS_TASK edges in the graph."),

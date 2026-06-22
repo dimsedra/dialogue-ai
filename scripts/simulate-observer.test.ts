@@ -37,9 +37,28 @@ vi.mock("../src/lib/ai-providers", () => ({
   }
 }));
 
-// Mock embeddings to return a dummy array
+// Mock embeddings — hash-based unit vectors so each text produces a unique vector.
+// Dot product threshold in observer.ts (0.85) assumes unit-normalized embeddings,
+// so we normalize each vector to length 1.
 vi.mock("../src/lib/graph/embedding", () => ({
-  getLocalEmbedding: async () => new Array(384).fill(0.1)
+  getLocalEmbedding: async (text: string) => {
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+    }
+    const seed = Math.abs(hash);
+    const raw = new Array(384).fill(0);
+    for (let i = 0; i < raw.length; i++) {
+      raw[i] = Math.sin(seed * (i + 1));
+    }
+    // Normalize to unit length
+    let mag = 0;
+    for (let i = 0; i < raw.length; i++) mag += raw[i] * raw[i];
+    mag = Math.sqrt(mag);
+    const norm = new Array(384).fill(0);
+    for (let i = 0; i < raw.length; i++) norm[i] = raw[i] / mag;
+    return norm;
+  }
 }));
 
 // =============================================================================

@@ -17,3 +17,4 @@ export * from './appendTaskNotes';
 export * from './appendEventNotes';
 export * from './checkUpcomingSchedule';
 export * from './updateWorkspaceContext';
+export * from './queryDailyLogs';

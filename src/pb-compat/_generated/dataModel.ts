@@ -309,16 +309,6 @@ export interface PbSessionSummaries extends PbRecord {
   createdAt: number;
 }
 
-export interface PbWeeklyDigests extends PbRecord {
-  collectionName: "weekly_digests";
-  user: PbId<"users">;
-  weekStart: number;
-  weekStartStr?: string;
-  weekLabel: string;
-  digest: string;
-  createdAt: number;
-}
-
 export interface PbArchivedSummaries extends PbRecord {
   collectionName: "archived_summaries";
   user: PbId<"users">;
@@ -407,7 +397,6 @@ export interface PbRecordMap {
   habit_logs: PbHabitLogs;
   page_settings: PbPageSettings;
   session_summaries: PbSessionSummaries;
-  weekly_digests: PbWeeklyDigests;
   archived_summaries: PbArchivedSummaries;
   notifications: PbNotifications;
   push_subscriptions: PbPushSubscriptions;

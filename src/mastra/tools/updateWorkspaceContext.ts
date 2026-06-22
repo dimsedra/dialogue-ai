@@ -5,7 +5,7 @@ export const updateWorkspaceContextTool = createTool({
   id: 'updateWorkspaceContext',
   description: 'Updates the workspace CONTEXT.md file with macro-level project focus, active objectives, rules, and major milestones. PREFERRED over saveSemanticMemory when information relates to workspace-level context (project rules, architecture decisions, workspace purpose, behavioral guidelines). CONTEXT.md is loaded into the agent prompt when you are in a workspace — use this to persist information about what this workspace IS and how the AI should behave in it.',
   inputSchema: z.object({
-    contextContent: z.string().describe("The full new CONTEXT.md content. Must include Purpose, Behavioral Tuning, Vibe, and Milestones/Current Focus sections as appropriate. PRESERVE all existing sections — only update the parts that need to change."),
+    contextContent: z.string().describe("The full new CONTEXT.md content. Required sections: ## Purpose (always), ## Current State (always), ## User Notes (always, for explicit overrides). Optional sections: ## Behavioral Tuning (tone/style), ## Vibe (atmosphere/energy), ## Milestones (big-picture goals). PRESERVE all existing sections — only update the parts that need to change."),
   }),
   outputSchema: z.object({ success: z.boolean(), path: z.string() }),
   execute: async (input) => {

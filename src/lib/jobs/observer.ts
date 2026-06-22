@@ -174,13 +174,29 @@ async function runMemoryExtraction(
 
   // 5. Run LLM extraction task
   const systemInstruction = `You are the memory extraction module of Dialogue, a relationship-first AI companion. 
-Your goal is to parse the conversation transcript and identify new, persistent personal facts, preferences, or life details about the user (e.g. favorite topics, technologies, work conditions, habits, relationship updates) that are NOT temporary feelings, chit-chat, or task progress updates.`;
+Your goal is to parse the conversation transcript and extract ATOMIC, persistent personal facts about the user — single, indivisible units of information like preferences, life details, personality traits, or background facts. Do NOT extract daily activity, what the user did today, task progress, event details, or habitual behavior (those belong in daily logs). Each fact must be exactly one atomic unit.`;
 
   const prompt = `Read the following chat transcript between the User and the Companion.
-Identify any new, persistent personal facts, background details, or long-term preferences about the user (e.g., job title, family details, favorite technologies, personal habits, food preferences) that are NOT temporary emotions, greeting chit-chat, or task notes/habit log details.
+Extract ONLY atomic, persistent personal facts — single indivisible units of information about the user.
 
-Format your output as a raw JSON array of strings (e.g. ["User is a software engineer.", "User prefers light mode UI."]). If no new facts are found, return an empty array [].
-Do NOT include any markdown formatting, backticks, or explanation. Output ONLY the JSON array.
+✅ Atomic facts (extract these):
+- "User prefers React over Vue"
+- "User is 28 years old"
+- "User's father was laid off"
+- "User works as a backend developer"
+- "User likes matcha lattes"
+
+❌ Do NOT extract (belong in daily logs or task notes):
+- Daily activity ("User went to the gym today", "User ate sushi for dinner")
+- Task progress ("User finished the API endpoint", "User is working on login page")
+- Temporary emotions ("User is tired", "User is frustrated with debugging")
+- Habit check-ins ("User did pushups this morning")
+- Compound facts combining multiple units
+
+If you find multiple facts, output each as a separate string — do NOT combine them.
+If no atomic facts are found, return an empty array [].
+
+Format your output as a raw JSON array of strings. Do NOT include any markdown formatting, backticks, or explanation. Output ONLY the JSON array.
 
 Chat Transcript:
 ${transcript}`;
@@ -586,20 +602,21 @@ CRITICAL RULES FOR CONTEXT.MD:
 1. CONTEXT.md is for MACRO-level project focus, active objectives, rules, and major milestones.
 2. It is NOT a daily diary or log. Never add transient updates, transient user moods, or specific conversation details.
 3. Do NOT create or maintain a "Recent Activity" diary block. Daily chitchat and reflections belong in the daily log, not here.
-4. Only update the "Milestones / Current Focus" section if a major structural goal or milestone has actually been achieved or changed (e.g. "Completed Database setup").
-5. For workspaces without a formal objective (e.g., casual workspaces or "chill zones"):
-   - CONTEXT.md should focus on:
-     - **Behavioral Tuning** (how the AI companion should adapt its tone, style, and responses specifically for this workspace, e.g., friendly, humorous, concise, relaxed, etc.).
-     - **Vibe** (the overall atmosphere and emotional energy of the workspace, e.g., low-pressure, supportive, brain-dump, encouraging, etc.).
-     - **Topic Affinities** (the core subjects, essence, and topics that the user frequently discusses or prefers to discuss here, e.g., sharing project updates, venting, talking about music, coding, etc.).
-   - Update these sections when new persistent patterns in the user's topics of interest, conversational vibe, or requested AI behavior emerge from the conversations.
-   - Keep it at a macro-level description of behavioral and topic preferences; do not list chronological session summaries or specific conversations.
+
+SECTION STRUCTURE:
+- **## Purpose** (ALWAYS present) — Permanent raison d'être of the workspace. For formal workspaces (e.g., Skripsi), this is strong enough to stand alone.
+- **## Current State** (ALWAYS present) — What's happening now: active objectives, recent progress, immediate next steps. NOT a daily log — stay at the "this week" level. This is the most frequently updated section.
+- **## User Notes** (ALWAYS present) — Explicit user overrides, preferences, and rules they've set for this specific workspace.
+- **## Behavioral Tuning** (OPTIONAL) — How the AI companion should adapt its tone, style, and responses for this workspace (e.g., friendly, humorous, concise, relaxed). Use when tone cannot be inferred from Purpose alone. For casual/personal workspaces, this is more important than Purpose.
+- **## Vibe** (OPTIONAL) — The overall atmosphere and emotional energy (e.g., low-pressure, supportive, brain-dump, encouraging). Most relevant for personal/casual workspaces.
+- **## Milestones** (OPTIONAL) — Big-picture goals and major achievements. For project workspaces only.
+
 6. Never add global user personality traits, general user biography details, or specific user preferences/facts to CONTEXT.md. These must reside in USER.md (global profile) or MEMORIES.md (semantic memories) to avoid redundancy and prompt collisions.
 7. Enforce a strict budget of 3000 characters. Prioritize high-impact behavioral guidelines, core vibe rules, and active goals. Condense or merge overlapping sections.
 8. If no structural changes or behavioral/vibe tuning updates are warranted, return the EXACT original CONTEXT.md content.
 9. **SUBSTANTIAL CONTENT HANDLING**: If the user shares substantial text content in the conversation (project docs, learning notes, research findings, architecture decisions, etc.), extract the macro-level information relevant to this workspace's purpose and integrate it into the Purpose section. Rules:
-   - PRESERVE all existing sections (Behavioral Tuning, Vibe, Milestones, Topic Affinities, etc.) — never remove them.
-   - Only ADD/UPDATE the Purpose section with distilled overview.
+   - PRESERVE all existing sections — never remove them.
+   - Only ADD/UPDATE the Purpose section with distilled overview. Also update Current State if the content changes active direction.
    - If Purpose section doesn't exist, create it at the top.
    - Extract what matters: core concept, key decisions, current phase.
    - Do NOT copy full text verbatim — let the 3000 char limit naturally compress.

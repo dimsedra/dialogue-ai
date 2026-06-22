@@ -443,6 +443,15 @@ ${reflectionsLines.length > 0 ? reflectionsLines.join("\n") : "No chat activity 
     console.error("[generateDailySummary] Failed writing global daily log:", err);
   }
 
+  // Trigger immediate sync so PB daily_logs record is created without waiting for watcher
+  try {
+    const { syncFolioFileToDb } = await import('../folio/sync');
+    const folioRoot = getFolioRootPath();
+    await syncFolioFileToDb(globalLogPath, pb, folioRoot);
+  } catch (err) {
+    console.error("[generateDailySummary] Failed syncing daily log to DB:", err);
+  }
+
   // 10. Compile single overall summary for session_summaries table
   const allReflections = [...sessionReflections.values()];
   let finalSummaryText = "No activity.";

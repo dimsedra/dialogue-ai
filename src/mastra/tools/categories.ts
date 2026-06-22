@@ -29,6 +29,7 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   getEventResources: 'core',
   checkUpcomingSchedule: 'core',
   updateWorkspaceContext: 'core',
+  queryDailyLogs: 'core',
 
   addTask: 'task',
   updateTask: 'task',
