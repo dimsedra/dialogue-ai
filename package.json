@@ -19,7 +19,9 @@
     "test:smoke:jobs": "node scripts/smoke-pb-jobs.mjs",
     "test:e2e:backend": "node scripts/e2e-pb-backend.mjs",
     "electron:dev": "electron . --dev",
-    "electron:build": "next build && electron-builder"
+    "electron:build": "next build && electron-builder",
+    "pocketbase:download": "node scripts/download-pocketbase.mjs",
+    "postinstall": "node scripts/download-pocketbase.mjs"
   },
   "dependencies": {
     "@ai-sdk/alibaba": "^1.0.25",
