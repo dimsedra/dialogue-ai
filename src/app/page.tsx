@@ -276,7 +276,7 @@ export default function Home() {
           >
             <div className="w-full h-full">
               <TaskPanel
-                activeWorkspaceId={activeWorkspaceId as any}
+                activeWorkspaceId={activeSessionId ? activeWorkspaceId : undefined}
                 onSync={handleSyncFromPanel}
                 onClose={() => handleSetShowTasks(false)}
                 onRefer={(scope) => {
