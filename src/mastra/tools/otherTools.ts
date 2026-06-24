@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import PocketBase from 'pocketbase';
 
 export const searchWebTool = createTool({
   id: 'searchWeb',
@@ -9,31 +10,55 @@ export const searchWebTool = createTool({
     let searchProvider: 'tavily' | 'serper' = 'tavily';
     let apiKey: string | null = process.env.TAVILY_API_KEY || process.env.NEXT_PUBLIC_TAVILY_API_KEY || null;
 
+    let pb: PocketBase | null = null;
+    let userId: string | null = null;
+
     try {
       const { getPbClient } = await import('../../lib/pb-server');
-      const pb = getPbClient();
-      const userId = pb.authStore.record?.id;
-      if (userId) {
-        try {
-          const profile = await pb.collection('users').getOne(userId);
-          const prefs = profile.preferences as any;
-          if (prefs?.searchProvider) {
-            searchProvider = prefs.searchProvider;
-          }
-          // Search API key is stored in customConfigs[searchProvider].apiKey
-          const searchConfig = prefs?.customConfigs?.[searchProvider];
-          if (searchConfig?.apiKey) {
-            apiKey = searchConfig.apiKey;
-          } else if (prefs?.searchApiKey) {
-            // Fallback for legacy path
-            apiKey = prefs.searchApiKey;
-          }
-        } catch (e) {
-          console.error("Could not fetch search config from PB:", e);
-        }
-      }
+      pb = getPbClient();
+      userId = pb.authStore.record?.id || null;
     } catch (e) {
-      console.error("Could not fetch search config:", e);
+      // Outside request context, try to resolve via admin client
+      try {
+        const { getPbAdmin } = await import('../../lib/pb-server-admin');
+        pb = await getPbAdmin();
+        const users = await pb.collection('users').getFullList({ limit: 1 });
+        if (users.length > 0) {
+          userId = users[0].id;
+        }
+      } catch (adminErr) {
+        console.error("Could not fetch search config from PB admin fallback:", adminErr);
+      }
+    }
+
+    if (pb && userId) {
+      try {
+        const profile = await pb.collection('user_profile').getFirstListItem(`user = "${userId.replace(/"/g, '\\"')}"`);
+        const prefs = profile.preferences as any;
+        if (prefs?.searchProvider) {
+          searchProvider = prefs.searchProvider;
+        }
+        
+        // Search API key is stored in customConfigs[searchProvider].apiKey
+        const searchConfig = prefs?.customConfigs?.[searchProvider];
+        const rawKey = searchConfig?.apiKey || prefs?.searchApiKey || null;
+        if (rawKey) {
+          // Decrypt if it looks encrypted (contains a colon)
+          if (typeof rawKey === 'string' && rawKey.includes(':')) {
+            try {
+              const { decrypt } = await import('../../lib/encryption');
+              apiKey = await decrypt(rawKey);
+            } catch (decErr) {
+              console.error("Could not decrypt search API key, using raw:", decErr);
+              apiKey = rawKey;
+            }
+          } else {
+            apiKey = rawKey;
+          }
+        }
+      } catch (e) {
+        console.error("Could not fetch search config from PB profile:", e);
+      }
     }
 
     if (!apiKey) {
