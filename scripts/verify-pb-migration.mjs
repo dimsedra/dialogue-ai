@@ -38,10 +38,12 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 
-const PB_BIN = process.argv[2] || process.env.POCKETBASE_BIN;
+const localPbPath = join(process.cwd(), "pocketbase", process.platform === "win32" ? "pocketbase.exe" : "pocketbase");
+const PB_BIN = process.argv[2] || process.env.POCKETBASE_BIN || (existsSync(localPbPath) ? localPbPath : null);
 if (!PB_BIN) {
   console.error("Usage: node scripts/verify-pb-migration.mjs <path-to-pocketbase.exe>");
   console.error("   or: POCKETBASE_BIN=<path> node scripts/verify-pb-migration.mjs");
+  console.error("   or place the pocketbase binary inside the local pocketbase/ folder");
   process.exit(2);
 }
 const pbBin = resolve(PB_BIN);

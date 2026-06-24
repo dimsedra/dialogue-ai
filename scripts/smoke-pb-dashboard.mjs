@@ -58,9 +58,8 @@ const { default: PocketBase } = await import("pocketbase");
 // Config
 // =============================================================================
 
-const PB_BIN =
-  process.env.POCKETBASE_BIN ||
-  "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe";
+const localPbPath = join(process.cwd(), "pocketbase", process.platform === "win32" ? "pocketbase.exe" : "pocketbase");
+const PB_BIN = process.env.POCKETBASE_BIN || (existsSync(localPbPath) ? localPbPath : "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, "..");
@@ -72,7 +71,7 @@ const REAL_MIGRATION_PATH = join(
 
 if (!existsSync(PB_BIN)) {
   console.error(`PocketBase binary not found at: ${PB_BIN}`);
-  console.error("Set POCKETBASE_BIN env var or place the binary at the default path.");
+  console.error("Set POCKETBASE_BIN env var or place the binary in the local pocketbase folder.");
   process.exit(2);
 }
 if (!existsSync(REAL_MIGRATION_PATH)) {
