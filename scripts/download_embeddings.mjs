@@ -23,6 +23,16 @@ async function downloadModel() {
     // Ensure directory exists
     await fs.mkdir(path.dirname(destPath), { recursive: true });
     
+    try {
+      const stats = await fs.stat(destPath).catch(() => null);
+      if (stats && stats.size > 0) {
+        console.log(`✅ Already exists: ${file} (skipped)`);
+        continue;
+      }
+    } catch (err) {
+      // Proceed to download
+    }
+
     console.log(`Downloading ${file}...`);
     try {
       const response = await fetch(url);

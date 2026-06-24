@@ -21,7 +21,8 @@
     "electron:dev": "electron . --dev",
     "electron:build": "next build && electron-builder",
     "pocketbase:download": "node scripts/download-pocketbase.mjs",
-    "postinstall": "node scripts/download-pocketbase.mjs"
+    "embeddings:download": "node scripts/download_embeddings.mjs",
+    "postinstall": "node scripts/download-pocketbase.mjs && node scripts/download_embeddings.mjs"
   },
   "dependencies": {
     "@ai-sdk/alibaba": "^1.0.25",
