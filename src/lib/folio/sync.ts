@@ -1339,12 +1339,15 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
   // Prune deleted daily logs
   try {
     const dailyLogDir = join(folioRootPath, 'daily-logs');
-    const dbDailyLogs = await pb.collection('daily_logs').getFullList();
-    for (const rec of dbDailyLogs) {
-      const expectedPath = join(dailyLogDir, `${rec.date}.md`);
-      if (!existsSync(expectedPath)) {
-        console.log(`[Sync Engine] Pruning deleted daily_logs from DB:`, rec.id);
-        await pb.collection('daily_logs').delete(rec.id);
+    const coll = pb.collection('daily_logs');
+    if (coll) {
+      const dbDailyLogs = await coll.getFullList();
+      for (const rec of dbDailyLogs) {
+        const expectedPath = join(dailyLogDir, `${rec.date}.md`);
+        if (!existsSync(expectedPath)) {
+          console.log(`[Sync Engine] Pruning deleted daily_logs from DB:`, rec.id);
+          await coll.delete(rec.id);
+        }
       }
     }
   } catch (err) {

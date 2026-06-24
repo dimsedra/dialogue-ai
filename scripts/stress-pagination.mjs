@@ -53,8 +53,9 @@ const { default: PocketBase } = await import("pocketbase");
 // Config
 // =============================================================================
 
-const PB_BIN =
-  process.env.POCKETBASE_BIN || "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe";
+const localPbPath = join(process.cwd(), "pocketbase", process.platform === "win32" ? "pocketbase.exe" : "pocketbase");
+const PB_BIN = process.env.POCKETBASE_BIN || (existsSync(localPbPath) ? localPbPath : "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe");
+
 // 50K (Phase 5.5): validates long-running pagination. Was 10K pre-5.5.
 const TOTAL_ITEMS = 50_000;
 const PAGE_SIZE = 50;
@@ -62,7 +63,7 @@ const EXPECTED_PAGES = Math.ceil(TOTAL_ITEMS / PAGE_SIZE);
 
 if (!existsSync(PB_BIN)) {
   console.error(`PocketBase binary not found at: ${PB_BIN}`);
-  console.error("Set POCKETBASE_BIN env var or place the binary at the default path.");
+  console.error("Set POCKETBASE_BIN env var or place the binary in the local pocketbase folder.");
   process.exit(2);
 }
 

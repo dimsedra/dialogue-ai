@@ -102,5 +102,46 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.7"
+  },
+  "build": {
+    "appId": "com.dialogue.app",
+    "productName": "Dialogue AI",
+    "files": [
+      "main.js",
+      "preload.js",
+      "llm-runner.js",
+      "package.json",
+      "public/**/*",
+      ".next/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "pocketbase",
+        "to": "pocketbase",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "pb_migrations",
+        "to": "pb_migrations",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

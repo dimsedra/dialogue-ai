@@ -75,3 +75,6 @@ scratch/
 # Local user folios and test directories
 /dialogue-folio/
 /test-folio-memories/
+
+# graphify outputs and cache
+/graphify-out/

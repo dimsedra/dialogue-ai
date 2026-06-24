@@ -349,6 +349,18 @@ export async function POST(req: Request) {
 
     // Vercel AI SDK 'useChat' sends the body payload here automatically
     const params = await req.json();
+
+    // Intercept proactive greeting trigger and map it to a system-guided user message
+    if (params.messages && params.messages.length > 0) {
+      const lastMsg = params.messages[params.messages.length - 1];
+      if (lastMsg.content === '[Trigger Proactive Greeting]') {
+        if (overdueTriagePrompt) {
+          lastMsg.content = `[System Trigger: Proactive Greeting]\nProvide a warm, proactive greeting to the user since they just opened this session. Highlight that they have overdue tasks in this workspace, list them briefly, and suggest starting a specialized topic branch to triage them. Mention that they can click the branch button on your message to do so.`;
+        } else {
+          lastMsg.content = `[System Trigger: Proactive Greeting]\nProvide a warm, proactive greeting to the user. Offer a daily briefing or ask how you can help them today.`;
+        }
+      }
+    }
     
     // Inject scope as a system message so the model sees it prominently
     // in the conversation, not just buried in the agent instructions

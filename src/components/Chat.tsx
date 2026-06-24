@@ -928,7 +928,8 @@ function ActiveChat({
 
       if (hasConvexCaughtUp || aiMessages.length === 0) {
         const seenIds = new Set<string>();
-        const mappedHistory = messages.map(m => {
+        const filteredMessages = messages.filter(m => m.text !== "[Trigger Proactive Greeting]");
+        const mappedHistory = filteredMessages.map(m => {
           const parts: any[] = [];
           if (m.reasoning) {
             const splitReasoning = m.reasoning.split('\n[---DIALOGUE_REASONING_SPLIT---]\n');
@@ -1071,6 +1072,60 @@ function ActiveChat({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
+  // Automatically trigger proactive greeting if trunk session is empty
+  useEffect(() => {
+    if (
+      activeSessionId &&
+      isTrunk &&
+      !isArchived &&
+      messages &&
+      messages.length === 0 &&
+      !isLoading &&
+      aiMessages.length === 0
+    ) {
+      console.log("[Chat] Auto-triggering proactive greeting for empty trunk session");
+      
+      const triggerGreeting = async () => {
+        setIsTyping(true);
+        try {
+          const greetingText = "[Trigger Proactive Greeting]";
+          const aiPromise = sendVercelMessage({ text: greetingText });
+          
+          const [dbId] = await Promise.all([
+            sendMessage({
+              sessionId: activeSessionId,
+              text: greetingText,
+              author: "User",
+              timezoneOffset: new Date().getTimezoneOffset(),
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              provider,
+            }),
+            aiPromise
+          ]);
+          if (dbId) {
+            pendingUserDbIdsRef.current.push(dbId);
+          }
+        } catch (err) {
+          console.error("Failed to trigger proactive greeting:", err);
+        } finally {
+          setIsTyping(false);
+        }
+      };
+      
+      triggerGreeting();
+    }
+  }, [
+    activeSessionId,
+    isTrunk,
+    isArchived,
+    messages,
+    isLoading,
+    aiMessages.length,
+    provider,
+    sendVercelMessage,
+    sendMessage
+  ]);
+
   // Build a scope lookup from messages
   const scopeByContent = useMemo(() => {
     if (!messages) return new Map<string, Scope>();
@@ -1088,7 +1143,8 @@ function ActiveChat({
     if (messagesPaginated.status === "LoadingFirstPage") return undefined;
     
     const seenIds = new Set<string>();
-    return aiMessages.map((m, idx) => {
+    const filteredAiMessages = aiMessages.filter(m => m.content !== "[Trigger Proactive Greeting]");
+    return filteredAiMessages.map((m, idx) => {
       const textParts = m.parts ? m.parts.filter(p => p.type === 'text') : [];
       const reasoningParts = m.parts ? m.parts.filter(p => p.type === 'reasoning') : [];
       

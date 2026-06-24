@@ -100,10 +100,10 @@ async function waitForPb(url, timeoutMs = 15000) {
 // Main.
 // =============================================================================
 
-const PB_BIN = process.env.POCKETBASE_BIN || "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe";
+const localPbPath = join(process.cwd(), "pocketbase", process.platform === "win32" ? "pocketbase.exe" : "pocketbase");
+const PB_BIN = process.env.POCKETBASE_BIN || (existsSync(localPbPath) ? localPbPath : "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe");
 if (!existsSync(PB_BIN)) {
-  console.error(`smoke: POCKETBASE_BIN not found at ${PB_BIN}`);
-  console.error("Set POCKETBASE_BIN env var to the PB binary path.");
+  console.error(`smoke: POCKETBASE_BIN not found at ${PB_BIN}. Please set POCKETBASE_BIN env var or place the binary in the local pocketbase folder.`);
   process.exit(2);
 }
 

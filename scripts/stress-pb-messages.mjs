@@ -65,9 +65,8 @@ const { default: PocketBase } = await import("pocketbase");
 // Config
 // =============================================================================
 
-const PB_BIN =
-  process.env.POCKETBASE_BIN ||
-  "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe";
+const localPbPath = join(process.cwd(), "pocketbase", process.platform === "win32" ? "pocketbase.exe" : "pocketbase");
+const PB_BIN = process.env.POCKETBASE_BIN || (existsSync(localPbPath) ? localPbPath : "C:\\Users\\user\\tools\\pocketbase\\pocketbase.exe");
 // 200 is enough to test pagination math (4 pages of 50) without making
 // the seed slow. Auth + relation overhead per create is real (~2-3x the
 // synthetic run), so smaller N is the right trade-off.

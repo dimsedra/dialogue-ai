@@ -1,8 +1,9 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const net = require('net');
 const http = require('http');
+const fs = require('fs');
 
 const isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
@@ -58,6 +59,41 @@ function startPocketBase() {
   const migrationsDir = isDev
     ? path.join(__dirname, 'pb_migrations')
     : path.join(process.resourcesPath, 'pb_migrations');
+
+  // First-run database bootstrap if empty
+  const dbFile = path.join(dataDir, 'data.db');
+  if (!fs.existsSync(dbFile)) {
+    console.log('[PocketBase] Database not found. Performing first-run bootstrap...');
+    try {
+      fs.mkdirSync(dataDir, { recursive: true });
+      
+      // 1. Run migrations up
+      console.log('[PocketBase] Running initial migrations...');
+      const migrateResult = spawnSync(pbPath, [
+        'migrate', 'up',
+        '--dir', dataDir,
+        '--migrationsDir', migrationsDir
+      ]);
+      if (migrateResult.status !== 0) {
+        console.error('[PocketBase] Initial migrations failed:', migrateResult.stderr ? migrateResult.stderr.toString() : migrateResult.error);
+      }
+
+      // 2. Upsert default superuser
+      const email = process.env.PB_ADMIN_EMAIL || 'admin@dialogue.local';
+      const password = process.env.PB_ADMIN_PASSWORD || 'admin123456';
+      console.log(`[PocketBase] Upserting default superuser: ${email}`);
+      const superuserResult = spawnSync(pbPath, [
+        'superuser', 'upsert',
+        email, password,
+        '--dir', dataDir
+      ]);
+      if (superuserResult.status !== 0) {
+        console.error('[PocketBase] Superuser upsert failed:', superuserResult.stderr ? superuserResult.stderr.toString() : superuserResult.error);
+      }
+    } catch (bootstrapErr) {
+      console.error('[PocketBase] Error during database bootstrap:', bootstrapErr);
+    }
+  }
 
   console.log(`[PocketBase] Spawning binary: ${pbPath}`);
   console.log(`[PocketBase] Using data directory: ${dataDir}`);

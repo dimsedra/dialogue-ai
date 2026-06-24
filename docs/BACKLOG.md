@@ -131,8 +131,8 @@
 | # | Item | Status | Complexity |
 |---|------|--------|------------|
 | 9.1 | Morning greetings / daily briefs | ✅ | — |
-| 9.2 | Overdue task triage (dashboard card) | 🟡 | — |
-| 9.3 | Branch suggestion on overdue triage (requires §6) | ❌ | Medium |
+| 9.2 | Overdue task triage (dashboard card) | ✅ | — |
+| 9.3 | Branch suggestion on overdue triage (requires §6) | ✅ | Medium |
 | 9.4 | Habit check-ins (evening) | ✅ | — |
 | 9.5 | Event prep (upcoming 2h) | ✅ | — |
 | 9.6 | Intrusion protection: queue proactive in branch, show on trunk return (requires §6) | ❌ | Medium |
@@ -157,6 +157,14 @@
 | 11.1 | Migrate synchronous file system calls (*Sync) in background jobs to asynchronous fs.promises | ❌ | Medium |
 | 11.2 | Offload heavy CPU-bound Observer tasks (embeddings/synthesis) to Node.js Worker Threads | ❌ | Large |
 
+## 🔵 §12 — Trust-Safe Database Access & Local Credentials
+
+| # | Item | Status | Complexity |
+|---|------|--------|------------|
+| 12.1 | Local Credentials Config: auto-generate random PB admin credentials on first install | ❌ | Medium |
+| 12.2 | Dev Settings Tab: expose Dashboard link, Admin email, and the generated password for database transparency | ❌ | Small |
+| 12.3 | Enforce minimum 10 characters for user registration password to align with PocketBase requirements | ❌ | Small |
+
 ---
 
 ## Priority Order (Recommended)
@@ -166,5 +174,7 @@
 | 🥇 **Next** | **9.2, 9.3, 9.6** — Proactive Behaviors & Intrusion Protection | Builds directly on the new branching session architecture to block/delay intrusion alerts and suggest branches. |
 | 🥈 | **1.4 + 2.9** — Onboarding wizard & Workspace `notes/` CRUD UI | UI refinements to complete the workspace-first flow. |
 | 🥉 | **3.6 + 8.7** — Eliminate Chat Agent Write Tools | Enforces 100% separation of concerns: Chat Agent becomes purely conversational, Observer handles all mutations. |
-| 4 | **§11** — Performance Optimization & Non-blocking Threading | Offloads disk I/O and heavy CPU-bound tasks (local embeddings) to async promises and Worker Threads, ensuring 60fps responsiveness. |
+| 4 | **§12** — Trust-Safe Database Access & Local Credentials | Cleans up dummy credentials, secures the vault, and exposes local db details for developer transparency. |
+| 5 | **§11** — Performance Optimization & Non-blocking Threading | Offloads disk I/O and heavy CPU-bound tasks (local embeddings) to async promises and Worker Threads, ensuring 60fps responsiveness. |
+
 
