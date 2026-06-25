@@ -1819,7 +1819,16 @@ export async function syncDailyLogFileToDb(
   // 2. Sync tasks
   for (const [id, taskData] of parsedTasks.entries()) {
     try {
-      const task = await pb.collection('tasks').getOne(id);
+      let task;
+      try {
+        task = await pb.collection('tasks').getOne(id);
+      } catch (err: any) {
+        if (err?.status === 404) {
+          console.log(`[Sync Engine] Task ${id} from daily log no longer exists in DB, skipping`);
+          continue;
+        }
+        throw err;
+      }
       if (!task) continue;
 
       let taskUpdated = false;
@@ -1888,7 +1897,16 @@ export async function syncDailyLogFileToDb(
   // 3. Sync events
   for (const [id, eventData] of parsedEvents.entries()) {
     try {
-      const event = await pb.collection('events').getOne(id);
+      let event;
+      try {
+        event = await pb.collection('events').getOne(id);
+      } catch (err: any) {
+        if (err?.status === 404) {
+          console.log(`[Sync Engine] Event ${id} from daily log no longer exists in DB, skipping`);
+          continue;
+        }
+        throw err;
+      }
       if (!event) continue;
 
       let eventUpdated = false;

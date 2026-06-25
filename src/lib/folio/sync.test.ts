@@ -956,6 +956,37 @@ Updated content.
     expect(logs[0].updatedAt).toBeGreaterThan(1000);
     expect(logs[0].createdAt).toBe(1000); // Preserved from original
   });
+
+  test('handles missing tasks and events gracefully (404) on daily log sync', async () => {
+    const filePath = 'C:/Users/user/Dialogue Folio/daily-logs/2026-06-17.md';
+    mockPb.collections.daily_logs = createMockCollection([]);
+    mockPb.collections.tasks = createMockCollection([]);
+    mockPb.collections.events = createMockCollection([]);
+
+    mockFiles[filePath] = `---
+date: 2026-06-17
+type: daily-log
+---
+
+# Daily Log - 2026-06-17
+
+## Tasks
+- [x] Fix bug #tsk-task-missing
+
+## Events
+- [ ] Attend meeting #evt-event-missing
+`;
+
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { syncDailyLogFileToDb } = await import('./sync');
+    await expect(syncDailyLogFileToDb(filePath, mockPb, '2026-06-17', folioRoot)).resolves.not.toThrow();
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('[Sync Engine] Task task-missing from daily log no longer exists in DB, skipping'));
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('[Sync Engine] Event event-missing from daily log no longer exists in DB, skipping'));
+
+    consoleLogSpy.mockRestore();
+  });
 });
 
 describe('Workspace CONTEXT.md Sync', () => {
