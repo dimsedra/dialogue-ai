@@ -189,12 +189,12 @@ describe("mergeSession job", () => {
 
     // Verify task updated on disk and database history logs
     expect(mockUpdateDiskFileForEntity).toHaveBeenCalledWith("tasks", "t1", pb, "C:/Users/user/Dialogue Folio", {
-      appendNotes: "[Merged Branch: Feature Branch] Test Consolidated Summary",
+      appendNotes: "[Discussion Summary: Feature Branch] Test Consolidated Summary",
     });
     expect(tasks.update).toHaveBeenCalledWith("t1", expect.objectContaining({
       history_logs: expect.arrayContaining([
         expect.objectContaining({
-          note: "[Merged Branch: Feature Branch] Test Consolidated Summary",
+          note: "[Discussion Summary: Feature Branch] Test Consolidated Summary",
         }),
       ]),
     }));

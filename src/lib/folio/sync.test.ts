@@ -1132,7 +1132,7 @@ describe('Workspace CONTEXT.md Sync', () => {
       (s: any) => s.workspace === 'wsnotrunk' && s.isTrunk === true
     );
     expect(trunkSessions).toHaveLength(1);
-    expect(trunkSessions[0].title).toBe('Workspace No Trunk Trunk');
+    expect(trunkSessions[0].title).toBe('Workspace No Trunk Main Chat');
     expect(trunkSessions[0].sessionType).toBe('trunk');
     expect(trunkSessions[0].pinned).toBe(true);
   });

@@ -134,17 +134,17 @@ Output ONLY the summary itself. Do not include any introductory remarks.`;
       }
     }
 
-    // 6. Post system narrated "Merge Commit" back in parent Trunk Session
+    // 6. Post system narrated "Discussion Summary" back in parent Main Chat
     await pb.collection("messages").create({
       session: parentSessionId,
-      text: `[Merge Commit] Topic branch "${session.title || "Untitled Branch"}" was merged:\n\n${summary}`,
+      text: `[Discussion Summary] "${session.title || "Untitled Discussion"}" was closed and summarized:\n\n${summary}`,
       author: "System",
       timestamp: Date.now(),
     });
 
     // 7. Find and update associated tasks/events (on disk and DB)
     const todayStr = new Date().toISOString().slice(0, 10);
-    const newLogEntry = { date: todayStr, note: `[Merged Branch: ${session.title || "Untitled Branch"}] ${summary}` };
+    const newLogEntry = { date: todayStr, note: `[Discussion Summary: ${session.title || "Untitled Discussion"}] ${summary}` };
 
     const tasksList = await pb.collection("tasks").getList(1, 200, {
       filter: `origin_branch = "${sessionId}"`,
@@ -152,7 +152,7 @@ Output ONLY the summary itself. Do not include any introductory remarks.`;
     for (const t of tasksList.items) {
       // Update disk file body
       await updateDiskFileForEntity("tasks", t.id, pb, folioRootPath, {
-        appendNotes: `[Merged Branch: ${session.title || "Untitled Branch"}] ${summary}`,
+        appendNotes: `[Discussion Summary: ${session.title || "Untitled Discussion"}] ${summary}`,
       });
 
       // Update DB record history_logs
@@ -168,7 +168,7 @@ Output ONLY the summary itself. Do not include any introductory remarks.`;
     for (const e of eventsList.items) {
       // Update disk file body
       await updateDiskFileForEntity("events", e.id, pb, folioRootPath, {
-        appendNotes: `[Merged Branch: ${session.title || "Untitled Branch"}] ${summary}`,
+        appendNotes: `[Discussion Summary: ${session.title || "Untitled Discussion"}] ${summary}`,
       });
 
       // Update DB record history_logs

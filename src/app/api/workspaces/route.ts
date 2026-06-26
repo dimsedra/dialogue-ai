@@ -52,7 +52,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await pb.collection('chat_sessions').create({
       user: user.id,
       workspace: record.id,
-      title: `${name} Trunk`,
+      title: `${name} Main Chat`,
       isTrunk: true,
       sessionType: 'trunk',
       pinned: true,

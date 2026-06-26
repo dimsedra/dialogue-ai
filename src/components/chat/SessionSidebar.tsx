@@ -330,7 +330,7 @@ export function SessionSidebar({
               <div className="mb-4">
                 <div className="px-3 sticky top-0 bg-[#1a1814] py-1.5 z-10 flex items-center gap-1.5">
                   <Bot className="w-2.5 h-2.5 text-[#d4a373]" />
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#d4a373]">Companion Trunk</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#d4a373]">Main Chat</span>
                 </div>
                 <div className="space-y-0.5 lg:space-y-1">
                   {renderSessionItem(trunkSession)}
@@ -342,7 +342,7 @@ export function SessionSidebar({
               <div className="mb-4">
                 <div className="px-3 sticky top-0 bg-[#1a1814] py-1.5 z-10 flex items-center gap-1.5">
                   <GitBranch className="w-2.5 h-2.5 text-[#a8a29e]/50" />
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/50">Active Branches</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#a8a29e]/50">Deep Dives</span>
                 </div>
                 <div className="space-y-0.5 lg:space-y-1">
                   {activeBranches.map(renderSessionItem)}
@@ -358,7 +358,7 @@ export function SessionSidebar({
                 >
                   <div className="flex items-center gap-1.5">
                     <Archive className="w-2.5 h-2.5" />
-                    <span className="text-[9px] font-bold uppercase tracking-widest">Archived ({archivedBranches.length})</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest">Past Discussions ({archivedBranches.length})</span>
                   </div>
                   <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${archivedOpen ? "rotate-180" : ""}`} />
                 </button>

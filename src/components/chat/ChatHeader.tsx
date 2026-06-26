@@ -82,14 +82,14 @@ export function ChatHeader(props: ChatHeaderProps) {
                 onClick={onMerge}
                 disabled={isMerging}
                 className="py-1.5 px-3 rounded-lg bg-[#d4a373] text-[#0f0e0c] hover:bg-[#c39262] disabled:opacity-50 text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center shadow-md shrink-0"
-                title="Merge & Close Branch"
+                title="Summarize & Close Discussion"
               >
-                {isMerging ? "Merging..." : "Merge & Close"}
+                {isMerging ? "Merging..." : "Close & Summarize"}
               </button>
             )}
             {isBranch && isArchived && (
               <span className="py-1.5 px-2.5 rounded-lg bg-[#2a2723] text-[#a8a29e] text-[9px] font-bold tracking-wider uppercase border border-[#2a2723]/80 select-none">
-                Archived
+                Past
               </span>
             )}
             <NotificationBell />
@@ -120,12 +120,12 @@ export function ChatHeader(props: ChatHeaderProps) {
             disabled={isMerging}
             className="py-1 px-2.5 rounded-md bg-[#d4a373] text-[#0f0e0c] text-[9px] font-bold uppercase tracking-wider disabled:opacity-50 transition-all active:scale-95 shrink-0"
           >
-            {isMerging ? "Merging..." : "Merge"}
+            {isMerging ? "Merging..." : "Close"}
           </button>
         )}
         {isBranch && isArchived && (
           <span className="py-0.5 px-2 rounded-md bg-[#2a2723] text-[#a8a29e] text-[9px] font-bold uppercase tracking-wider border border-[#2a2723]/80 select-none shrink-0">
-            Archived
+            Past
           </span>
         )}
       </div>

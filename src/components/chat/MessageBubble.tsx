@@ -292,7 +292,7 @@ export const MessageBubble = React.memo(function MessageBubble({
           <button
             onClick={() => onBranch(msg._id, msg.timestamp)}
             className="opacity-0 group-hover/bubble:opacity-100 p-1 rounded hover:bg-[#2a2723] text-[#a8a29e] hover:text-[#d4a373] transition-all ml-1 shrink-0"
-            title="Branch from this message"
+            title="Deep dive from here"
           >
             <Layers className="w-3.5 h-3.5" />
           </button>

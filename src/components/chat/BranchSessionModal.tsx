@@ -14,7 +14,7 @@ export function BranchSessionModal({ isOpen, onConfirm, onCancel, isLargeViewpor
 
   useEffect(() => {
     if (isOpen) {
-      setTitle(`Topic Branch - ${new Date().toLocaleDateString()}`);
+      setTitle(`Deep Dive - ${new Date().toLocaleDateString()}`);
     }
   }, [isOpen]);
 
@@ -48,10 +48,10 @@ export function BranchSessionModal({ isOpen, onConfirm, onCancel, isLargeViewpor
               <Layers className="w-6 h-6 text-[#d4a373]" />
             </div>
             <h3 className="text-lg font-bold text-[#f2efeb] mb-2 leading-tight">
-              Create Topic Branch
+              Start Deep Dive
             </h3>
             <p className="text-sm text-[#a8a29e] mb-4 leading-relaxed">
-              Create a new focus timeline branching off from this point in the conversation history.
+              Start a separate, focused conversation thread from this message.
             </p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -61,7 +61,7 @@ export function BranchSessionModal({ isOpen, onConfirm, onCancel, isLargeViewpor
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Branch title..."
+                  placeholder="Discussion title..."
                   className="w-full px-4 py-3 rounded-xl bg-[#0f0e0c] border border-[#2a2723] text-[#f2efeb] text-sm placeholder:text-[#a8a29e]/40 outline-none focus:border-[#d4a373]/50 transition-all"
                 />
               </div>
@@ -70,7 +70,7 @@ export function BranchSessionModal({ isOpen, onConfirm, onCancel, isLargeViewpor
                   type="submit"
                   className="w-full py-3 bg-[#d4a373] text-[#0f0e0c] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#c39262] transition-all shadow-lg shadow-[#d4a373]/10"
                 >
-                  Create Branch
+                  Start Deep Dive
                 </button>
                 <button 
                   type="button"

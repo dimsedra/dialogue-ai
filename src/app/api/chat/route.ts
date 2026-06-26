@@ -302,7 +302,7 @@ export async function POST(req: Request) {
                   if (overdueTasks.length > 5) {
                     overdueTriagePrompt += `- ... and ${overdueTasks.length - 5} more.\n`;
                   }
-                  overdueTriagePrompt += `\nINSTRUCTION: Direct the user to address these overdue tasks. Suggest creating a specialized topic branch to triage them. Mention that they can click the branch icon on your response to start a branch for this.`;
+                  overdueTriagePrompt += `\nINSTRUCTION: Direct the user to address these overdue tasks. Suggest starting a focused discussion to triage them. Mention that they can click the deep dive button on your response to start a deep dive for this.`;
                 }
               }
             }
@@ -355,7 +355,7 @@ export async function POST(req: Request) {
       const lastMsg = params.messages[params.messages.length - 1];
       if (lastMsg.content === '[Trigger Proactive Greeting]') {
         if (overdueTriagePrompt) {
-          lastMsg.content = `[System Trigger: Proactive Greeting]\nProvide a warm, proactive greeting to the user since they just opened this session. Highlight that they have overdue tasks in this workspace, list them briefly, and suggest starting a specialized topic branch to triage them. Mention that they can click the branch button on your message to do so.`;
+          lastMsg.content = `[System Trigger: Proactive Greeting]\nProvide a warm, proactive greeting to the user since they just opened this session. Highlight that they have overdue tasks in this workspace, list them briefly, and suggest starting a focused discussion to triage them. Mention that they can click the deep dive button on your message to do so.`;
         } else {
           lastMsg.content = `[System Trigger: Proactive Greeting]\nProvide a warm, proactive greeting to the user. Offer a daily briefing or ask how you can help them today.`;
         }

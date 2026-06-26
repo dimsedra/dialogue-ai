@@ -704,8 +704,8 @@ function ActiveChat({
       });
       setActiveSessionIdAction(newSessionId);
     } catch (err) {
-      console.error("Failed to create topic branch:", err);
-      onShowWarning("Failed to Create Branch", err instanceof Error ? err.message : String(err));
+      console.error("Failed to create deep dive:", err);
+      onShowWarning("Failed to Start Deep Dive", err instanceof Error ? err.message : String(err));
     } finally {
       setBranchingMessage(null);
     }
@@ -723,8 +723,8 @@ function ActiveChat({
         setActiveSessionIdAction(null);
       }
     } catch (err) {
-      console.error("Failed to merge topic branch:", err);
-      onShowWarning("Failed to Merge Branch", err instanceof Error ? err.message : String(err));
+      console.error("Failed to close discussion:", err);
+      onShowWarning("Failed to Close Discussion", err instanceof Error ? err.message : String(err));
     } finally {
       setIsMerging(false);
     }

@@ -980,7 +980,7 @@ export async function reconcileFolio(folioRootPath: string, pb: PocketBase): Pro
           await pb.collection('chat_sessions').create({
             user: activeUserIdForWs,
             workspace: ws.id,
-            title: `${ws.name} Trunk`,
+            title: `${ws.name} Main Chat`,
             isTrunk: true,
             sessionType: 'trunk',
             pinned: true,
